@@ -1,8 +1,8 @@
 
-const STORAGE_KEY = 'spesa-pronta-final:v14';
-const SETTINGS_KEY = 'spesa-pronta-final:settings:v14';
-const SESSION_KEY = 'spesa-pronta-final:session:v14';
-const AI_MEMORY_KEY = 'spesa-pronta-final:ai-memory:v14';
+const STORAGE_KEY = 'spesa-pronta-final:v16';
+const SETTINGS_KEY = 'spesa-pronta-final:settings:v16';
+const SESSION_KEY = 'spesa-pronta-final:session:v16';
+const AI_MEMORY_KEY = 'spesa-pronta-final:ai-memory:v16';
 const SYNC_WAIT = 650;
 
 const translations = {
@@ -17,7 +17,7 @@ const translations = {
     registerText:'Prima di vedere i prodotti devi accedere o creare un profilo. Poi fai l’inventario iniziale con foto.', username:'Nome utente', usernamePh:'Inserisci il tuo nome',
     email:'Email', password:'Password', passwordPh:'Minimo 8 caratteri', peopleCount:'Numero persone in casa', animalCount:'Numero animali', captcha:'Captcha',
     apiEndpoint:'API endpoint', autoSmartOrdering:'Spesa intelligente automatica', registerCreate:'Registrati', continueOffline:'Continua offline', whyRegister:'Perché registrarsi?',
-    benefitCloud:'Sincronizzazione sicura su cloud', benefitDevices:'Accesso da più dispositivi', benefitSmart:'Suggerimenti personalizzati', benefitAlexa:'Integrazione con Alexa',
+    benefitCloud:'Sincronizzazione sicura su cloud', benefitSecurity:'Dati cifrati nel database', forgotPassword:'Hai dimenticato la password?', resetMailSent:'Se l’indirizzo è presente, riceverai una email con link/token di recupero.', passwordUpdated:'Password aggiornata ✅', captchaPick:'Tocca l’immagine richiesta', captchaPickItem:'Tocca: ', welcomeEmailSent:'Email di benvenuto inviata ✅', benefitDevices:'Accesso da più dispositivi', benefitSmart:'Suggerimenti personalizzati', benefitAlexa:'Integrazione con Alexa',
     productsHint:'Catalogo completo e gestione articoli personalizzati.', shoppingHint:'Questa è la lista che Alexa leggerà dal cloud.', suggestionsSmart:'Suggerimenti intelligenti',
     suggestionsExplain:'Raccomandazioni basate su persone, animali e consumo reale.', peopleInHome:'Persone in casa', animalsInHome:'Animali', smartAnalysis:'Analisi consumi',
     smartHow:'Analizziamo i consumi abituali e il numero di persone/animali per prevedere cosa sta per finire.', language:'Lingua dell’app', cloudSync:'Cloud & Sincronizzazione',
@@ -65,7 +65,7 @@ const translations = {
     registerText:'Antes de ver productos, accede o crea un perfil. Luego completa el inventario inicial con fotos.', username:'Usuario', usernamePh:'Introduce tu nombre',
     email:'Email', password:'Contraseña', passwordPh:'Mínimo 8 caracteres', peopleCount:'Personas en casa', animalCount:'Animales', captcha:'Captcha',
     apiEndpoint:'API endpoint', autoSmartOrdering:'Compra inteligente automática', registerCreate:'Registrarse', continueOffline:'Continuar offline', whyRegister:'¿Por qué registrarse?',
-    benefitCloud:'Sincronización segura en la nube', benefitDevices:'Acceso desde varios dispositivos', benefitSmart:'Sugerencias personalizadas', benefitAlexa:'Integración con Alexa',
+    benefitCloud:'Sincronización segura en la nube', benefitSecurity:'Datos cifrados en la base de datos', forgotPassword:'¿Olvidaste la contraseña?', resetMailSent:'Si el email existe, recibirás un enlace/token.', passwordUpdated:'Contraseña actualizada ✅', captchaPick:'Toca la imagen solicitada', captchaPickItem:'Toca: ', welcomeEmailSent:'Email de bienvenida enviado ✅', benefitDevices:'Acceso desde varios dispositivos', benefitSmart:'Sugerencias personalizadas', benefitAlexa:'Integración con Alexa',
     productsHint:'Catálogo completo y gestión de artículos personalizados.', shoppingHint:'Esta es la lista que Alexa leerá desde la nube.', suggestionsSmart:'Sugerencias inteligentes',
     suggestionsExplain:'Recomendaciones basadas en personas, animales y consumo real.', peopleInHome:'Personas en casa', animalsInHome:'Animales', smartAnalysis:'Análisis de consumo',
     smartHow:'Analizamos consumos habituales y número de personas/animales para prever lo que se acaba.', language:'Idioma de la app', cloudSync:'Cloud y sincronización',
@@ -89,7 +89,7 @@ const translations = {
     registerText:'Melde dich an oder erstelle ein Profil, bevor Produkte angezeigt werden. Danach folgt die Foto-Erstinventur.', username:'Benutzername', usernamePh:'Namen eingeben',
     email:'E-Mail', password:'Passwort', passwordPh:'Mindestens 8 Zeichen', peopleCount:'Personen im Haushalt', animalCount:'Tiere', captcha:'Captcha',
     apiEndpoint:'API-Endpunkt', autoSmartOrdering:'Automatische intelligente Einkaufsliste', registerCreate:'Registrieren', continueOffline:'Offline fortfahren', whyRegister:'Warum registrieren?',
-    benefitCloud:'Sichere Cloud-Synchronisierung', benefitDevices:'Zugriff von mehreren Geräten', benefitSmart:'Personalisierte Vorschläge', benefitAlexa:'Alexa-Integration',
+    benefitCloud:'Sichere Cloud-Synchronisierung', benefitSecurity:'Verschlüsselte Datenbankdaten', forgotPassword:'Passwort vergessen?', resetMailSent:'Wenn die Adresse existiert, erhältst du eine E-Mail.', passwordUpdated:'Passwort aktualisiert ✅', captchaPick:'Tippe auf das gewünschte Bild', captchaPickItem:'Tippe: ', welcomeEmailSent:'Willkommensmail gesendet ✅', benefitDevices:'Zugriff von mehreren Geräten', benefitSmart:'Personalisierte Vorschläge', benefitAlexa:'Alexa-Integration',
     productsHint:'Vollständiger Katalog und eigene Artikel verwalten.', shoppingHint:'Diese Liste liest Alexa aus der Cloud.', suggestionsSmart:'Intelligente Vorschläge',
     suggestionsExplain:'Empfehlungen nach Personen, Tieren und tatsächlichem Verbrauch.', peopleInHome:'Personen im Haushalt', animalsInHome:'Tiere', smartAnalysis:'Verbrauchsanalyse',
     smartHow:'Wir analysieren Verbrauch, Personen und Tiere, um vorherzusagen, was knapp wird.', language:'App-Sprache', cloudSync:'Cloud & Synchronisierung',
@@ -208,14 +208,46 @@ function recommendedQty(item){
 }
 function stockPercent(item){ return Math.max(0, Math.min(100, Math.round((1 - (item.qty / Math.max(item.maxQty, recommendedQty(item)))) * 100))); }
 
-function newCaptcha(){ const a=1+Math.floor(Math.random()*8), b=1+Math.floor(Math.random()*8); return {q:`${a} + ${b} = ?`, ans:a+b}; }
+function newCaptcha(){
+  const pool=[
+    {id:'alexa', label:'Alexa', img:'assets/illustrations/alexa.png'},
+    {id:'milk', label:'Latte', img:'assets/illustrations/milk.png'},
+    {id:'bread', label:'Pane', img:'assets/illustrations/bread.png'},
+    {id:'water', label:'Acqua', img:'assets/illustrations/water.png'},
+    {id:'dogfood', label:'Crocchette', img:'assets/illustrations/dogfood.png'},
+    {id:'key', label:'Chiave', emoji:'🔑'},
+    {id:'lock', label:'Lucchetto', emoji:'🔐'},
+    {id:'fridge', label:'Frigo', emoji:'🧊'}
+  ];
+  const target=pool[Math.floor(Math.random()*pool.length)];
+  const options=[target];
+  while(options.length<4){
+    const x=pool[Math.floor(Math.random()*pool.length)];
+    if(!options.some(o=>o.id===x.id)) options.push(x);
+  }
+  options.sort(()=>Math.random()-.5);
+  return {target, options};
+}
+function renderCaptcha(){
+  const box=$('#captchaBox'); if(!box) return;
+  $('#regCaptcha').value='';
+  $('#captchaQuestion').textContent=(t('captchaPickItem')||'Tocca: ')+captcha.target.label;
+  box.innerHTML=captcha.options.map(o=>`<button class="captcha-choice" type="button" data-captcha="${esc(o.id)}" aria-label="${esc(o.label)}">${o.img?`<img src="${esc(o.img)}" alt="${esc(o.label)}">`:`<span class="emoji">${o.emoji}</span>`}<span>${esc(o.label)}</span></button>`).join('');
+  box.querySelectorAll('[data-captcha]').forEach(btn=>btn.addEventListener('click',()=>{
+    box.querySelectorAll('.captcha-choice').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    $('#regCaptcha').value=btn.dataset.captcha;
+  }));
+}
 
 function init(){
   bind();
   applyLang();
   render();
   showView(initialView());
-  $('#regCaptcha').placeholder = captcha.q;
+  renderCaptcha();
+  const resetToken=new URLSearchParams(location.search).get('reset');
+  if(resetToken){ setTimeout(()=>{ $('#resetToken').value=resetToken; $('#resetDialog').showModal(); }, 250); }
   $('#alexaExamples').textContent = [
     'Alexa, chiedi a Spesa Pronta cosa devo comprare',
     'Alexa, chiedi a Spesa Pronta di aggiungere acqua',
@@ -244,6 +276,10 @@ function bind(){
   $('#closeDialogBtn').addEventListener('click', () => $('#productDialog').close());
   $('#customProductForm').addEventListener('submit', addCustom);
   $('#loginForm')?.addEventListener('submit', login);
+  $('#forgotPasswordBtn')?.addEventListener('click', forgotPassword);
+  $('#resetCloseBtn')?.addEventListener('click', () => $('#resetDialog').close());
+  $('#resetForm')?.addEventListener('submit', resetPassword);
+  $('#continueToInventoryBtn')?.addEventListener('click', continueToInventory);
   $('#registerForm').addEventListener('submit', register);
   $('#continueOfflineBtn')?.addEventListener('click', () => toast('Per usare Spesa Pronta serve accesso o registrazione cloud.'));
   $('#initialScanBtn')?.addEventListener('click', () => openGroceryScanner(true));
@@ -279,6 +315,7 @@ function applyLang(){
   $('#settingsLanguage').value = settings.lang;
   $('#categorySelect').innerHTML = `<option value="all">${esc(t('allCategories'))}</option>` + categories.map(c=>`<option value="${c}">${esc(catName(c))}</option>`).join('');
   $('#customCategory').innerHTML = categories.map(c=>`<option value="${c}">${esc(catName(c))}</option>`).join('');
+  renderCaptcha();
 }
 function toggleMobileMenu(open){
   document.querySelector('.sidebar')?.classList.toggle('open', !!open);
@@ -295,6 +332,7 @@ function needsInitialInventory(){
 }
 function initialView(){
   if(!isSignedIn()) return 'registration';
+  if(session.welcomePending) return 'welcome';
   if(needsInitialInventory()) return 'onboarding';
   return 'dashboard';
 }
@@ -305,7 +343,8 @@ function updateFlowClasses(){
 function showView(v){
   toggleMobileMenu(false);
   if(!isSignedIn() && v !== 'registration') v='registration';
-  if(needsInitialInventory() && !['onboarding','registration','settings','help'].includes(v)) v='onboarding';
+  if(needsInitialInventory() && !['welcome','onboarding','registration','settings','help'].includes(v)) v='onboarding';
+  if(v==='welcome' && !session.welcomePending) v='onboarding';
   updateFlowClasses();
   activeView=v;
   $all('.view').forEach(x=>x.classList.remove('active'));
@@ -318,7 +357,7 @@ function showView(v){
 }
 function render(){
   updateFlowClasses();
-  renderStats(); renderProducts(); renderSide(); renderSettings(); renderAllProducts(); renderShoppingFull(); renderSuggestions();
+  renderStats(); renderProducts(); renderSide(); renderSettings(); renderAllProducts(); renderShoppingFull(); renderSuggestions(); renderWelcome();
   renderUserPill();
 }
 
@@ -472,6 +511,38 @@ function saveSettingsFromForm(){
   saveAll(); render(); toast(t('saved'));
 }
 
+
+function renderWelcome(){
+  const el=$('#welcomeName'); if(!el) return;
+  const p=settings.profile||{};
+  el.textContent=(p.firstName || session.user?.firstName || p.username || session.user?.username || 'amico');
+}
+function continueToInventory(){
+  session.welcomePending=false;
+  saveAll(); render(); showView('onboarding');
+}
+async function forgotPassword(){
+  const email=(prompt('Inserisci la tua email per recuperare la password')||'').trim();
+  if(!email) return;
+  try{
+    await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/auth/forgot`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+    toast(t('resetMailSent'));
+  }catch{ toast(t('resetMailSent')); }
+}
+async function resetPassword(e){
+  e.preventDefault();
+  const token=$('#resetToken').value.trim();
+  const password=$('#resetPassword').value;
+  if(!token || !password || password.length<8){ toast(t('required')); return; }
+  try{
+    const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/auth/reset`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,password})});
+    if(!res.ok) throw new Error('reset');
+    $('#resetDialog').close();
+    toast(t('passwordUpdated'));
+    showView('registration');
+  }catch{ toast('Token non valido o scaduto'); }
+}
+
 async function login(e){
   e.preventDefault();
   const email=$('#loginEmail').value.trim(), password=$('#loginPassword').value;
@@ -503,8 +574,8 @@ function continueLocalProfile(){
 }
 async function register(e){
   e.preventDefault();
-  const answer=Number($('#regCaptcha').value);
-  if(answer!==captcha.ans){ toast(t('wrongCaptcha')); captcha=newCaptcha(); $('#regCaptcha').value=''; $('#regCaptcha').placeholder=captcha.q; return; }
+  const answer=$('#regCaptcha').value;
+  if(answer!==captcha.target.id){ toast(t('wrongCaptcha')); captcha=newCaptcha(); renderCaptcha(); return; }
   const firstName=$('#regFirstName').value.trim(), lastName=$('#regLastName').value.trim(), username=$('#regUsername').value.trim(), email=$('#regEmail').value.trim(), password=$('#regPassword').value;
   if(!firstName||!lastName||!username||!email||!password){ toast(t('required')); return; }
   settings.people=Number($('#regPeople').value)||1; settings.animals=Number($('#regAnimals').value)||0; settings.autoSmart=$('#regAutoSmart').checked; settings.apiEndpoint=$('#regEndpoint').value.trim()||settings.apiEndpoint;
@@ -514,8 +585,8 @@ async function register(e){
   try{
     const res=await fetch(`${settings.apiEndpoint}/auth/register`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({firstName,lastName,username,email,password,people:settings.people,animals:settings.animals,autoSmart:settings.autoSmart,items:[],aiMemory})});
     if(!res.ok) throw new Error('register fail');
-    const data=await res.json(); settings.token=data.token; settings.householdId=data.householdId; settings.cloudEnabled=true; session={mode:'registered',user:data.user};
-    saveAll(); await syncCloud(true); toast(t('saved')); showView('onboarding');
+    const data=await res.json(); settings.token=data.token; settings.householdId=data.householdId; settings.cloudEnabled=true; session={mode:'registered',user:data.user,welcomePending:true};
+    saveAll(); await syncCloud(true); toast(t('welcomeEmailSent')); showView('welcome');
   }catch(err){
     toast('Registrazione non riuscita: controlla connessione e riprova.');
     showView('registration');

@@ -31,11 +31,32 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.5';
 const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || OPENAI_MODEL;
 const OPENAI_TIMEOUT_MS = Number(process.env.OPENAI_TIMEOUT_MS || 45000);
 const DATABASE_URL = process.env.DATABASE_URL || '';
+const APP_BASE_URL = (process.env.APP_BASE_URL || process.env.PUBLIC_URL || 'https://spesa-pronta.it').replace(/\/$/, '');
+const EMAIL_FROM = process.env.EMAIL_FROM || 'Spesa Pronta <noreply@spesa-pronta.it>';
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+const APP_SECRET = process.env.APP_SECRET || process.env.ENCRYPTION_SECRET || DATABASE_URL || 'spesa-pronta-dev-secret-change-me';
 let db = { users:{}, households:{} };
 let dbMode = 'file';
 let pgPool = null;
 
 function emptyDb(){ return { users:{}, households:{} }; }
+function cryptoKey(){ return crypto.createHash('sha256').update(String(APP_SECRET)).digest(); }
+function encryptObject(obj){
+  const iv=crypto.randomBytes(12);
+  const cipher=crypto.createCipheriv('aes-256-gcm', cryptoKey(), iv);
+  const encrypted=Buffer.concat([cipher.update(JSON.stringify(obj),'utf8'), cipher.final()]);
+  return { encrypted:true, v:2, alg:'aes-256-gcm', iv:iv.toString('base64'), tag:cipher.getAuthTag().toString('base64'), data:encrypted.toString('base64') };
+}
+function decryptObject(payload){
+  const decipher=crypto.createDecipheriv('aes-256-gcm', cryptoKey(), Buffer.from(payload.iv,'base64'));
+  decipher.setAuthTag(Buffer.from(payload.tag,'base64'));
+  const plain=Buffer.concat([decipher.update(Buffer.from(payload.data,'base64')), decipher.final()]).toString('utf8');
+  return JSON.parse(plain);
+}
+function decodeStoredDb(data){
+  if(data && data.encrypted && data.data && data.iv && data.tag) return { db:decryptObject(data), encrypted:true };
+  return { db:data || emptyDb(), encrypted:false };
+}
 function loadDbFile(){ try { return JSON.parse(fs.readFileSync(DB_PATH,'utf8')); } catch { return emptyDb(); } }
 async function initStorage(){
   if(!DATABASE_URL){
@@ -53,25 +74,64 @@ async function initStorage(){
   )`);
   const found = await pgPool.query('SELECT data FROM spesa_pronta_store WHERE key=$1', ['main']);
   if(found.rows.length){
-    db = found.rows[0].data || emptyDb();
+    const decoded=decodeStoredDb(found.rows[0].data);
+    db = decoded.db || emptyDb();
+    if(!decoded.encrypted) await saveDb();
   } else {
     db = loadDbFile();
     await saveDb();
   }
-  console.log('Spesa Pronta DB: Supabase/Postgres connected');
+  console.log('Spesa Pronta DB: Supabase/Postgres connected encrypted=true');
 }
 async function saveDb(){
   if(pgPool){
+    const secureData = encryptObject(db);
     await pgPool.query(`INSERT INTO spesa_pronta_store(key,data,updated_at) VALUES($1,$2,now())
-      ON CONFLICT(key) DO UPDATE SET data=EXCLUDED.data, updated_at=now()`, ['main', db]);
+      ON CONFLICT(key) DO UPDATE SET data=EXCLUDED.data, updated_at=now()`, ['main', secureData]);
     return;
   }
   fs.writeFileSync(DB_PATH, JSON.stringify(db,null,2));
 }
 function id(prefix){ return prefix + '_' + crypto.randomBytes(8).toString('hex'); }
 function token(){ return crypto.randomBytes(24).toString('hex'); }
-function hash(pwd){ return crypto.createHash('sha256').update(String(pwd)).digest('hex'); }
+function tokenHash(raw){ return crypto.createHash('sha256').update(String(raw)).digest('hex'); }
+function hashPassword(pwd){
+  const salt=crypto.randomBytes(16).toString('hex');
+  const iterations=160000;
+  const hash=crypto.pbkdf2Sync(String(pwd), salt, iterations, 32, 'sha256').toString('hex');
+  return `pbkdf2$${iterations}$${salt}$${hash}`;
+}
+function verifyPassword(pwd, stored=''){
+  if(String(stored).startsWith('pbkdf2$')){
+    const [,iterRaw,salt,expected]=String(stored).split('$');
+    const actual=crypto.pbkdf2Sync(String(pwd), salt, Number(iterRaw)||160000, 32, 'sha256').toString('hex');
+    return crypto.timingSafeEqual(Buffer.from(actual,'hex'), Buffer.from(expected,'hex'));
+  }
+  const legacy=crypto.createHash('sha256').update(String(pwd)).digest('hex');
+  return legacy === stored;
+}
 function safeUser(u){ return { id:u.id, username:u.username, email:u.email, firstName:u.firstName || '', lastName:u.lastName || '' }; }
+async function sendEmail({to,subject,text,html}){
+  if(!RESEND_API_KEY){
+    console.log('[mail:simulata]', subject, 'to', to, text?.slice(0,140)||'');
+    return { sent:false, simulated:true };
+  }
+  const r=await fetch('https://api.resend.com/emails',{
+    method:'POST',
+    headers:{'Authorization':`Bearer ${RESEND_API_KEY}`,'Content-Type':'application/json'},
+    body:JSON.stringify({from:EMAIL_FROM,to:[to],subject,text,html})
+  });
+  if(!r.ok) console.error('[mail:error]', r.status, await r.text().catch(()=>'').then(x=>x.slice(0,300)));
+  return { sent:r.ok };
+}
+function welcomeHtml({firstName,username}){ return `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;padding:24px;border-radius:24px;background:#f4f9ff;color:#071b34"><h1>Benvenuto in Spesa Pronta, ${firstName||username||'amico'} ✨</h1><p>Il tuo account cloud è stato creato.</p><p><b>Nome utente:</b> ${username}</p><p>Ora puoi fare l’inventario iniziale con foto e collegare Alexa alla stessa lista.</p><a href="${APP_BASE_URL}" style="display:inline-block;background:#1266f1;color:white;padding:14px 18px;border-radius:14px;text-decoration:none;font-weight:bold">Apri Spesa Pronta</a></div>`; }
+async function sendWelcomeEmail(user){
+  return sendEmail({to:user.email,subject:'Benvenuto in Spesa Pronta ✨',text:`Ciao ${user.firstName||user.username}, il tuo account Spesa Pronta è pronto. Nome utente: ${user.username}. Apri ${APP_BASE_URL}`,html:welcomeHtml(user)}).catch(err=>console.error('[mail welcome]',err));
+}
+async function sendResetEmail(user, rawToken){
+  const link=`${APP_BASE_URL}?reset=${encodeURIComponent(rawToken)}`;
+  return sendEmail({to:user.email,subject:'Recupero password Spesa Pronta',text:`Hai richiesto il recupero password. Apri questo link entro 30 minuti: ${link} oppure usa questo token: ${rawToken}`,html:`<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;padding:24px;border-radius:24px;background:#f4f9ff;color:#071b34"><h1>Recupero password</h1><p>Usa questo link entro 30 minuti:</p><p><a href="${link}">${link}</a></p><p><b>Token:</b> ${rawToken}</p><p>Se non sei stato tu, ignora questa email.</p></div>`}).catch(err=>console.error('[mail reset]',err));
+}
 
 function contentType(file){
   const ext = path.extname(file).toLowerCase();
@@ -258,18 +318,49 @@ const server = http.createServer(async (req,res)=>{
       const found = Object.values(db.users).find(u=>u.email===email);
       if(found) return send(res, 409, { error:'email_exists' });
       const userId=id('user'), householdId=id('home'), tkn=token();
-      db.users[userId]={ id:userId, firstName, lastName, username, email, passwordHash:hash(password), householdId };
+      db.users[userId]={ id:userId, firstName, lastName, username, email, passwordHash:hashPassword(password), householdId };
       db.households[householdId]={ id:householdId, ownerUserId:userId, token:tkn, settings:{ people, animals, autoSmart, alexaConnected:false, lang:'it', inventorySetupDone:false, inventoryStatus:'required', inventoryUpdatedAt:null }, items, aiMemory: aiMemory || {messages:[],facts:[],events:[],scanHistory:[]}, updatedAt:Date.now() };
       await saveDb();
-      return send(res, 200, { ok:true, user:safeUser(db.users[userId]), householdId, token:tkn });
+      sendWelcomeEmail(db.users[userId]);
+      return send(res, 200, { ok:true, user:safeUser(db.users[userId]), householdId, token:tkn, welcomeEmail:true });
     }
 
     if(req.method === 'POST' && pathName === '/api/auth/login'){
       const { email,password } = body;
-      const user = Object.values(db.users).find(u=>u.email===email && u.passwordHash===hash(password));
-      if(!user) return send(res, 401, { error:'invalid_credentials' });
+      const user = Object.values(db.users).find(u=>String(u.email||'').toLowerCase()===String(email||'').toLowerCase());
+      if(!user || !verifyPassword(password, user.passwordHash)) return send(res, 401, { error:'invalid_credentials' });
+      if(!String(user.passwordHash||'').startsWith('pbkdf2$')){ user.passwordHash=hashPassword(password); await saveDb(); }
       const h = db.households[user.householdId];
       return send(res, 200, { ok:true, user:safeUser(user), householdId:h.id, token:h.token, settings:h.settings, items:h.items, aiMemory:h.aiMemory||null });
+    }
+
+
+    if(req.method === 'POST' && pathName === '/api/auth/forgot'){
+      const email=String(body.email||'').trim().toLowerCase();
+      const user=Object.values(db.users||{}).find(u=>String(u.email||'').toLowerCase()===email);
+      if(user){
+        const raw=token();
+        user.resetTokenHash=tokenHash(raw);
+        user.resetTokenExpiresAt=Date.now()+30*60*1000;
+        user.resetRequestedAt=Date.now();
+        await saveDb();
+        sendResetEmail(user, raw);
+      }
+      return send(res, 200, { ok:true, message:'if_email_exists_reset_sent' });
+    }
+
+    if(req.method === 'POST' && pathName === '/api/auth/reset'){
+      const raw=String(body.token||'').trim();
+      const newPassword=String(body.password||'');
+      if(!raw || newPassword.length<8) return send(res, 400, { error:'invalid_request' });
+      const hsh=tokenHash(raw);
+      const user=Object.values(db.users||{}).find(u=>u.resetTokenHash===hsh && Number(u.resetTokenExpiresAt||0)>Date.now());
+      if(!user) return send(res, 400, { error:'invalid_or_expired_token' });
+      user.passwordHash=hashPassword(newPassword);
+      delete user.resetTokenHash; delete user.resetTokenExpiresAt; delete user.resetRequestedAt;
+      await saveDb();
+      sendEmail({to:user.email,subject:'Password Spesa Pronta aggiornata',text:'La password del tuo account Spesa Pronta è stata aggiornata. Se non sei stato tu, contatta subito il supporto.'}).catch(()=>{});
+      return send(res, 200, { ok:true });
     }
 
     const stateMatch = pathName.match(/^\/api\/households\/([^/]+)\/state$/);
