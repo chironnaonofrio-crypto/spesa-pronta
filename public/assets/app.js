@@ -2,7 +2,7 @@
 const STORAGE_KEY = 'spesa-pronta-final:v19';
 const SETTINGS_KEY = 'spesa-pronta-final:settings:v19';
 const SESSION_KEY = 'spesa-pronta-final:session:v19';
-const AI_MEMORY_KEY = 'spesa-pronta-final:ai-memory:v22';
+const AI_MEMORY_KEY = 'spesa-pronta-final:ai-memory:v23';
 const SYNC_WAIT = 650;
 
 const translations = {

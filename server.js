@@ -75,10 +75,27 @@ async function initStorage(){
   )`);
   const found = await pgPool.query('SELECT data FROM spesa_pronta_store WHERE key=$1', ['main']);
   if(found.rows.length){
-    const decoded=decodeStoredDb(found.rows[0].data);
-    db = decoded.db || emptyDb();
-    ensureDbShape();
-    if(!decoded.encrypted) await saveDb();
+    const rawStoredData = found.rows[0].data;
+    let decoded;
+    try {
+      decoded = decodeStoredDb(rawStoredData);
+      db = decoded.db || emptyDb();
+      ensureDbShape();
+      if(!decoded.encrypted) await saveDb();
+    } catch(decryptErr) {
+      console.warn('Spesa Pronta DB: dati non decriptabili. Possibile APP_SECRET cambiato o vecchio formato cifrato. Avvio recovery sicuro.', decryptErr?.message || decryptErr);
+      try {
+        const backupKey = 'main_backup_decrypt_failed_' + Date.now();
+        await pgPool.query(`INSERT INTO spesa_pronta_store(key,data,updated_at) VALUES($1,$2,now()) ON CONFLICT(key) DO NOTHING`, [backupKey, rawStoredData]);
+        console.warn('Spesa Pronta DB: backup record creato con key=' + backupKey);
+      } catch(backupErr) {
+        console.warn('Spesa Pronta DB: impossibile creare backup del record non decriptabile', backupErr?.message || backupErr);
+      }
+      db = emptyDb();
+      ensureDbShape();
+      await saveDb();
+      console.warn('Spesa Pronta DB: database ripristinato vuoto e cifrato con APP_SECRET attuale.');
+    }
   } else {
     db = loadDbFile();
     ensureDbShape();
