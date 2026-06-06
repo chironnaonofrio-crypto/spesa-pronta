@@ -1,7 +1,7 @@
 
-const STORAGE_KEY = 'spesa-pronta-final:v1';
-const SETTINGS_KEY = 'spesa-pronta-final:settings:v1';
-const SESSION_KEY = 'spesa-pronta-final:session:v1';
+const STORAGE_KEY = 'spesa-pronta-final:v12';
+const SETTINGS_KEY = 'spesa-pronta-final:settings:v12';
+const SESSION_KEY = 'spesa-pronta-final:session:v12';
 const AI_MEMORY_KEY = 'spesa-pronta-final:ai-memory:v2';
 const SYNC_WAIT = 650;
 
@@ -13,8 +13,8 @@ const translations = {
     addArticle:'Aggiungi articolo', shoppingDone:'Ho fatto la spesa', searchPlaceholder:'Cerca un articolo', allCategories:'Tutte le categorie',
     catalogNote:'Qui trovi un menu generico con molti articoli comuni. Se qualcosa manca, aggiungilo tu.', quickList:'Lista rapida', quickListHint:'Solo ciò che devi comprare.',
     copyList:'Copia lista', suggestedTitle:'Consigliati per te', suggestedHint:'Articoli che consumi spesso o che stanno per finire.', alexaTitle:'Collegamento Alexa',
-    alexaTextShort:'Alexa legge e aggiorna la lista cloud.', connectAlexa:'Connetti Alexa', copyAlexaEndpoint:'Copia endpoint Alexa', registerTitle:'Registrazione opzionale',
-    registerText:'Crea un account per sincronizzare i tuoi dati e usare Alexa. Puoi anche continuare offline.', username:'Nome utente', usernamePh:'Inserisci il tuo nome',
+    alexaTextShort:'Alexa legge e aggiorna la lista cloud.', connectAlexa:'Connetti Alexa', copyAlexaEndpoint:'Copia endpoint Alexa', registerTitle:'Accedi o registrati',
+    registerText:'Prima di vedere i prodotti devi accedere o creare un profilo. Poi fai l’inventario iniziale con foto.', username:'Nome utente', usernamePh:'Inserisci il tuo nome',
     email:'Email', password:'Password', passwordPh:'Minimo 8 caratteri', peopleCount:'Numero persone in casa', animalCount:'Numero animali', captcha:'Captcha',
     apiEndpoint:'API endpoint', autoSmartOrdering:'Spesa intelligente automatica', registerCreate:'Registrati', continueOffline:'Continua offline', whyRegister:'Perché registrarsi?',
     benefitCloud:'Sincronizzazione sicura su cloud', benefitDevices:'Accesso da più dispositivi', benefitSmart:'Suggerimenti personalizzati', benefitAlexa:'Integrazione con Alexa',
@@ -37,8 +37,8 @@ const translations = {
     addArticle:'Add item', shoppingDone:'Shopping completed', searchPlaceholder:'Search item', allCategories:'All categories',
     catalogNote:'Here is a generic menu with many common items. Add yours if something is missing.', quickList:'Quick list', quickListHint:'Only what you need to buy.',
     copyList:'Copy list', suggestedTitle:'Suggested for you', suggestedHint:'Items you use often or that are running low.', alexaTitle:'Alexa connection',
-    alexaTextShort:'Alexa reads and updates the cloud list.', connectAlexa:'Connect Alexa', copyAlexaEndpoint:'Copy Alexa endpoint', registerTitle:'Optional registration',
-    registerText:'Create an account to sync your data and use Alexa. You can also continue offline.', username:'Username', usernamePh:'Enter your name',
+    alexaTextShort:'Alexa reads and updates the cloud list.', connectAlexa:'Connect Alexa', copyAlexaEndpoint:'Copy Alexa endpoint', registerTitle:'Login or register',
+    registerText:'Before seeing products, sign in or create a profile. Then complete the first photo inventory.', username:'Username', usernamePh:'Enter your name',
     email:'Email', password:'Password', passwordPh:'Minimum 8 characters', peopleCount:'People at home', animalCount:'Animals', captcha:'Captcha',
     apiEndpoint:'API endpoint', autoSmartOrdering:'Automatic smart shopping', registerCreate:'Register', continueOffline:'Continue offline', whyRegister:'Why register?',
     benefitCloud:'Secure cloud synchronization', benefitDevices:'Access from multiple devices', benefitSmart:'Personalized suggestions', benefitAlexa:'Alexa integration',
@@ -61,8 +61,8 @@ const translations = {
     addArticle:'Añadir artículo', shoppingDone:'Compra hecha', searchPlaceholder:'Buscar artículo', allCategories:'Todas las categorías',
     catalogNote:'Aquí tienes un menú genérico con muchos artículos comunes. Añade los tuyos si falta algo.', quickList:'Lista rápida', quickListHint:'Solo lo que debes comprar.',
     copyList:'Copiar lista', suggestedTitle:'Sugeridos para ti', suggestedHint:'Artículos que usas a menudo o que se están acabando.', alexaTitle:'Conexión Alexa',
-    alexaTextShort:'Alexa lee y actualiza la lista cloud.', connectAlexa:'Conectar Alexa', copyAlexaEndpoint:'Copiar endpoint Alexa', registerTitle:'Registro opcional',
-    registerText:'Crea una cuenta para sincronizar datos y usar Alexa. También puedes seguir offline.', username:'Usuario', usernamePh:'Introduce tu nombre',
+    alexaTextShort:'Alexa lee y actualiza la lista cloud.', connectAlexa:'Conectar Alexa', copyAlexaEndpoint:'Copiar endpoint Alexa', registerTitle:'Acceder o registrarse',
+    registerText:'Antes de ver productos, accede o crea un perfil. Luego completa el inventario inicial con fotos.', username:'Usuario', usernamePh:'Introduce tu nombre',
     email:'Email', password:'Contraseña', passwordPh:'Mínimo 8 caracteres', peopleCount:'Personas en casa', animalCount:'Animales', captcha:'Captcha',
     apiEndpoint:'API endpoint', autoSmartOrdering:'Compra inteligente automática', registerCreate:'Registrarse', continueOffline:'Continuar offline', whyRegister:'¿Por qué registrarse?',
     benefitCloud:'Sincronización segura en la nube', benefitDevices:'Acceso desde varios dispositivos', benefitSmart:'Sugerencias personalizadas', benefitAlexa:'Integración con Alexa',
@@ -85,8 +85,8 @@ const translations = {
     addArticle:'Artikel hinzufügen', shoppingDone:'Einkauf erledigt', searchPlaceholder:'Artikel suchen', allCategories:'Alle Kategorien',
     catalogNote:'Hier findest du viele häufige Artikel. Füge eigene Artikel hinzu, wenn etwas fehlt.', quickList:'Schnellliste', quickListHint:'Nur was du kaufen musst.',
     copyList:'Liste kopieren', suggestedTitle:'Für dich empfohlen', suggestedHint:'Artikel, die du oft verbrauchst oder die knapp werden.', alexaTitle:'Alexa-Verbindung',
-    alexaTextShort:'Alexa liest und aktualisiert die Cloud-Liste.', connectAlexa:'Alexa verbinden', copyAlexaEndpoint:'Alexa-Endpunkt kopieren', registerTitle:'Optionale Registrierung',
-    registerText:'Erstelle ein Konto, um Daten zu synchronisieren und Alexa zu nutzen. Du kannst auch offline fortfahren.', username:'Benutzername', usernamePh:'Namen eingeben',
+    alexaTextShort:'Alexa liest und aktualisiert die Cloud-Liste.', connectAlexa:'Alexa verbinden', copyAlexaEndpoint:'Alexa-Endpunkt kopieren', registerTitle:'Einloggen oder registrieren',
+    registerText:'Melde dich an oder erstelle ein Profil, bevor Produkte angezeigt werden. Danach folgt die Foto-Erstinventur.', username:'Benutzername', usernamePh:'Namen eingeben',
     email:'E-Mail', password:'Passwort', passwordPh:'Mindestens 8 Zeichen', peopleCount:'Personen im Haushalt', animalCount:'Tiere', captcha:'Captcha',
     apiEndpoint:'API-Endpunkt', autoSmartOrdering:'Automatische intelligente Einkaufsliste', registerCreate:'Registrieren', continueOffline:'Offline fortfahren', whyRegister:'Warum registrieren?',
     benefitCloud:'Sichere Cloud-Synchronisierung', benefitDevices:'Zugriff von mehreren Geräten', benefitSmart:'Personalisierte Vorschläge', benefitAlexa:'Alexa-Integration',
@@ -151,12 +151,12 @@ let aiMemory = loadAiMemory();
 let aiRecognition = null;
 let aiListening = false;
 
-function loadState(){ try { const x=JSON.parse(localStorage.getItem(STORAGE_KEY)); return Array.isArray(x) && x.length ? migrateItems(x) : structuredClone(defaults); } catch { return structuredClone(defaults); } }
+function loadState(){ try { const x=JSON.parse(localStorage.getItem(STORAGE_KEY)); return Array.isArray(x) ? migrateItems(x) : []; } catch { return []; } }
 function loadSettings(){ try { return Object.assign(defaultSettings(), JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}')); } catch { return defaultSettings(); } }
 function loadSession(){ try { return Object.assign({mode:'guest', user:null}, JSON.parse(localStorage.getItem(SESSION_KEY)||'{}')); } catch { return {mode:'guest', user:null}; } }
 function loadAiMemory(){ try { return Object.assign({messages:[], facts:[], events:[], scanHistory:[], pendingVerification:false, lastGreetingDate:'', summary:'', lastInsights:{}, personality:{warmth:1}}, JSON.parse(localStorage.getItem(AI_MEMORY_KEY)||'{}')); } catch { return {messages:[], facts:[], events:[], scanHistory:[], pendingVerification:false, lastGreetingDate:'', summary:'', lastInsights:{}, personality:{warmth:1}}; } }
 function saveAiMemory(){ localStorage.setItem(AI_MEMORY_KEY, JSON.stringify(aiMemory)); }
-function defaultSettings(){ return {lang:'it', cloudEnabled:false, apiEndpoint:'/api', token:'', householdId:'', people:2, animals:3, autoSmart:true, alexaConnected:false, profile:{firstName:'',lastName:'',username:'',email:''}}; }
+function defaultSettings(){ return {lang:'it', cloudEnabled:false, apiEndpoint:'/api', token:'', householdId:'', people:2, animals:0, autoSmart:true, alexaConnected:false, inventorySetupDone:false, inventoryStatus:'required', inventoryUpdatedAt:null, profile:{firstName:'',lastName:'',username:'',email:''}}; }
 function migrateItems(items){ return items.map(x => ({...createItem(x.id||cryptoId(), x.image||'assets/illustrations/generic-item.png', x.category||'food', x.names||{it:x.name||x.id,en:x.name||x.id,es:x.name||x.id,de:x.name||x.id}, x.qty??1, x.maxQty??6, x.baseThreshold??2, x.unitOptions||['pz','pc','lt','kg'], {custom:x.custom, usage:x.usage||0, kind:x.kind, perPersonMin:x.perPersonMin, perAnimalMin:x.perAnimalMin, recommendedBuy:x.recommendedBuy}), ...x})); }
 function saveAll(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); localStorage.setItem(SESSION_KEY, JSON.stringify(session)); scheduleSync(); }
 function t(k){ return translations[settings.lang]?.[k] || translations.it[k] || k; }
@@ -214,7 +214,7 @@ function init(){
   bind();
   applyLang();
   render();
-  showView('dashboard');
+  showView(initialView());
   $('#regCaptcha').placeholder = captcha.q;
   $('#alexaExamples').textContent = [
     'Alexa, chiedi a Spesa Pronta cosa devo comprare',
@@ -243,8 +243,11 @@ function bind(){
   $('#addProductBtn2').addEventListener('click', openAdd);
   $('#closeDialogBtn').addEventListener('click', () => $('#productDialog').close());
   $('#customProductForm').addEventListener('submit', addCustom);
+  $('#loginForm')?.addEventListener('submit', login);
   $('#registerForm').addEventListener('submit', register);
-  $('#continueOfflineBtn').addEventListener('click', () => { session={mode:'offline',user:null}; settings.cloudEnabled=false; saveAll(); showView('dashboard'); toast('Offline'); });
+  $('#continueOfflineBtn').addEventListener('click', continueLocalProfile);
+  $('#initialScanBtn')?.addEventListener('click', () => openGroceryScanner(true));
+  $('#initialVerifyLaterBtn')?.addEventListener('click', markInitialInventoryToVerify);
   $('#saveSettingsBtn').addEventListener('click', saveSettingsFromForm);
   $('#syncNowBtn').addEventListener('click', () => syncCloud(true));
   $('#saveProfileBtn').addEventListener('click', saveProfile);
@@ -283,8 +286,27 @@ function toggleMobileMenu(open){
   document.body.classList.toggle('menu-open', !!open);
 }
 
+
+function isSignedIn(){
+  return !!(session.user && (session.user.username || session.user.email || settings.profile?.username || settings.profile?.email));
+}
+function needsInitialInventory(){
+  return isSignedIn() && !settings.inventorySetupDone;
+}
+function initialView(){
+  if(!isSignedIn()) return 'registration';
+  if(needsInitialInventory()) return 'onboarding';
+  return 'dashboard';
+}
+function updateFlowClasses(){
+  document.body.classList.toggle('auth-required', !isSignedIn());
+  document.body.classList.toggle('inventory-required', needsInitialInventory());
+}
 function showView(v){
   toggleMobileMenu(false);
+  if(!isSignedIn() && v !== 'registration') v='registration';
+  if(needsInitialInventory() && !['onboarding','registration','settings','help'].includes(v)) v='onboarding';
+  updateFlowClasses();
   activeView=v;
   $all('.view').forEach(x=>x.classList.remove('active'));
   $(`#view-${v}`)?.classList.add('active');
@@ -295,6 +317,7 @@ function showView(v){
   if(v==='settings') renderSettings();
 }
 function render(){
+  updateFlowClasses();
   renderStats(); renderProducts(); renderSide(); renderSettings(); renderAllProducts(); renderShoppingFull(); renderSuggestions();
   renderUserPill();
 }
@@ -363,7 +386,7 @@ function filteredItems(){
   });
 }
 function renderProducts(){
-  const html = filteredItems().map(productRow).join('') || `<div class="info-strip"><span>i</span><p>${esc(t('noBuy'))}</p></div>`;
+  const html = filteredItems().map(productRow).join('') || `<div class="info-strip"><span>i</span><p>${state.length ? esc(t('noBuy')) : 'Nessun prodotto inventato: fai l’inventario con foto per creare la tua lista reale.'}</p></div>`;
   $('#productList').innerHTML=html;
   bindProductControls($('#productList'));
   renderStats(); renderSide();
@@ -448,6 +471,36 @@ function saveSettingsFromForm(){
   settings.cloudEnabled=$('#cloudEnabled').checked; settings.apiEndpoint=$('#apiEndpoint').value.trim()||settings.apiEndpoint;
   saveAll(); render(); toast(t('saved'));
 }
+
+async function login(e){
+  e.preventDefault();
+  const email=$('#loginEmail').value.trim(), password=$('#loginPassword').value;
+  if(!email||!password){ toast(t('required')); return; }
+  try{
+    const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+    if(!res.ok) throw new Error('login fail');
+    const data=await res.json();
+    session={mode:'registered',user:data.user};
+    settings={...settings,...(data.settings||{}),cloudEnabled:true,householdId:data.householdId,token:data.token,profile:{...(settings.profile||{}),firstName:data.user.firstName||'',lastName:data.user.lastName||'',username:data.user.username||'',email:data.user.email||''}};
+    state=Array.isArray(data.items)?migrateItems(data.items):[];
+    if(data.aiMemory) aiMemory=Object.assign(aiMemory,data.aiMemory);
+    if(!state.length && !settings.inventorySetupDone){ settings.inventorySetupDone=false; settings.inventoryStatus='required'; }
+    saveAiMemory(); saveAll(); render(); toast('Accesso effettuato ✅'); showView(initialView());
+  }catch(err){ toast('Accesso non riuscito: controlla email e password'); }
+}
+function continueLocalProfile(){
+  const firstName=$('#regFirstName').value.trim() || 'Utente';
+  const lastName=$('#regLastName').value.trim();
+  const username=$('#regUsername').value.trim() || 'profilo-locale';
+  const email=$('#regEmail').value.trim();
+  settings.people=Number($('#regPeople').value)||1;
+  settings.animals=Number($('#regAnimals').value)||0;
+  settings.profile={firstName,lastName,username,email};
+  settings.cloudEnabled=false; settings.inventorySetupDone=false; settings.inventoryStatus='required'; settings.inventoryUpdatedAt=null;
+  session={mode:'offline',user:{firstName,lastName,username,email}};
+  state=[];
+  saveAll(); render(); toast('Profilo locale creato. Ora fai l’inventario iniziale.'); showView('onboarding');
+}
 async function register(e){
   e.preventDefault();
   const answer=Number($('#regCaptcha').value);
@@ -456,13 +509,15 @@ async function register(e){
   if(!firstName||!lastName||!username||!email||!password){ toast(t('required')); return; }
   settings.people=Number($('#regPeople').value)||1; settings.animals=Number($('#regAnimals').value)||0; settings.autoSmart=$('#regAutoSmart').checked; settings.apiEndpoint=$('#regEndpoint').value.trim()||settings.apiEndpoint;
   settings.profile = { firstName, lastName, username, email };
+  settings.inventorySetupDone=false; settings.inventoryStatus='required'; settings.inventoryUpdatedAt=null;
+  state=[];
   try{
-    const res=await fetch(`${settings.apiEndpoint}/auth/register`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({firstName,lastName,username,email,password,people:settings.people,animals:settings.animals,autoSmart:settings.autoSmart,items:state})});
+    const res=await fetch(`${settings.apiEndpoint}/auth/register`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({firstName,lastName,username,email,password,people:settings.people,animals:settings.animals,autoSmart:settings.autoSmart,items:[],aiMemory})});
     if(!res.ok) throw new Error('register fail');
     const data=await res.json(); settings.token=data.token; settings.householdId=data.householdId; settings.cloudEnabled=true; session={mode:'registered',user:data.user};
-    saveAll(); await syncCloud(true); toast(t('saved')); showView('dashboard');
+    saveAll(); await syncCloud(true); toast(t('saved')); showView('onboarding');
   }catch(err){
-    session={mode:'offline',user:{firstName,lastName,username,email}}; settings.cloudEnabled=false; saveAll(); toast('Offline: account locale salvato'); showView('dashboard');
+    session={mode:'offline',user:{firstName,lastName,username,email}}; settings.cloudEnabled=false; saveAll(); toast('Offline: account locale salvato. Ora fai l’inventario iniziale.'); showView('onboarding');
   }
 }
 function openAdd(){ $('#productDialog').showModal(); }
@@ -474,7 +529,7 @@ function addCustom(e){
   state.unshift(createItem(cryptoId(),'assets/illustrations/generic-item.png',$('#customCategory').value,names,1,6,2,['pz','pc','lt','kg'],{custom:true}));
   $('#productDialog').close(); $('#customProductForm').reset(); saveAll(); render(); toast(t('added'));
 }
-function shoppingDone(){ state=state.map(i=>{ const newQty=recommendedQty(i); if(newQty>i.qty) rememberEvent('restock', i, newQty-i.qty, 'shopping done'); return {...i,qty:newQty,updatedAt:Date.now()}; }); saveAll(); render(); toast(t('saved')); }
+function shoppingDone(){ openGroceryScanner(true); }
 async function copyList(){ const txt=buyItems().map(i=>`- ${nameOf(i)} (${i.qty} ${i.unit})`).join('\n') || t('noBuy'); await navigator.clipboard.writeText(txt).catch(()=>{}); toast(t('copied')); }
 function connectAlexa(){ settings.alexaConnected=true; saveAll(); render(); syncCloud(true); toast(t('alexaConnected')); }
 async function copyAlexaEndpoint(){ const url=`${settings.apiEndpoint.replace(/\/$/,'')}/alexa?householdId=${encodeURIComponent(settings.householdId||'DEMO')}`; await navigator.clipboard.writeText(url).catch(()=>{}); toast(t('copied')); }
@@ -663,16 +718,37 @@ async function askBackendAi(message){
 function openGroceryScanner(afterShopping=false){
   const dlg=$('#groceryScannerDialog'); if(!dlg) return;
   dlg.dataset.afterShopping = afterShopping ? '1' : '0';
-  $('#scannerStatus').textContent = afterShopping ? 'Hai premuto “Ho fatto la spesa”. Ora puoi fotografare ogni prodotto prima di metterlo in frigo/dispensa, oppure segnare la spesa come fatta ma da verificare.' : 'Fotografa un articolo alla volta. L’AI prova a riconoscerlo, ti fa modificare nome/quantità e poi aggiorna le scorte.';
+  $('#scannerStatus').textContent = !settings.inventorySetupDone ? 'Inventario iniziale: tira fuori i prodotti, fotografa un articolo alla volta e conferma nome/quantità prima di rimetterlo a posto.' : (afterShopping ? 'Hai premuto “Ho fatto la spesa”. Ora puoi fotografare ogni prodotto prima di metterlo in frigo/dispensa, oppure segnare la spesa come fatta ma da verificare.' : 'Fotografa un articolo alla volta. L’AI prova a riconoscerlo, ti fa modificare nome/quantità e poi aggiorna le scorte.');
   try{ dlg.showModal(); }catch{ dlg.setAttribute('open',''); }
   openAiPanel();
 }
 function closeGroceryScanner(){ const dlg=$('#groceryScannerDialog'); if(dlg?.open) dlg.close(); else dlg?.removeAttribute('open'); }
 function resetScannerResults(){ $('#scannerResults').innerHTML=''; $('#scannerPreview').innerHTML=''; $('#scannerStatus').textContent='Risultati svuotati. Puoi scattare nuove foto.'; }
+function completeShoppingDone(needsVerification=false){
+  if(state.length){
+    state=state.map(i=>{ const newQty=recommendedQty(i); if(newQty>i.qty) rememberEvent('restock', i, newQty-i.qty, needsVerification?'shopping done unverified':'shopping done verified'); return {...i,qty:newQty,updatedAt:Date.now()}; });
+  }
+  settings.inventorySetupDone=true;
+  settings.inventoryStatus=needsVerification?'to_verify':'verified';
+  settings.inventoryUpdatedAt=Date.now();
+  aiMemory.pendingVerification=!!needsVerification;
+  saveAiMemory(); saveAll(); render(); showView('dashboard');
+}
 function finishScanner(){
-  aiMemory.pendingVerification=false; saveAiMemory(); saveAll(); render(); closeGroceryScanner();
-  addAiMessage('assistant','Controllo foto completato. Ho aggiornato gli articoli riconosciuti e salvato la memoria della spesa.');
-  toast('Controllo spesa completato ✅');
+  const confirmed=document.querySelectorAll('#scannerResults .scan-result.confirmed').length;
+  if(!settings.inventorySetupDone && confirmed===0){
+    $('#scannerStatus').textContent='Per completare il primo inventario devi confermare almeno un prodotto, oppure scegliere “Non posso ora: fatta da verificare”.';
+    toast('Conferma almeno un prodotto o scegli da verificare');
+    return;
+  }
+  completeShoppingDone(false); closeGroceryScanner();
+  addAiMessage('assistant','Inventario foto completato. Ora la lista parte dai prodotti reali che hai confermato.');
+  toast('Inventario completato ✅');
+}
+function markInitialInventoryToVerify(){
+  settings.inventorySetupDone=true; settings.inventoryStatus='to_verify'; settings.inventoryUpdatedAt=Date.now();
+  aiMemory.pendingVerification=true; saveAiMemory(); saveAll(); render(); showView('dashboard');
+  toast('Inventario segnato da verificare ⚠️');
 }
 function markShoppingDoneToVerify(){
   completeShoppingDone(true); closeGroceryScanner();

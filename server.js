@@ -3,6 +3,8 @@ import fs from 'fs';
 import crypto from 'crypto';
 import path from 'path';
 import { URL } from 'url';
+import pg from 'pg';
+const { Pool } = pg;
 
 // Carica automaticamente backend-example/.env in locale, senza dipendenze esterne.
 // In hosting tipo Render/Railway/Netlify Functions usa le Environment Variables del pannello.
@@ -28,10 +30,44 @@ const STATIC_DIR = path.resolve(process.env.STATIC_DIR || './public');
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.5';
 const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || OPENAI_MODEL;
 const OPENAI_TIMEOUT_MS = Number(process.env.OPENAI_TIMEOUT_MS || 45000);
-let db = loadDb();
+const DATABASE_URL = process.env.DATABASE_URL || '';
+let db = { users:{}, households:{} };
+let dbMode = 'file';
+let pgPool = null;
 
-function loadDb(){ try { return JSON.parse(fs.readFileSync(DB_PATH,'utf8')); } catch { return { users:{}, households:{} }; } }
-function saveDb(){ fs.writeFileSync(DB_PATH, JSON.stringify(db,null,2)); }
+function emptyDb(){ return { users:{}, households:{} }; }
+function loadDbFile(){ try { return JSON.parse(fs.readFileSync(DB_PATH,'utf8')); } catch { return emptyDb(); } }
+async function initStorage(){
+  if(!DATABASE_URL){
+    db = loadDbFile();
+    dbMode = 'file';
+    console.log('Spesa Pronta DB: local file mode', DB_PATH);
+    return;
+  }
+  dbMode = 'supabase-postgres';
+  pgPool = new Pool({ connectionString:DATABASE_URL, ssl:{ rejectUnauthorized:false }, max:3, idleTimeoutMillis:30000, connectionTimeoutMillis:15000 });
+  await pgPool.query(`CREATE TABLE IF NOT EXISTS spesa_pronta_store (
+    key text PRIMARY KEY,
+    data jsonb NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now()
+  )`);
+  const found = await pgPool.query('SELECT data FROM spesa_pronta_store WHERE key=$1', ['main']);
+  if(found.rows.length){
+    db = found.rows[0].data || emptyDb();
+  } else {
+    db = loadDbFile();
+    await saveDb();
+  }
+  console.log('Spesa Pronta DB: Supabase/Postgres connected');
+}
+async function saveDb(){
+  if(pgPool){
+    await pgPool.query(`INSERT INTO spesa_pronta_store(key,data,updated_at) VALUES($1,$2,now())
+      ON CONFLICT(key) DO UPDATE SET data=EXCLUDED.data, updated_at=now()`, ['main', db]);
+    return;
+  }
+  fs.writeFileSync(DB_PATH, JSON.stringify(db,null,2));
+}
 function id(prefix){ return prefix + '_' + crypto.randomBytes(8).toString('hex'); }
 function token(){ return crypto.randomBytes(24).toString('hex'); }
 function hash(pwd){ return crypto.createHash('sha256').update(String(pwd)).digest('hex'); }
@@ -196,7 +232,11 @@ const server = http.createServer(async (req,res)=>{
   const body = await readBody(req);
 
   try {
-    if(req.method === 'GET' && pathName === '/api/health') return send(res, 200, { ok:true, service:'spesa-pronta-cloud', time:new Date().toISOString() });
+    if(req.method === 'GET' && pathName === '/api/health') return send(res, 200, { ok:true, service:'spesa-pronta-cloud', dbMode, dbConnected: dbMode !== 'file', time:new Date().toISOString() });
+
+    if(req.method === 'GET' && pathName === '/api/db/status') {
+      return send(res, 200, { ok:true, mode:dbMode, connected:dbMode !== 'file', users:Object.keys(db.users||{}).length, households:Object.keys(db.households||{}).length });
+    }
 
     if(req.method === 'GET' && pathName === '/api/ai/status') {
       return send(res, 200, {
@@ -206,6 +246,8 @@ const server = http.createServer(async (req,res)=>{
         model: OPENAI_MODEL,
         visionModel: OPENAI_VISION_MODEL,
         visionReady: aiConnected(),
+        dbMode,
+        databaseConnected: dbMode !== 'file',
         note: aiConnected() ? 'AI Chat + Vision attive dal backend' : 'Manca OPENAI_API_KEY: usa motore locale e inserimento guidato foto'
       });
     }
@@ -217,8 +259,8 @@ const server = http.createServer(async (req,res)=>{
       if(found) return send(res, 409, { error:'email_exists' });
       const userId=id('user'), householdId=id('home'), tkn=token();
       db.users[userId]={ id:userId, firstName, lastName, username, email, passwordHash:hash(password), householdId };
-      db.households[householdId]={ id:householdId, ownerUserId:userId, token:tkn, settings:{ people, animals, autoSmart, alexaConnected:false, lang:'it' }, items, aiMemory: aiMemory || {messages:[],facts:[],events:[],scanHistory:[]}, updatedAt:Date.now() };
-      saveDb();
+      db.households[householdId]={ id:householdId, ownerUserId:userId, token:tkn, settings:{ people, animals, autoSmart, alexaConnected:false, lang:'it', inventorySetupDone:false, inventoryStatus:'required', inventoryUpdatedAt:null }, items, aiMemory: aiMemory || {messages:[],facts:[],events:[],scanHistory:[]}, updatedAt:Date.now() };
+      await saveDb();
       return send(res, 200, { ok:true, user:safeUser(db.users[userId]), householdId, token:tkn });
     }
 
@@ -244,7 +286,7 @@ const server = http.createServer(async (req,res)=>{
         h.settings = { ...h.settings, ...(body.settings || {}) };
         if(body.aiMemory) h.aiMemory = body.aiMemory;
         h.updatedAt = Date.now();
-        saveDb();
+        await saveDb();
         return send(res, 200, { ok:true, updatedAt:h.updatedAt, shoppingList: shoppingList(h) });
       }
     }
@@ -302,19 +344,19 @@ const server = http.createServer(async (req,res)=>{
       if(intent === 'AddItemIntent'){
         const item = findItem(h, product);
         if(!item) return send(res, 200, alexaSpeak(`Non trovo ${product}. Apri l'app e aggiungilo al catalogo.`));
-        item.qty = 0; item.updatedAt = Date.now(); item.usage = Number(item.usage||0)+1; h.updatedAt=Date.now(); saveDb();
+        item.qty = 0; item.updatedAt = Date.now(); item.usage = Number(item.usage||0)+1; h.updatedAt=Date.now(); await saveDb();
         return send(res, 200, alexaSpeak(`Ok, ho aggiunto ${itemName(item,h.settings?.lang)} alla lista della spesa.`));
       }
       if(intent === 'SetQuantityIntent' || intent === 'UpdateItemIntent'){
         const item = findItem(h, product);
         if(!item) return send(res, 200, alexaSpeak(`Non trovo ${product}.`));
         if(!Number.isFinite(qty)) return send(res, 200, alexaSpeak('Dimmi una quantità valida.'));
-        item.qty = qty; if(unit) item.unit = unit; item.updatedAt = Date.now(); h.updatedAt=Date.now(); saveDb();
+        item.qty = qty; if(unit) item.unit = unit; item.updatedAt = Date.now(); h.updatedAt=Date.now(); await saveDb();
         return send(res, 200, alexaSpeak(`Ok, ${itemName(item,h.settings?.lang)} ora è a ${item.qty} ${item.unit||''}.`));
       }
       if(intent === 'ResetListIntent'){
         h.items = (h.items||[]).map(i => ({ ...i, qty: i.recommendedBuy || i.maxQty || 5, updatedAt:Date.now() }));
-        h.updatedAt=Date.now(); saveDb();
+        h.updatedAt=Date.now(); await saveDb();
         return send(res, 200, alexaSpeak('Perfetto, ho segnato la spesa come fatta.'));
       }
       return send(res, 200, alexaSpeak('Puoi chiedermi cosa devi comprare, aggiungere un prodotto o modificare una quantità.'));
@@ -328,4 +370,9 @@ const server = http.createServer(async (req,res)=>{
   }
 });
 
-server.listen(PORT, ()=>console.log(`Spesa Pronta all-in-one running on http://localhost:${PORT}`));
+initStorage()
+  .then(() => server.listen(PORT, ()=>console.log(`Spesa Pronta all-in-one running on http://localhost:${PORT} - db=${dbMode}`)))
+  .catch(err => {
+    console.error('Errore connessione database:', err);
+    process.exit(1);
+  });

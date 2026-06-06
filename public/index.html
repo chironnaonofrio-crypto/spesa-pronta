@@ -115,9 +115,16 @@
       <section class="view" id="view-registration">
         <section class="panel registration-panel">
           <div>
-            <h2 data-i18n="registerTitle">Registrazione opzionale</h2>
-            <p data-i18n="registerText">Crea un account per sincronizzare i tuoi dati e usare Alexa. Puoi anche continuare offline.</p>
+            <h2 data-i18n="registerTitle">Accedi o registrati</h2>
+            <p data-i18n="registerText">Prima di vedere i prodotti devi accedere o creare un profilo. Poi Spesa Pronta ti guiderà nell’inventario iniziale con foto.</p>
           </div>
+          <form id="loginForm" class="form-grid login-form">
+            <h3 class="wide">Accedi</h3>
+            <label class="wide"><span>Email</span><input id="loginEmail" type="email" required placeholder="esempio@email.it"></label>
+            <label class="wide"><span>Password</span><input id="loginPassword" type="password" required placeholder="La tua password"></label>
+            <button class="primary-btn wide" type="submit">Accedi a Spesa Pronta</button>
+            <p class="wide auth-note">Nuovo utente? Compila la registrazione qui sotto.</p>
+          </form>
           <form id="registerForm" class="form-grid">
             <label><span data-i18n="firstName">Nome</span><input id="regFirstName" required data-i18n-placeholder="firstNamePh" placeholder="Inserisci il tuo nome"></label>
             <label><span data-i18n="lastName">Cognome</span><input id="regLastName" required data-i18n-placeholder="lastNamePh" placeholder="Inserisci il tuo cognome"></label>
@@ -131,7 +138,7 @@
             <label class="switch-row wide"><span data-i18n="autoSmartOrdering">Spesa intelligente automatica</span><input id="regAutoSmart" type="checkbox" checked></label>
             <div class="form-actions wide">
               <button class="primary-btn" type="submit" data-i18n="registerCreate">Registrati</button>
-              <button class="outline-btn" id="continueOfflineBtn" type="button" data-i18n="continueOffline">Continua offline</button>
+              <button class="outline-btn" id="continueOfflineBtn" type="button">Usa profilo locale</button>
             </div>
           </form>
           <aside class="register-benefits">
@@ -140,10 +147,29 @@
             <ul>
               <li data-i18n="benefitCloud">Sincronizzazione sicura su cloud</li>
               <li data-i18n="benefitDevices">Accesso da più dispositivi</li>
-              <li data-i18n="benefitSmart">Suggerimenti personalizzati</li>
+              <li data-i18n="benefitSmart">Inventario iniziale con foto obbligatorio</li>
               <li data-i18n="benefitAlexa">Integrazione con Alexa</li>
             </ul>
           </aside>
+        </section>
+      </section>
+
+      <section class="view" id="view-onboarding">
+        <section class="panel onboarding-panel">
+          <div class="onboarding-badge">🧊📷</div>
+          <h2>Inventario iniziale obbligatorio</h2>
+          <p class="onboarding-lead">Prima di mostrarti la lista prodotti, Spesa Pronta deve sapere cosa hai davvero in casa.</p>
+          <div class="onboarding-steps">
+            <article><strong>1</strong><span>Tira fuori i prodotti dal frigo/dispensa.</span></article>
+            <article><strong>2</strong><span>Fotografa un articolo alla volta davanti al frigo.</span></article>
+            <article><strong>3</strong><span>L’AI propone nome, quantità, unità e categoria.</span></article>
+            <article><strong>4</strong><span>Confermi o correggi, poi rimetti il prodotto al suo posto.</span></article>
+          </div>
+          <div class="onboarding-actions">
+            <button class="primary-btn" id="initialScanBtn" type="button">📷 Inizia inventario con foto</button>
+            <button class="outline-btn warning" id="initialVerifyLaterBtn" type="button">Non posso ora: segna da verificare</button>
+          </div>
+          <p class="onboarding-warning">Finché non completi questo passaggio, non vengono caricati prodotti finti o quantità inventate.</p>
         </section>
       </section>
 
