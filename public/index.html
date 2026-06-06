@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#071b34">
-  <meta name="description" content="Spesa Pronta: gestione spesa intelligente con cloud, Alexa e suggerimenti automatici.">
+  <meta name="description" content="Spesa Pronta: gestione spesa intelligente con cloud, Alexa, Google Assistant e suggerimenti automatici.">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="assets/styles.css?v=16">
+  <link rel="stylesheet" href="assets/styles.css?v=17">
   <title>Spesa Pronta</title>
 </head>
 <body>
@@ -103,10 +103,11 @@
             </section>
 
             <section class="panel mini-panel">
-              <div class="mini-head"><div><h3 data-i18n="alexaTitle">Collegamento Alexa</h3><p data-i18n="alexaTextShort">Alexa legge e aggiorna la lista cloud.</p></div></div>
+              <div class="mini-head"><div><h3 data-i18n="voiceTitle">Assistenti vocali</h3><p data-i18n="voiceTextShort">Alexa e Google Assistant leggono e aggiornano la stessa lista cloud.</p></div></div>
               <div class="alexa-state"><span id="alexaDot"></span><strong id="alexaStatus">Non collegata</strong></div>
               <button class="primary-btn full" id="connectAlexaBtn" type="button" data-i18n="connectAlexa">Connetti Alexa</button>
               <button class="outline-btn full" id="copyAlexaBtn" type="button" data-i18n="copyAlexaEndpoint">Copia endpoint Alexa</button>
+              <button class="outline-btn full google-btn" id="copyGoogleBtn" type="button" data-i18n="copyGoogleEndpoint">Copia endpoint Google Assistant</button>
             </section>
           </aside>
         </div>
@@ -149,7 +150,7 @@
           <aside class="register-benefits futuristic-benefits">
             <div class="alexa-holo">
               <span class="ring r1"></span><span class="ring r2"></span>
-              <img src="assets/illustrations/alexa.png" alt="Alexa">
+              <img src="assets/illustrations/alexa.png" alt="Alexa"><img class="ga-icon" src="assets/illustrations/google-assistant.png" alt="Google Assistant">
             </div>
             <h3 data-i18n="whyRegister">Perché registrarsi?</h3>
             <ul>
@@ -158,21 +159,38 @@
               <li data-i18n="benefitDevices">Accesso da più dispositivi</li>
               <li data-i18n="benefitSmart">Inventario iniziale con foto obbligatorio</li>
               <li data-i18n="benefitAlexa">Integrazione con Alexa</li>
+              <li data-i18n="benefitGoogle">Compatibilità Google Assistant</li>
             </ul>
           </aside>
         </section>
       </section>
 
+
+      <section class="view" id="view-verify-email">
+        <section class="panel verify-email-panel">
+          <div class="verify-orb">✉️</div>
+          <p class="welcome-kicker">Sicurezza account • Email obbligatoria</p>
+          <h2>Verifica la tua email</h2>
+          <p class="welcome-lead">Ti abbiamo inviato un link di verifica a <b id="verifyEmailTarget">questa email</b>. Prima di entrare nella dashboard devi confermare che l’indirizzo esiste davvero.</p>
+          <form id="verifyEmailForm" class="form-grid verify-form">
+            <label class="wide"><span>Token di verifica</span><input id="verifyToken" placeholder="Incolla qui il token ricevuto via email"></label>
+            <button class="primary-btn wide" type="submit">Verifica email e attiva account</button>
+            <button class="outline-btn wide" id="resendVerificationBtn" type="button">Invia di nuovo email di verifica</button>
+          </form>
+          <p class="onboarding-warning">Se non trovi l’email, controlla anche spam/promozioni. Il link scade dopo 24 ore.</p>
+        </section>
+      </section>
+
       <section class="view" id="view-welcome">
         <section class="panel welcome-panel">
-          <div class="welcome-orb"><img src="assets/illustrations/alexa.png" alt="Alexa"></div>
+          <div class="welcome-orb dual-orb"><img src="assets/illustrations/alexa.png" alt="Alexa"><img src="assets/illustrations/google-assistant.png" alt="Google Assistant"></div>
           <p class="welcome-kicker">Account creato • Cloud sicuro attivo</p>
           <h2>Benvenuto in Spesa Pronta, <span id="welcomeName">amico</span> ✨</h2>
           <p class="welcome-lead">Ti abbiamo inviato una email di benvenuto con il tuo nome utente. Ora partiamo con l’inventario iniziale: foto reali, quantità reali, zero prodotti inventati.</p>
           <div class="welcome-grid">
             <article><strong>🔐</strong><span>Dati salvati in cloud con cifratura lato server.</span></article>
             <article><strong>📷</strong><span>Inventario iniziale obbligatorio con foto.</span></article>
-            <article><strong><img src="assets/illustrations/alexa.png" alt="Alexa"></strong><span>Alexa leggerà la stessa lista del database.</span></article>
+            <article><strong><img src="assets/illustrations/alexa.png" alt="Alexa"></strong><span>Alexa e Google Assistant leggeranno la stessa lista del database.</span></article>
           </div>
           <button class="primary-btn welcome-start" id="continueToInventoryBtn" type="button">Inizia inventario iniziale</button>
         </section>
@@ -280,11 +298,14 @@
                 <label class="switch-row"><span data-i18n="autoSmartOrdering">Ordina/consiglia in automatico</span><input id="autoSmartToggle" type="checkbox"></label>
                 <p data-i18n="autoSmartExplain">Se disattivato, l’app non aggiunge suggerimenti automatici alla lista.</p>
               </article>
-              <article class="setting-card">
-                <h3>Alexa</h3>
-                <p data-i18n="alexaLong">Collega Alexa allo stesso database: quando modifichi un articolo, la lista vocale si aggiorna.</p>
+              <article class="setting-card voice-card">
+                <h3 data-i18n="voiceTitle">Assistenti vocali</h3>
+                <p data-i18n="voiceLong">Collega Alexa e Google Assistant allo stesso database: quando modifichi un articolo, la lista vocale si aggiorna per entrambi.</p>
+                <div class="voice-icons"><img src="assets/illustrations/alexa.png" alt="Alexa"><img src="assets/illustrations/google-assistant.png" alt="Google Assistant"></div>
                 <button class="primary-btn full" id="connectAlexaBtn2" type="button" data-i18n="connectAlexa">Connetti Alexa</button>
                 <button class="outline-btn full" id="copyAlexaBtn2" type="button" data-i18n="copyAlexaEndpoint">Copia endpoint Alexa</button>
+                <button class="outline-btn full google-btn" id="connectGoogleBtn" type="button" data-i18n="connectGoogle">Connetti Google Assistant</button>
+                <button class="outline-btn full google-btn" id="copyGoogleBtn2" type="button" data-i18n="copyGoogleEndpoint">Copia endpoint Google Assistant</button>
               </article>
             </div>
           </section>
@@ -294,7 +315,7 @@
       <section class="view" id="view-help">
         <section class="panel">
           <h2 data-i18n="navHelp">Aiuto</h2>
-          <p data-i18n="helpText">Esempi Alexa: “Alexa, chiedi a Spesa Pronta cosa devo comprare”, “aggiungi acqua”, “segna crocchette cane a 10 kg”.</p>
+          <p data-i18n="helpText">Esempi vocali: “Alexa, chiedi a Spesa Pronta cosa devo comprare” oppure “Hey Google, chiedi a Spesa Pronta cosa manca”.</p>
           <pre id="alexaExamples"></pre>
         </section>
       </section>

@@ -1,0 +1,18 @@
+{
+  "queryResult": {
+    "queryText": "imposta crocchette cane a 10 kg",
+    "intent": {
+      "displayName": "SetQuantityIntent"
+    },
+    "parameters": {
+      "product": "crocchette cane",
+      "quantity": 10,
+      "unit": "kg"
+    }
+  },
+  "sessionInfo": {
+    "parameters": {
+      "householdId": "SOSTITUISCI_CON_HOUSEHOLD_ID"
+    }
+  }
+}

@@ -1,8 +1,8 @@
 
-const STORAGE_KEY = 'spesa-pronta-final:v16';
-const SETTINGS_KEY = 'spesa-pronta-final:settings:v16';
-const SESSION_KEY = 'spesa-pronta-final:session:v16';
-const AI_MEMORY_KEY = 'spesa-pronta-final:ai-memory:v16';
+const STORAGE_KEY = 'spesa-pronta-final:v19';
+const SETTINGS_KEY = 'spesa-pronta-final:settings:v19';
+const SESSION_KEY = 'spesa-pronta-final:session:v19';
+const AI_MEMORY_KEY = 'spesa-pronta-final:ai-memory:v22';
 const SYNC_WAIT = 650;
 
 const translations = {
@@ -17,8 +17,8 @@ const translations = {
     registerText:'Prima di vedere i prodotti devi accedere o creare un profilo. Poi fai l’inventario iniziale con foto.', username:'Nome utente', usernamePh:'Inserisci il tuo nome',
     email:'Email', password:'Password', passwordPh:'Minimo 8 caratteri', peopleCount:'Numero persone in casa', animalCount:'Numero animali', captcha:'Captcha',
     apiEndpoint:'API endpoint', autoSmartOrdering:'Spesa intelligente automatica', registerCreate:'Registrati', continueOffline:'Continua offline', whyRegister:'Perché registrarsi?',
-    benefitCloud:'Sincronizzazione sicura su cloud', benefitSecurity:'Dati cifrati nel database', forgotPassword:'Hai dimenticato la password?', resetMailSent:'Se l’indirizzo è presente, riceverai una email con link/token di recupero.', passwordUpdated:'Password aggiornata ✅', captchaPick:'Tocca l’immagine richiesta', captchaPickItem:'Tocca: ', welcomeEmailSent:'Email di benvenuto inviata ✅', benefitDevices:'Accesso da più dispositivi', benefitSmart:'Suggerimenti personalizzati', benefitAlexa:'Integrazione con Alexa',
-    productsHint:'Catalogo completo e gestione articoli personalizzati.', shoppingHint:'Questa è la lista che Alexa leggerà dal cloud.', suggestionsSmart:'Suggerimenti intelligenti',
+    benefitCloud:'Sincronizzazione sicura su cloud', benefitSecurity:'Dati cifrati nel database', forgotPassword:'Hai dimenticato la password?', resetMailSent:'Se l’indirizzo è presente, riceverai una email con link/token di recupero.', verifyMailSent:'Ti abbiamo inviato una email di verifica ✅', emailVerified:'Email verificata ✅', emailNotVerified:'Devi verificare la tua email prima di accedere.', passwordUpdated:'Password aggiornata ✅', captchaPick:'Tocca l’immagine richiesta', captchaPickItem:'Tocca: ', welcomeEmailSent:'Email di benvenuto inviata ✅', benefitDevices:'Accesso da più dispositivi', benefitSmart:'Suggerimenti personalizzati', benefitAlexa:'Integrazione con Alexa', benefitGoogle:'Compatibilità Google Assistant', voiceTitle:'Assistenti vocali', voiceTextShort:'Alexa e Google Assistant aggiornano la stessa lista cloud.', voiceLong:'Collega Alexa e Google Assistant allo stesso database: quando modifichi un articolo, la lista vocale si aggiorna per entrambi.', connectGoogle:'Connetti Google Assistant', copyGoogleEndpoint:'Copia endpoint Google Assistant', googleConnected:'Google Assistant collegato',
+    productsHint:'Catalogo completo e gestione articoli personalizzati.', shoppingHint:'Questa è la lista che Alexa e Google Assistant leggeranno dal cloud.', suggestionsSmart:'Suggerimenti intelligenti',
     suggestionsExplain:'Raccomandazioni basate su persone, animali e consumo reale.', peopleInHome:'Persone in casa', animalsInHome:'Animali', smartAnalysis:'Analisi consumi',
     smartHow:'Analizziamo i consumi abituali e il numero di persone/animali per prevedere cosa sta per finire.', language:'Lingua dell’app', cloudSync:'Cloud & Sincronizzazione',
     enableCloud:'Abilita sync cloud', householdId:'ID famiglia', apiToken:'Token API', saveSettings:'Salva impostazioni', household:'Famiglia', smartShopping:'Suggerimenti spesa intelligenti',
@@ -28,7 +28,7 @@ const translations = {
     qty:'Quantità', unit:'Unità', availability:'Disponibilità', lowStock:'Scorta bassa', goodStock:'Scorta buona', inStock:'IN CASA', buyStock:'DA COMPRARE',
     copied:'Copiato ✅', saved:'Salvato ✅', synced:'Sincronizzato', offline:'Offline', guest:'Ospite', registered:'Registrato', wrongCaptcha:'Captcha errato', required:'Compila i campi richiesti',
     noBuy:'Niente da comprare 🎉', added:'Articolo aggiunto ✅', syncFail:'Sync non riuscita', alexaConnected:'Collegata', alexaNotConnected:'Non collegata',
-    category_food:'Alimentari', category_drinks:'Bevande', category_pets:'Animali', category_house:'Casa', category_pharmacy:'Farmacia', category_aquarium:'Acquario', category_fruit:'Frutta', category_veg:'Verdura', firstName:'Nome', lastName:'Cognome', firstNamePh:'Inserisci il tuo nome', lastNamePh:'Inserisci il tuo cognome', profileTitle:'Profilo utente', saveProfile:'Salva profilo', registerOrLogin:'Registrati / Login', account:'Account', clickToProfile:'Apri profilo', clickToRegister:'Registrati per sincronizzare', profileSaved:'Profilo aggiornato ✅', profileGuestText:'Accedi per sincronizzare tutto e usare Alexa.', homeDataTitle:'Dati casa per i consumi intelligenti', homeDataHint:'Questi numeri servono per calcolare acqua, crocchette e scorte consigliate.'
+    category_food:'Alimentari', category_drinks:'Bevande', category_pets:'Animali', category_house:'Casa', category_pharmacy:'Farmacia', category_aquarium:'Acquario', category_fruit:'Frutta', category_veg:'Verdura', firstName:'Nome', lastName:'Cognome', firstNamePh:'Inserisci il tuo nome', lastNamePh:'Inserisci il tuo cognome', profileTitle:'Profilo utente', saveProfile:'Salva profilo', registerOrLogin:'Registrati / Login', account:'Account', clickToProfile:'Apri profilo', clickToRegister:'Registrati per sincronizzare', profileSaved:'Profilo aggiornato ✅', profileGuestText:'Accedi per sincronizzare tutto e usare Alexa/Google Assistant.', homeDataTitle:'Dati casa per i consumi intelligenti', homeDataHint:'Questi numeri servono per calcolare acqua, crocchette e scorte consigliate.'
   },
   en: {
     navDashboard:'Dashboard', navProducts:'Products', navShopping:'Shopping list', navSuggestions:'Suggestions', navSettings:'Settings', navHelp:'Help',
@@ -41,7 +41,7 @@ const translations = {
     registerText:'Before seeing products, sign in or create a profile. Then complete the first photo inventory.', username:'Username', usernamePh:'Enter your name',
     email:'Email', password:'Password', passwordPh:'Minimum 8 characters', peopleCount:'People at home', animalCount:'Animals', captcha:'Captcha',
     apiEndpoint:'API endpoint', autoSmartOrdering:'Automatic smart shopping', registerCreate:'Register', continueOffline:'Continue offline', whyRegister:'Why register?',
-    benefitCloud:'Secure cloud synchronization', benefitDevices:'Access from multiple devices', benefitSmart:'Personalized suggestions', benefitAlexa:'Alexa integration',
+    benefitCloud:'Secure cloud synchronization', benefitDevices:'Access from multiple devices', benefitSmart:'Personalized suggestions', benefitAlexa:'Alexa integration', benefitGoogle:'Google Assistant compatibility', voiceTitle:'Voice assistants', voiceTextShort:'Alexa and Google Assistant update the same cloud list.', voiceLong:'Connect Alexa and Google Assistant to the same database: when you edit an item, the voice list updates for both.', connectGoogle:'Connect Google Assistant', copyGoogleEndpoint:'Copy Google Assistant endpoint', googleConnected:'Google Assistant connected',
     productsHint:'Full catalog and custom item management.', shoppingHint:'This is the list Alexa will read from the cloud.', suggestionsSmart:'Smart suggestions',
     suggestionsExplain:'Recommendations based on people, pets and real consumption.', peopleInHome:'People at home', animalsInHome:'Animals', smartAnalysis:'Consumption analysis',
     smartHow:'We analyze typical consumption and household size/pets to predict what is running low.', language:'App language', cloudSync:'Cloud & Sync',
@@ -65,7 +65,7 @@ const translations = {
     registerText:'Antes de ver productos, accede o crea un perfil. Luego completa el inventario inicial con fotos.', username:'Usuario', usernamePh:'Introduce tu nombre',
     email:'Email', password:'Contraseña', passwordPh:'Mínimo 8 caracteres', peopleCount:'Personas en casa', animalCount:'Animales', captcha:'Captcha',
     apiEndpoint:'API endpoint', autoSmartOrdering:'Compra inteligente automática', registerCreate:'Registrarse', continueOffline:'Continuar offline', whyRegister:'¿Por qué registrarse?',
-    benefitCloud:'Sincronización segura en la nube', benefitSecurity:'Datos cifrados en la base de datos', forgotPassword:'¿Olvidaste la contraseña?', resetMailSent:'Si el email existe, recibirás un enlace/token.', passwordUpdated:'Contraseña actualizada ✅', captchaPick:'Toca la imagen solicitada', captchaPickItem:'Toca: ', welcomeEmailSent:'Email de bienvenida enviado ✅', benefitDevices:'Acceso desde varios dispositivos', benefitSmart:'Sugerencias personalizadas', benefitAlexa:'Integración con Alexa',
+    benefitCloud:'Sincronización segura en la nube', benefitSecurity:'Datos cifrados en la base de datos', forgotPassword:'¿Olvidaste la contraseña?', resetMailSent:'Si el email existe, recibirás un enlace/token.', verifyMailSent:'Email de verificación enviado ✅', emailVerified:'Email verificado ✅', emailNotVerified:'Debes verificar tu email antes de entrar.', passwordUpdated:'Contraseña actualizada ✅', captchaPick:'Toca la imagen solicitada', captchaPickItem:'Toca: ', welcomeEmailSent:'Email de bienvenida enviado ✅', benefitDevices:'Acceso desde varios dispositivos', benefitSmart:'Sugerencias personalizadas', benefitAlexa:'Integración con Alexa', benefitGoogle:'Compatibilidad con Google Assistant', voiceTitle:'Asistentes de voz', voiceTextShort:'Alexa y Google Assistant actualizan la misma lista cloud.', voiceLong:'Conecta Alexa y Google Assistant a la misma base de datos: al modificar un artículo, la lista vocal se actualiza para ambos.', connectGoogle:'Conectar Google Assistant', copyGoogleEndpoint:'Copiar endpoint Google Assistant', googleConnected:'Google Assistant conectado',
     productsHint:'Catálogo completo y gestión de artículos personalizados.', shoppingHint:'Esta es la lista que Alexa leerá desde la nube.', suggestionsSmart:'Sugerencias inteligentes',
     suggestionsExplain:'Recomendaciones basadas en personas, animales y consumo real.', peopleInHome:'Personas en casa', animalsInHome:'Animales', smartAnalysis:'Análisis de consumo',
     smartHow:'Analizamos consumos habituales y número de personas/animales para prever lo que se acaba.', language:'Idioma de la app', cloudSync:'Cloud y sincronización',
@@ -89,7 +89,7 @@ const translations = {
     registerText:'Melde dich an oder erstelle ein Profil, bevor Produkte angezeigt werden. Danach folgt die Foto-Erstinventur.', username:'Benutzername', usernamePh:'Namen eingeben',
     email:'E-Mail', password:'Passwort', passwordPh:'Mindestens 8 Zeichen', peopleCount:'Personen im Haushalt', animalCount:'Tiere', captcha:'Captcha',
     apiEndpoint:'API-Endpunkt', autoSmartOrdering:'Automatische intelligente Einkaufsliste', registerCreate:'Registrieren', continueOffline:'Offline fortfahren', whyRegister:'Warum registrieren?',
-    benefitCloud:'Sichere Cloud-Synchronisierung', benefitSecurity:'Verschlüsselte Datenbankdaten', forgotPassword:'Passwort vergessen?', resetMailSent:'Wenn die Adresse existiert, erhältst du eine E-Mail.', passwordUpdated:'Passwort aktualisiert ✅', captchaPick:'Tippe auf das gewünschte Bild', captchaPickItem:'Tippe: ', welcomeEmailSent:'Willkommensmail gesendet ✅', benefitDevices:'Zugriff von mehreren Geräten', benefitSmart:'Personalisierte Vorschläge', benefitAlexa:'Alexa-Integration',
+    benefitCloud:'Sichere Cloud-Synchronisierung', benefitSecurity:'Verschlüsselte Datenbankdaten', forgotPassword:'Passwort vergessen?', resetMailSent:'Wenn die Adresse existiert, erhältst du eine E-Mail.', verifyMailSent:'Bestätigungs-E-Mail gesendet ✅', emailVerified:'E-Mail bestätigt ✅', emailNotVerified:'Bitte bestätige deine E-Mail vor dem Login.', passwordUpdated:'Passwort aktualisiert ✅', captchaPick:'Tippe auf das gewünschte Bild', captchaPickItem:'Tippe: ', welcomeEmailSent:'Willkommensmail gesendet ✅', benefitDevices:'Zugriff von mehreren Geräten', benefitSmart:'Personalisierte Vorschläge', benefitAlexa:'Alexa-Integration', benefitGoogle:'Google Assistant-Kompatibilität', voiceTitle:'Sprachassistenten', voiceTextShort:'Alexa und Google Assistant aktualisieren dieselbe Cloud-Liste.', voiceLong:'Verbinde Alexa und Google Assistant mit derselben Datenbank: Änderungen aktualisieren die Sprachliste für beide.', connectGoogle:'Google Assistant verbinden', copyGoogleEndpoint:'Google Assistant-Endpunkt kopieren', googleConnected:'Google Assistant verbunden',
     productsHint:'Vollständiger Katalog und eigene Artikel verwalten.', shoppingHint:'Diese Liste liest Alexa aus der Cloud.', suggestionsSmart:'Intelligente Vorschläge',
     suggestionsExplain:'Empfehlungen nach Personen, Tieren und tatsächlichem Verbrauch.', peopleInHome:'Personen im Haushalt', animalsInHome:'Tiere', smartAnalysis:'Verbrauchsanalyse',
     smartHow:'Wir analysieren Verbrauch, Personen und Tiere, um vorherzusagen, was knapp wird.', language:'App-Sprache', cloudSync:'Cloud & Synchronisierung',
@@ -156,7 +156,7 @@ function loadSettings(){ try { return Object.assign(defaultSettings(), JSON.pars
 function loadSession(){ try { return Object.assign({mode:'guest', user:null}, JSON.parse(localStorage.getItem(SESSION_KEY)||'{}')); } catch { return {mode:'guest', user:null}; } }
 function loadAiMemory(){ try { return Object.assign({messages:[], facts:[], events:[], scanHistory:[], pendingVerification:false, lastGreetingDate:'', summary:'', lastInsights:{}, personality:{warmth:1}}, JSON.parse(localStorage.getItem(AI_MEMORY_KEY)||'{}')); } catch { return {messages:[], facts:[], events:[], scanHistory:[], pendingVerification:false, lastGreetingDate:'', summary:'', lastInsights:{}, personality:{warmth:1}}; } }
 function saveAiMemory(){ localStorage.setItem(AI_MEMORY_KEY, JSON.stringify(aiMemory)); }
-function defaultSettings(){ return {lang:'it', cloudEnabled:false, apiEndpoint:'/api', token:'', householdId:'', people:2, animals:0, autoSmart:true, alexaConnected:false, inventorySetupDone:false, inventoryStatus:'required', inventoryUpdatedAt:null, profile:{firstName:'',lastName:'',username:'',email:''}}; }
+function defaultSettings(){ return {lang:'it', cloudEnabled:false, apiEndpoint:'/api', token:'', householdId:'', people:2, animals:0, autoSmart:true, alexaConnected:false, googleAssistantConnected:false, inventorySetupDone:false, inventoryStatus:'required', inventoryUpdatedAt:null, profile:{firstName:'',lastName:'',username:'',email:''}}; }
 function migrateItems(items){ return items.map(x => ({...createItem(x.id||cryptoId(), x.image||'assets/illustrations/generic-item.png', x.category||'food', x.names||{it:x.name||x.id,en:x.name||x.id,es:x.name||x.id,de:x.name||x.id}, x.qty??1, x.maxQty??6, x.baseThreshold??2, x.unitOptions||['pz','pc','lt','kg'], {custom:x.custom, usage:x.usage||0, kind:x.kind, perPersonMin:x.perPersonMin, perAnimalMin:x.perAnimalMin, recommendedBuy:x.recommendedBuy}), ...x})); }
 function saveAll(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); localStorage.setItem(SESSION_KEY, JSON.stringify(session)); scheduleSync(); }
 function t(k){ return translations[settings.lang]?.[k] || translations.it[k] || k; }
@@ -211,6 +211,7 @@ function stockPercent(item){ return Math.max(0, Math.min(100, Math.round((1 - (i
 function newCaptcha(){
   const pool=[
     {id:'alexa', label:'Alexa', img:'assets/illustrations/alexa.png'},
+    {id:'google', label:'Google Assistant', img:'assets/illustrations/google-assistant.png'},
     {id:'milk', label:'Latte', img:'assets/illustrations/milk.png'},
     {id:'bread', label:'Pane', img:'assets/illustrations/bread.png'},
     {id:'water', label:'Acqua', img:'assets/illustrations/water.png'},
@@ -246,13 +247,18 @@ function init(){
   render();
   showView(initialView());
   renderCaptcha();
-  const resetToken=new URLSearchParams(location.search).get('reset');
+  const params=new URLSearchParams(location.search);
+  const resetToken=params.get('reset');
+  const verifyToken=params.get('verify');
   if(resetToken){ setTimeout(()=>{ $('#resetToken').value=resetToken; $('#resetDialog').showModal(); }, 250); }
+  if(verifyToken){ setTimeout(()=>verifyEmailWithToken(verifyToken), 300); }
   $('#alexaExamples').textContent = [
     'Alexa, chiedi a Spesa Pronta cosa devo comprare',
     'Alexa, chiedi a Spesa Pronta di aggiungere acqua',
     'Alexa, chiedi a Spesa Pronta di segnare crocchette cane a 10 kg',
-    'Alexa, chiedi a Spesa Pronta di resettare la spesa'
+    'Hey Google, chiedi a Spesa Pronta cosa devo comprare',
+    'Hey Google, aggiungi acqua alla lista Spesa Pronta',
+    'Hey Google, imposta crocchette cane a 10 kg'
   ].join('\n');
   if(new URLSearchParams(location.search).get('openMenu') === '1') setTimeout(() => toggleMobileMenu(true), 120);
   if('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
@@ -279,6 +285,8 @@ function bind(){
   $('#forgotPasswordBtn')?.addEventListener('click', forgotPassword);
   $('#resetCloseBtn')?.addEventListener('click', () => $('#resetDialog').close());
   $('#resetForm')?.addEventListener('submit', resetPassword);
+  $('#verifyEmailForm')?.addEventListener('submit', verifyEmailSubmit);
+  $('#resendVerificationBtn')?.addEventListener('click', resendVerificationEmail);
   $('#continueToInventoryBtn')?.addEventListener('click', continueToInventory);
   $('#registerForm').addEventListener('submit', register);
   $('#continueOfflineBtn')?.addEventListener('click', () => toast('Per usare Spesa Pronta serve accesso o registrazione cloud.'));
@@ -292,6 +300,9 @@ function bind(){
   $('#connectAlexaBtn2').addEventListener('click', connectAlexa);
   $('#copyAlexaBtn').addEventListener('click', copyAlexaEndpoint);
   $('#copyAlexaBtn2').addEventListener('click', copyAlexaEndpoint);
+  $('#connectGoogleBtn')?.addEventListener('click', connectGoogleAssistant);
+  $('#copyGoogleBtn')?.addEventListener('click', copyGoogleEndpoint);
+  $('#copyGoogleBtn2')?.addEventListener('click', copyGoogleEndpoint);
   $('#aiFab').addEventListener('click', openAiPanel);
   $('#aiCloseBtn').addEventListener('click', closeAiPanel);
   $('#aiForm').addEventListener('submit', submitAiForm);
@@ -325,12 +336,13 @@ function toggleMobileMenu(open){
 
 
 function isSignedIn(){
-  return !!(session.user && (session.user.username || session.user.email || settings.profile?.username || settings.profile?.email));
+  return !!(session.user && (session.user.username || session.user.email));
 }
 function needsInitialInventory(){
   return isSignedIn() && !settings.inventorySetupDone;
 }
 function initialView(){
+  if(session.pendingVerifyEmail) return 'verify-email';
   if(!isSignedIn()) return 'registration';
   if(session.welcomePending) return 'welcome';
   if(needsInitialInventory()) return 'onboarding';
@@ -342,7 +354,7 @@ function updateFlowClasses(){
 }
 function showView(v){
   toggleMobileMenu(false);
-  if(!isSignedIn() && v !== 'registration') v='registration';
+  if(!isSignedIn() && !['registration','verify-email'].includes(v)) v='registration';
   if(needsInitialInventory() && !['welcome','onboarding','registration','settings','help'].includes(v)) v='onboarding';
   if(v==='welcome' && !session.welcomePending) v='onboarding';
   updateFlowClasses();
@@ -357,7 +369,7 @@ function showView(v){
 }
 function render(){
   updateFlowClasses();
-  renderStats(); renderProducts(); renderSide(); renderSettings(); renderAllProducts(); renderShoppingFull(); renderSuggestions(); renderWelcome();
+  renderStats(); renderProducts(); renderSide(); renderSettings(); renderAllProducts(); renderShoppingFull(); renderSuggestions(); renderWelcome(); renderVerifyEmail();
   renderUserPill();
 }
 
@@ -517,6 +529,10 @@ function renderWelcome(){
   const p=settings.profile||{};
   el.textContent=(p.firstName || session.user?.firstName || p.username || session.user?.username || 'amico');
 }
+function renderVerifyEmail(){
+  const el=$('#verifyEmailTarget'); if(!el) return;
+  el.textContent=session.pendingVerifyEmail || settings.profile?.email || 'la tua email';
+}
 function continueToInventory(){
   session.welcomePending=false;
   saveAll(); render(); showView('onboarding');
@@ -543,21 +559,58 @@ async function resetPassword(e){
   }catch{ toast('Token non valido o scaduto'); }
 }
 
+function applyAuthPayload(data, makeWelcome=false){
+  session={mode:'registered',user:data.user,welcomePending:!!makeWelcome};
+  settings={...settings,...(data.settings||{}),cloudEnabled:true,householdId:data.householdId,token:data.token,profile:{...(settings.profile||{}),firstName:data.user.firstName||'',lastName:data.user.lastName||'',username:data.user.username||'',email:data.user.email||''}};
+  state=Array.isArray(data.items)?migrateItems(data.items):[];
+  if(data.aiMemory) aiMemory=Object.assign(aiMemory,data.aiMemory);
+  if(!state.length && !settings.inventorySetupDone){ settings.inventorySetupDone=false; settings.inventoryStatus='required'; }
+  saveAiMemory(); saveAll(); render();
+}
 async function login(e){
   e.preventDefault();
   const email=$('#loginEmail').value.trim(), password=$('#loginPassword').value;
   if(!email||!password){ toast(t('required')); return; }
   try{
     const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
-    if(!res.ok) throw new Error('login fail');
-    const data=await res.json();
-    session={mode:'registered',user:data.user};
-    settings={...settings,...(data.settings||{}),cloudEnabled:true,householdId:data.householdId,token:data.token,profile:{...(settings.profile||{}),firstName:data.user.firstName||'',lastName:data.user.lastName||'',username:data.user.username||'',email:data.user.email||''}};
-    state=Array.isArray(data.items)?migrateItems(data.items):[];
-    if(data.aiMemory) aiMemory=Object.assign(aiMemory,data.aiMemory);
-    if(!state.length && !settings.inventorySetupDone){ settings.inventorySetupDone=false; settings.inventoryStatus='required'; }
-    saveAiMemory(); saveAll(); render(); toast('Accesso effettuato ✅'); showView(initialView());
-  }catch(err){ toast('Accesso non riuscito: controlla email e password'); }
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok){ const error=new Error('login fail'); error.data=data; throw error; }
+    applyAuthPayload(data, false); toast('Accesso effettuato ✅'); showView(initialView());
+  }catch(err){
+    try{
+      const data=err?.data || {};
+      if(data.error==='email_not_verified'){ session={mode:'pending-verification',user:null,pendingVerifyEmail:data.email||email}; saveAll(); render(); toast(t('emailNotVerified')); showView('verify-email'); return; }
+    }catch{}
+    toast('Accesso non riuscito: controlla email e password');
+  }
+}
+async function verifyEmailSubmit(e){
+  e.preventDefault();
+  const raw=$('#verifyToken').value.trim();
+  if(!raw){ toast(t('required')); return; }
+  await verifyEmailWithToken(raw);
+}
+async function verifyEmailWithToken(raw){
+  try{
+    const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/auth/verify-email`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:raw})});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.error||'verify');
+    applyAuthPayload(data, true);
+    session.pendingVerifyEmail=null;
+    saveAll();
+    toast(t('emailVerified'));
+    try{ history.replaceState(null,'',location.pathname+'?v=19'); }catch{}
+    showView('welcome');
+  }catch{ toast('Token email non valido o scaduto. Prova a inviare di nuovo la verifica.'); showView('verify-email'); }
+}
+async function resendVerificationEmail(){
+  const email=session.pendingVerifyEmail || settings.profile?.email || (prompt('Inserisci la tua email da verificare')||'').trim();
+  if(!email){ toast(t('required')); return; }
+  try{
+    await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/auth/resend-verification`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+    session={mode:'pending-verification',user:null,pendingVerifyEmail:email}; saveAll(); render();
+    toast(t('verifyMailSent'));
+  }catch{ toast(t('verifyMailSent')); }
 }
 function continueLocalProfile(){
   const firstName=$('#regFirstName').value.trim() || 'Utente';
@@ -584,9 +637,14 @@ async function register(e){
   state=[];
   try{
     const res=await fetch(`${settings.apiEndpoint}/auth/register`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({firstName,lastName,username,email,password,people:settings.people,animals:settings.animals,autoSmart:settings.autoSmart,items:[],aiMemory})});
-    if(!res.ok) throw new Error('register fail');
-    const data=await res.json(); settings.token=data.token; settings.householdId=data.householdId; settings.cloudEnabled=true; session={mode:'registered',user:data.user,welcomePending:true};
-    saveAll(); await syncCloud(true); toast(t('welcomeEmailSent')); showView('welcome');
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.error||'register fail');
+    if(data.requiresEmailVerification){
+      session={mode:'pending-verification',user:null,pendingVerifyEmail:data.email||email};
+      settings.cloudEnabled=false; settings.token=''; settings.householdId='';
+      saveAll(); render(); toast(t('verifyMailSent')); showView('verify-email'); return;
+    }
+    applyAuthPayload(data, true); toast(t('welcomeEmailSent')); showView('welcome');
   }catch(err){
     toast('Registrazione non riuscita: controlla connessione e riprova.');
     showView('registration');
@@ -604,12 +662,19 @@ function addCustom(e){
 function shoppingDone(){ openGroceryScanner(true); }
 async function copyList(){ const txt=buyItems().map(i=>`- ${nameOf(i)} (${i.qty} ${i.unit})`).join('\n') || t('noBuy'); await navigator.clipboard.writeText(txt).catch(()=>{}); toast(t('copied')); }
 function connectAlexa(){ settings.alexaConnected=true; saveAll(); render(); syncCloud(true); toast(t('alexaConnected')); }
-async function copyAlexaEndpoint(){ const url=`${settings.apiEndpoint.replace(/\/$/,'')}/alexa?householdId=${encodeURIComponent(settings.householdId||'DEMO')}`; await navigator.clipboard.writeText(url).catch(()=>{}); toast(t('copied')); }
+function voiceEndpoint(path){
+  const base=settings.apiEndpoint.replace(/\/$/,'');
+  const params=new URLSearchParams({ householdId:settings.householdId||'DEMO', token:settings.token||'TOKEN_DA_LOGIN' });
+  return `${base}/${path}?${params.toString()}`;
+}
+async function copyAlexaEndpoint(){ const url=voiceEndpoint('alexa'); await navigator.clipboard.writeText(url).catch(()=>{}); toast(t('copied')); }
+function connectGoogleAssistant(){ settings.googleAssistantConnected=true; saveAll(); render(); syncCloud(true); toast(t('googleConnected')); }
+async function copyGoogleEndpoint(){ const url=voiceEndpoint('google-assistant'); await navigator.clipboard.writeText(url).catch(()=>{}); toast(t('copied')); }
 function scheduleSync(){ clearTimeout(syncTimer); if(settings.cloudEnabled) syncTimer=setTimeout(()=>syncCloud(false), SYNC_WAIT); }
 async function syncCloud(show){
   if(!settings.cloudEnabled || !settings.apiEndpoint || !settings.token || !settings.householdId){ if(show) toast(t('syncFail')); return; }
   try{
-    const payload={items:state, settings:{people:settings.people,animals:settings.animals,autoSmart:settings.autoSmart,lang:settings.lang,alexaConnected:settings.alexaConnected,profile:settings.profile}, aiMemory};
+    const payload={items:state, settings:{people:settings.people,animals:settings.animals,autoSmart:settings.autoSmart,lang:settings.lang,alexaConnected:settings.alexaConnected,googleAssistantConnected:settings.googleAssistantConnected,profile:settings.profile}, aiMemory};
     const res=await fetch(`${settings.apiEndpoint}/households/${settings.householdId}/state`,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token}`},body:JSON.stringify(payload)});
     if(!res.ok) throw new Error('sync fail');
     if(show) toast(t('synced'));
@@ -674,7 +739,7 @@ async function updateAiBackendStatus(){
     const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/ai/status`);
     if(!res.ok) throw new Error('status');
     const data=await res.json();
-    el.textContent = data.connected ? `AI vera collegata: chat + vision attive (${data.model}).` : 'AI locale attiva. Per Vision vera manca la chiave OpenAI nel backend.';
+    el.textContent = data.connected ? `AI vera collegata: chat + vision + memoria cloud attive (${data.model}).` : 'AI locale attiva. Per Vision vera manca la chiave OpenAI nel backend.';
   }catch{
     el.textContent='AI locale attiva. Backend non raggiungibile o non ancora online.';
   }
@@ -782,9 +847,15 @@ async function aiAnswer(text){
 }
 async function askBackendAi(message){
   if(!settings.apiEndpoint) return null;
-  const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/ai/chat`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token||''}`},body:JSON.stringify({message,state,settings,memory:aiMemory})});
+  const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/ai/chat`,{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token||''}`},
+    body:JSON.stringify({message,state,settings,memory:aiMemory,householdId:settings.householdId})
+  });
   if(!res.ok) return null;
-  const data=await res.json(); return data.reply || null;
+  const data=await res.json();
+  if(data.memory){ aiMemory=Object.assign(aiMemory,data.memory); saveAiMemory(); }
+  return data.reply || null;
 }
 
 function openGroceryScanner(afterShopping=false){
@@ -883,8 +954,15 @@ function guessScanFallback(fileName='',dataUrl=''){
 async function askVisionAi(dataUrl){
   if(!settings.apiEndpoint) return null;
   const catalog=state.map(i=>({id:i.id,names:i.names,unit:i.unit,unitOptions:i.unitOptions,category:i.category,qty:i.qty}));
-  const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/ai/vision`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token||''}`},body:JSON.stringify({image:dataUrl,catalog,settings,memory:aiMemory})});
-  if(!res.ok) return null; const data=await res.json(); return data.result || data;
+  const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/ai/vision`,{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token||''}`},
+    body:JSON.stringify({image:dataUrl,catalog,settings,memory:aiMemory,householdId:settings.householdId})
+  });
+  if(!res.ok) return null;
+  const data=await res.json();
+  if(data.memory){ aiMemory=Object.assign(aiMemory,data.memory); saveAiMemory(); }
+  return data.result || data;
 }
 function addScannerResult(result){
   const id='scan_'+Math.random().toString(36).slice(2,9);

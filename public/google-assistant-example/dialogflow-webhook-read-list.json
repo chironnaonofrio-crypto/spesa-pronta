@@ -1,0 +1,14 @@
+{
+  "queryResult": {
+    "queryText": "cosa devo comprare",
+    "intent": {
+      "displayName": "ReadShoppingListIntent"
+    },
+    "parameters": {}
+  },
+  "sessionInfo": {
+    "parameters": {
+      "householdId": "SOSTITUISCI_CON_HOUSEHOLD_ID"
+    }
+  }
+}

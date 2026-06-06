@@ -39,7 +39,7 @@ let db = { users:{}, households:{} };
 let dbMode = 'file';
 let pgPool = null;
 
-function emptyDb(){ return { users:{}, households:{} }; }
+function emptyDb(){ return { users:{}, households:{}, assistantBrain:{version:1, globalFacts:[], productLearnings:{}, phrasePatterns:{}, dailyStats:{}, updatedAt:0} }; }
 function cryptoKey(){ return crypto.createHash('sha256').update(String(APP_SECRET)).digest(); }
 function encryptObject(obj){
   const iv=crypto.randomBytes(12);
@@ -61,6 +61,7 @@ function loadDbFile(){ try { return JSON.parse(fs.readFileSync(DB_PATH,'utf8'));
 async function initStorage(){
   if(!DATABASE_URL){
     db = loadDbFile();
+    ensureDbShape();
     dbMode = 'file';
     console.log('Spesa Pronta DB: local file mode', DB_PATH);
     return;
@@ -76,9 +77,11 @@ async function initStorage(){
   if(found.rows.length){
     const decoded=decodeStoredDb(found.rows[0].data);
     db = decoded.db || emptyDb();
+    ensureDbShape();
     if(!decoded.encrypted) await saveDb();
   } else {
     db = loadDbFile();
+    ensureDbShape();
     await saveDb();
   }
   console.log('Spesa Pronta DB: Supabase/Postgres connected encrypted=true');
@@ -95,6 +98,94 @@ async function saveDb(){
 function id(prefix){ return prefix + '_' + crypto.randomBytes(8).toString('hex'); }
 function token(){ return crypto.randomBytes(24).toString('hex'); }
 function tokenHash(raw){ return crypto.createHash('sha256').update(String(raw)).digest('hex'); }
+
+function nowIso(){ return new Date().toISOString(); }
+function ensureDbShape(){
+  db = db || emptyDb();
+  db.users = db.users || {};
+  db.households = db.households || {};
+  db.assistantBrain = db.assistantBrain || {version:1, globalFacts:[], productLearnings:{}, phrasePatterns:{}, dailyStats:{}, updatedAt:0};
+  db.assistantBrain.globalFacts = db.assistantBrain.globalFacts || [];
+  db.assistantBrain.productLearnings = db.assistantBrain.productLearnings || {};
+  db.assistantBrain.phrasePatterns = db.assistantBrain.phrasePatterns || {};
+  db.assistantBrain.dailyStats = db.assistantBrain.dailyStats || {};
+  Object.values(db.households||{}).forEach(h=>{
+    h.aiMemory = h.aiMemory || {messages:[],facts:[],events:[],scanHistory:[],summary:'',preferences:{},updatedAt:0};
+    h.aiMemory.messages = h.aiMemory.messages || [];
+    h.aiMemory.facts = h.aiMemory.facts || [];
+    h.aiMemory.events = h.aiMemory.events || [];
+    h.aiMemory.scanHistory = h.aiMemory.scanHistory || [];
+    h.aiMemory.preferences = h.aiMemory.preferences || {};
+  });
+}
+function ensureHouseholdMemory(h){
+  h.aiMemory = h.aiMemory || {messages:[],facts:[],events:[],scanHistory:[],summary:'',preferences:{},updatedAt:0};
+  h.aiMemory.messages = h.aiMemory.messages || [];
+  h.aiMemory.facts = h.aiMemory.facts || [];
+  h.aiMemory.events = h.aiMemory.events || [];
+  h.aiMemory.scanHistory = h.aiMemory.scanHistory || [];
+  h.aiMemory.preferences = h.aiMemory.preferences || {};
+  return h.aiMemory;
+}
+function rememberMessage(memory, role, text, extra={}){
+  memory.messages = memory.messages || [];
+  memory.messages.push({role, text:String(text||'').slice(0,4000), at:Date.now(), ...extra});
+  memory.messages = memory.messages.slice(-800);
+  memory.updatedAt = Date.now();
+}
+function rememberFact(memory, text, source='chat'){
+  const clean=String(text||'').trim().slice(0,500);
+  if(!clean) return;
+  memory.facts = memory.facts || [];
+  const key=normalizeText(clean);
+  if(!memory.facts.some(f=>normalizeText(f.text)===key)) memory.facts.push({text:clean, source, at:Date.now()});
+  memory.facts = memory.facts.slice(-250);
+  memory.updatedAt = Date.now();
+}
+function extractMemoryFacts(message=''){
+  const raw=String(message||'').trim();
+  const q=normalizeText(raw);
+  const facts=[];
+  const patterns=[
+    /(?:mi piace|preferisco|adoro|uso spesso|compro spesso)\s+(.{2,120})/i,
+    /(?:non mi piace|non comprare|evita|odio)\s+(.{2,120})/i,
+    /(?:ho|abbiamo)\s+(\d+)\s+(?:cani|gatti|animali|persone)/i,
+    /(?:siamo)\s+(\d+)\s+(?:persone|in casa)/i,
+    /(?:ricordati che|tieni a mente che|memorizza che)\s+(.{2,180})/i
+  ];
+  for(const r of patterns){ const m=raw.match(r); if(m) facts.push(raw); }
+  if(q.includes('sono allergico') || q.includes('intollerante')) facts.push(raw);
+  return facts.slice(0,3);
+}
+function updateGlobalBrain({message='', action='', productName='', category='', confidence=null}={}){
+  ensureDbShape();
+  const brain=db.assistantBrain;
+  const day=new Date().toISOString().slice(0,10);
+  brain.dailyStats[day]=brain.dailyStats[day]||{chats:0,photos:0,voice:0,updates:0};
+  if(action==='photo') brain.dailyStats[day].photos++; else if(action==='voice') brain.dailyStats[day].voice++; else if(action==='update') brain.dailyStats[day].updates++; else brain.dailyStats[day].chats++;
+  const q=normalizeText(message).replace(/\d+/g,'#').slice(0,120);
+  if(q){ brain.phrasePatterns[q]=(brain.phrasePatterns[q]||0)+1; }
+  if(productName){
+    const key=normalizeText(productName).slice(0,80);
+    brain.productLearnings[key]=brain.productLearnings[key]||{name:productName, category, count:0, confidenceSum:0, lastSeenAt:0};
+    brain.productLearnings[key].count++;
+    if(Number.isFinite(Number(confidence))) brain.productLearnings[key].confidenceSum += Number(confidence);
+    if(category) brain.productLearnings[key].category=category;
+    brain.productLearnings[key].lastSeenAt=Date.now();
+  }
+  brain.globalFacts=(brain.globalFacts||[]).slice(-300);
+  brain.updatedAt=Date.now();
+}
+function publicGlobalBrain(){
+  ensureDbShape();
+  const brain=db.assistantBrain;
+  const topProducts=Object.values(brain.productLearnings||{}).sort((a,b)=>b.count-a.count).slice(0,20).map(p=>({name:p.name, category:p.category, count:p.count, avgConfidence:p.count?Number((p.confidenceSum/p.count).toFixed(2)):null}));
+  const topPhrases=Object.entries(brain.phrasePatterns||{}).sort((a,b)=>b[1]-a[1]).slice(0,20).map(([phrase,count])=>({phrase,count}));
+  return {version:brain.version||1, updatedAt:brain.updatedAt||0, topProducts, topPhrases, dailyStats:brain.dailyStats||{}};
+}
+function normalizeEmail(email){ return String(email||'').trim().toLowerCase(); }
+function isValidEmail(email){ return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(String(email||'')); }
+function escapeHtml(value){ return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch])); }
 function hashPassword(pwd){
   const salt=crypto.randomBytes(16).toString('hex');
   const iterations=160000;
@@ -110,7 +201,7 @@ function verifyPassword(pwd, stored=''){
   const legacy=crypto.createHash('sha256').update(String(pwd)).digest('hex');
   return legacy === stored;
 }
-function safeUser(u){ return { id:u.id, username:u.username, email:u.email, firstName:u.firstName || '', lastName:u.lastName || '' }; }
+function safeUser(u){ return { id:u.id, username:u.username, email:u.email, firstName:u.firstName || '', lastName:u.lastName || '', emailVerified: u.emailVerified !== false && !u.emailVerifyTokenHash }; }
 async function sendEmail({to,subject,text,html}){
   if(!RESEND_API_KEY){
     console.log('[mail:simulata]', subject, 'to', to, text?.slice(0,140)||'');
@@ -124,13 +215,213 @@ async function sendEmail({to,subject,text,html}){
   if(!r.ok) console.error('[mail:error]', r.status, await r.text().catch(()=>'').then(x=>x.slice(0,300)));
   return { sent:r.ok };
 }
-function welcomeHtml({firstName,username}){ return `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;padding:24px;border-radius:24px;background:#f4f9ff;color:#071b34"><h1>Benvenuto in Spesa Pronta, ${firstName||username||'amico'} ✨</h1><p>Il tuo account cloud è stato creato.</p><p><b>Nome utente:</b> ${username}</p><p>Ora puoi fare l’inventario iniziale con foto e collegare Alexa alla stessa lista.</p><a href="${APP_BASE_URL}" style="display:inline-block;background:#1266f1;color:white;padding:14px 18px;border-radius:14px;text-decoration:none;font-weight:bold">Apri Spesa Pronta</a></div>`; }
+function emailTextFooter(){
+  return `\n\n— Spesa Pronta\n${APP_BASE_URL}\nSe non hai richiesto tu questa operazione, ignora questa email o cambia subito la password.`;
+}
+function emailPlain({title='', intro='', lines=[], ctaLabel='', ctaUrl='', token='', warning=''}){
+  const body=[title, '', intro, ...lines.map(x=>`- ${x}`)];
+  if(ctaUrl) body.push('', `${ctaLabel}: ${ctaUrl}`);
+  if(token) body.push('', `Token: ${token}`);
+  if(warning) body.push('', warning);
+  return body.filter(Boolean).join('\n') + emailTextFooter();
+}
+function brandEmailTemplate({
+  preheader='Spesa Pronta',
+  badge='SPESA PRONTA',
+  title='Spesa Pronta',
+  intro='',
+  name='',
+  username='',
+  cards=[],
+  ctaLabel='Apri Spesa Pronta',
+  ctaUrl=APP_BASE_URL,
+  token='',
+  warning='',
+  footerNote='Questa email è stata inviata automaticamente dal sistema Spesa Pronta.'
+}={}){
+  const safeTitle=escapeHtml(title);
+  const safeIntro=escapeHtml(intro);
+  const safeName=escapeHtml(name || '');
+  const safeUsername=escapeHtml(username || '');
+  const safeCtaLabel=escapeHtml(ctaLabel);
+  const safeCtaUrl=escapeHtml(ctaUrl || APP_BASE_URL);
+  const safeToken=escapeHtml(token || '');
+  const safeWarning=escapeHtml(warning || '');
+  const cardHtml=(cards||[]).map(card=>`\n    <tr>\n      <td style="padding:0 0 12px 0;">\n        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;background:${card.tone==='gold'?'#fff7df':card.tone==='green'?'#edfdf4':card.tone==='red'?'#fff1f2':'#f6f9ff'};border:1px solid ${card.tone==='gold'?'#ffe0a3':card.tone==='green'?'#bff0d0':card.tone==='red'?'#fecdd3':'#dbe8ff'};border-radius:18px;overflow:hidden;">\n          <tr>\n            <td style="padding:16px 18px;font-family:Arial,Helvetica,sans-serif;color:#0c1f35;">\n              <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#52708f;font-weight:800;margin-bottom:6px;">${escapeHtml(card.label||'')}</div>\n              <div style="font-size:18px;line-height:1.35;font-weight:900;color:#0b1c33;">${escapeHtml(card.value||'')}</div>\n              ${card.text?`<div style="font-size:14px;line-height:1.55;color:#597089;margin-top:6px;">${escapeHtml(card.text)}</div>`:''}\n            </td>\n          </tr>\n        </table>\n      </td>\n    </tr>`).join('');
+  return `<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>${safeTitle}</title>
+</head>
+<body style="margin:0;padding:0;background:#eef5ff;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${escapeHtml(preheader)}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(180deg,#ecf5ff 0%,#f7fbff 45%,#eef6ff 100%);margin:0;padding:0;border-collapse:collapse;">
+    <tr>
+      <td align="center" style="padding:28px 14px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:660px;border-collapse:separate;background:#ffffff;border:1px solid #dbe8ff;border-radius:30px;box-shadow:0 22px 70px rgba(16,44,84,.16);overflow:hidden;">
+          <tr>
+            <td style="background:linear-gradient(135deg,#0a2a55 0%,#1266f1 52%,#49d79d 120%);padding:28px 26px 24px 26px;font-family:Arial,Helvetica,sans-serif;color:#fff;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td valign="middle" style="width:72px;">
+                    <div style="width:58px;height:58px;border-radius:20px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.35);text-align:center;line-height:58px;font-size:30px;box-shadow:inset 0 1px 0 rgba(255,255,255,.25);">🛍️</div>
+                  </td>
+                  <td valign="middle">
+                    <div style="font-size:12px;letter-spacing:.24em;text-transform:uppercase;font-weight:800;opacity:.88;">${escapeHtml(badge)}</div>
+                    <div style="font-size:30px;line-height:1.12;font-weight:900;margin-top:5px;">${safeTitle}</div>
+                    <div style="font-size:14px;line-height:1.5;opacity:.9;margin-top:6px;">Quando finisce, scorri. Quando esci, compri.</div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 26px 10px 26px;font-family:Arial,Helvetica,sans-serif;color:#0b1c33;">
+              ${safeName?`<div style="display:inline-block;background:#eaf3ff;border:1px solid #d6e7ff;color:#1557b8;border-radius:999px;padding:8px 12px;font-size:13px;font-weight:800;margin-bottom:14px;">Ciao ${safeName}</div>`:''}
+              <p style="margin:0 0 16px 0;font-size:18px;line-height:1.62;color:#405975;font-weight:600;">${safeIntro}</p>
+              ${safeUsername?`<p style="margin:0 0 18px 0;font-size:15px;line-height:1.5;color:#597089;"><b style="color:#102b4e;">Nome utente:</b> ${safeUsername}</p>`:''}
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${cardHtml}</table>
+              ${safeToken?`<div style="margin:6px 0 18px 0;background:#071b34;color:#dff7ff;border-radius:18px;padding:16px 18px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:15px;line-height:1.5;word-break:break-all;border:1px solid #113a69;box-shadow:inset 0 1px 0 rgba(255,255,255,.08);"><div style="font-family:Arial,Helvetica,sans-serif;letter-spacing:.12em;text-transform:uppercase;font-size:11px;color:#8fd7ff;font-weight:900;margin-bottom:8px;">Token di sicurezza</div>${safeToken}</div>`:''}
+              ${safeCtaUrl?`<table role="presentation" cellpadding="0" cellspacing="0" style="margin:20px 0 18px 0;"><tr><td style="border-radius:16px;background:#1266f1;box-shadow:0 10px 28px rgba(18,102,241,.28);"><a href="${safeCtaUrl}" style="display:inline-block;padding:15px 22px;border-radius:16px;color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:900;text-decoration:none;">${safeCtaLabel} ✨</a></td></tr></table>`:''}
+              ${safeCtaUrl?`<p style="margin:0 0 14px 0;font-size:12px;line-height:1.55;color:#7790ad;word-break:break-all;">Se il pulsante non funziona, copia questo link:<br><a href="${safeCtaUrl}" style="color:#1266f1;text-decoration:underline;">${safeCtaUrl}</a></p>`:''}
+              ${safeWarning?`<div style="margin:16px 0 10px 0;background:#fff7df;border:1px solid #ffe0a3;color:#6a4b00;border-radius:16px;padding:14px 16px;font-size:14px;line-height:1.55;font-weight:700;">${safeWarning}</div>`:''}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 26px 28px 26px;font-family:Arial,Helvetica,sans-serif;">
+              <div style="height:1px;background:#e2ecf8;margin-bottom:18px;"></div>
+              <p style="margin:0;font-size:12px;line-height:1.65;color:#7890aa;">${escapeHtml(footerNote)}<br>© ${new Date().getFullYear()} Spesa Pronta · <a href="${APP_BASE_URL}" style="color:#1266f1;text-decoration:none;">${escapeHtml(APP_BASE_URL)}</a></p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+function welcomeHtml(user){
+  return brandEmailTemplate({
+    preheader:'Il tuo account Spesa Pronta è attivo.',
+    title:`Benvenuto in Spesa Pronta, ${user.firstName||user.username||'amico'} ✨`,
+    intro:'Account attivato, email verificata e spazio cloud pronto. Ora puoi fare l’inventario iniziale con foto e collegare Alexa o Google Assistant alla stessa lista.',
+    name:user.firstName||user.username,
+    username:user.username,
+    ctaLabel:'Apri Spesa Pronta',
+    ctaUrl:APP_BASE_URL,
+    cards:[
+      {label:'Cloud',value:'Sincronizzazione attiva',text:'I tuoi dati vengono salvati nel database collegato al tuo account.',tone:'green'},
+      {label:'Assistenti vocali',value:'Alexa + Google Assistant',text:'La lista può essere aggiornata anche con comandi vocali.',tone:'gold'},
+      {label:'Primo passo',value:'Inventario iniziale con foto',text:'Tira fuori i prodotti, fotografali e rimetti tutto a posto: l’app crea la base corretta.'}
+    ]
+  });
+}
+function verifyEmailHtml(user, rawToken){
+  const link=`${APP_BASE_URL}?verify=${encodeURIComponent(rawToken)}`;
+  return brandEmailTemplate({
+    preheader:'Conferma la tua email per attivare Spesa Pronta.',
+    title:'Verifica la tua email ✉️',
+    intro:'Per proteggere il tuo account e confermare che l’indirizzo sia reale, premi il pulsante qui sotto. Dopo la verifica potrai entrare e iniziare l’inventario.',
+    name:user.firstName||user.username,
+    username:user.username,
+    ctaLabel:'Verifica email',
+    ctaUrl:link,
+    token:rawToken,
+    warning:'Il link scade tra 24 ore. Se non hai creato tu questo account, puoi ignorare questa email.',
+    cards:[
+      {label:'Sicurezza',value:'Verifica obbligatoria',text:'Senza conferma email l’account non può accedere alla dashboard.',tone:'green'},
+      {label:'Account',value:user.email||'',text:'Questo è l’indirizzo che verrà collegato al profilo Spesa Pronta.'}
+    ]
+  });
+}
+async function sendVerificationEmail(user, rawToken){
+  const link=`${APP_BASE_URL}?verify=${encodeURIComponent(rawToken)}`;
+  return sendEmail({
+    to:user.email,
+    subject:'Verifica email Spesa Pronta ✉️',
+    text:emailPlain({
+      title:'Verifica la tua email',
+      intro:`Ciao ${user.firstName||user.username||''}, conferma questa email per attivare Spesa Pronta.`,
+      lines:[`Nome utente: ${user.username}`, 'Il link scade tra 24 ore.'],
+      ctaLabel:'Verifica email',
+      ctaUrl:link,
+      token:rawToken
+    }),
+    html:verifyEmailHtml(user, rawToken)
+  }).catch(err=>console.error('[mail verify]',err));
+}
 async function sendWelcomeEmail(user){
-  return sendEmail({to:user.email,subject:'Benvenuto in Spesa Pronta ✨',text:`Ciao ${user.firstName||user.username}, il tuo account Spesa Pronta è pronto. Nome utente: ${user.username}. Apri ${APP_BASE_URL}`,html:welcomeHtml(user)}).catch(err=>console.error('[mail welcome]',err));
+  return sendEmail({
+    to:user.email,
+    subject:'Benvenuto in Spesa Pronta ✨',
+    text:emailPlain({
+      title:'Benvenuto in Spesa Pronta',
+      intro:`Ciao ${user.firstName||user.username||''}, il tuo account Spesa Pronta è pronto.`,
+      lines:[`Nome utente: ${user.username}`, 'Puoi fare l’inventario iniziale con foto e collegare Alexa o Google Assistant.'],
+      ctaLabel:'Apri Spesa Pronta',
+      ctaUrl:APP_BASE_URL
+    }),
+    html:welcomeHtml(user)
+  }).catch(err=>console.error('[mail welcome]',err));
+}
+function resetEmailHtml(user, rawToken){
+  const link=`${APP_BASE_URL}?reset=${encodeURIComponent(rawToken)}`;
+  return brandEmailTemplate({
+    preheader:'Recupera la password del tuo account Spesa Pronta.',
+    title:'Recupero password 🔐',
+    intro:'Abbiamo ricevuto una richiesta per reimpostare la password. Usa il pulsante o il token qui sotto entro 30 minuti.',
+    name:user.firstName||user.username,
+    username:user.username,
+    ctaLabel:'Reimposta password',
+    ctaUrl:link,
+    token:rawToken,
+    warning:'Se non sei stato tu a richiederlo, ignora questa email: la password non cambierà.',
+    cards:[
+      {label:'Scadenza',value:'30 minuti',text:'Dopo questo tempo il link non sarà più valido.',tone:'gold'},
+      {label:'Protezione',value:'Token salvato solo in hash',text:'Nel database non viene salvato il token leggibile.',tone:'green'}
+    ]
+  });
 }
 async function sendResetEmail(user, rawToken){
   const link=`${APP_BASE_URL}?reset=${encodeURIComponent(rawToken)}`;
-  return sendEmail({to:user.email,subject:'Recupero password Spesa Pronta',text:`Hai richiesto il recupero password. Apri questo link entro 30 minuti: ${link} oppure usa questo token: ${rawToken}`,html:`<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;padding:24px;border-radius:24px;background:#f4f9ff;color:#071b34"><h1>Recupero password</h1><p>Usa questo link entro 30 minuti:</p><p><a href="${link}">${link}</a></p><p><b>Token:</b> ${rawToken}</p><p>Se non sei stato tu, ignora questa email.</p></div>`}).catch(err=>console.error('[mail reset]',err));
+  return sendEmail({
+    to:user.email,
+    subject:'Recupero password Spesa Pronta 🔐',
+    text:emailPlain({
+      title:'Recupero password',
+      intro:'Hai richiesto il recupero password per Spesa Pronta.',
+      lines:['Il link scade tra 30 minuti.'],
+      ctaLabel:'Reimposta password',
+      ctaUrl:link,
+      token:rawToken,
+      warning:'Se non sei stato tu, ignora questa email.'
+    }),
+    html:resetEmailHtml(user, rawToken)
+  }).catch(err=>console.error('[mail reset]',err));
+}
+function passwordChangedHtml(user){
+  return brandEmailTemplate({
+    preheader:'La password del tuo account è stata aggiornata.',
+    title:'Password aggiornata ✅',
+    intro:'La password del tuo account Spesa Pronta è stata modificata correttamente.',
+    name:user.firstName||user.username,
+    username:user.username,
+    ctaLabel:'Apri Spesa Pronta',
+    ctaUrl:APP_BASE_URL,
+    warning:'Se non sei stato tu, prova subito il recupero password e controlla il tuo account.',
+    cards:[{label:'Sicurezza',value:'Modifica completata',text:'Da ora dovrai usare la nuova password per accedere.',tone:'green'}]
+  });
+}
+async function sendPasswordChangedEmail(user){
+  return sendEmail({
+    to:user.email,
+    subject:'Password Spesa Pronta aggiornata ✅',
+    text:emailPlain({title:'Password aggiornata',intro:'La password del tuo account Spesa Pronta è stata aggiornata.',warning:'Se non sei stato tu, cambia subito la password.'}),
+    html:passwordChangedHtml(user)
+  }).catch(err=>console.error('[mail password changed]',err));
 }
 
 function contentType(file){
@@ -216,6 +507,112 @@ function findItem(household, product){
 }
 function alexaSpeak(text){ return { version:'1.0', response:{ outputSpeech:{ type:'PlainText', text }, shouldEndSession:true } }; }
 
+function googleAssistantSpeak(text){
+  return {
+    fulfillmentText:text,
+    fulfillment_response:{ messages:[{ text:{ text:[text] } }] },
+    payload:{ google:{ expectUserResponse:false, richResponse:{ items:[{ simpleResponse:{ textToSpeech:text, displayText:text } }] } } }
+  };
+}
+function textParam(params, ...keys){
+  for(const k of keys){
+    const v=params?.[k];
+    if(v === undefined || v === null) continue;
+    if(typeof v === 'object' && !Array.isArray(v)){
+      if(v.value !== undefined) return v.value;
+      if(v.name !== undefined) return v.name;
+      if(v.amount !== undefined) return v.amount;
+    }
+    return Array.isArray(v) ? v[0] : v;
+  }
+  return '';
+}
+function parseVoiceFromNaturalText(text=''){
+  const raw=String(text||'').trim();
+  const q=normalizeText(raw);
+  if(!q) return { intent:'' };
+  if(q.includes('cosa devo comprare') || q.includes('cosa manca') || q.includes('lista della spesa') || q.includes('leggi la lista')) return { intent:'ReadShoppingListIntent' };
+  if(q.includes('ho fatto la spesa') || q.includes('resetta') || q.includes('azzera')) return { intent:'ResetListIntent' };
+  let m=raw.match(/(?:aggiungi|metti|compra)\s+(.+)$/i);
+  if(m) return { intent:'AddItemIntent', product:m[1].trim() };
+  m=raw.match(/(?:segna|imposta|porta|metti)\s+(.+?)\s+(?:a|ad)\s+(\d+(?:[\.,]\d+)?)\s*([a-zA-Zàèéìòù]+)?/i);
+  if(m) return { intent:'SetQuantityIntent', product:m[1].trim(), qty:Number(m[2].replace(',','.')), unit:m[3]||'' };
+  return { intent:'HelpIntent' };
+}
+function parseGoogleAssistantRequest(body={}){
+  const params = body.queryResult?.parameters || body.sessionInfo?.parameters || body.parameters || body.slots || {};
+  const text = body.queryResult?.queryText || body.text || body.transcript || body.query || '';
+  const natural = parseVoiceFromNaturalText(text);
+  let intent = body.queryResult?.intent?.displayName || body.queryResult?.intent?.name || body.intent || body.request?.intent?.name || natural.intent || '';
+  if(String(intent).includes('/')) intent=String(intent).split('/').pop();
+  const product = textParam(params,'Product','product','articolo','item','food','prodotto') || body.product || natural.product;
+  const qtyRaw = textParam(params,'Quantity','quantity','qty','number','numero') || body.qty || natural.qty;
+  const unit = textParam(params,'Unit','unit','unita','unità') || body.unit || natural.unit;
+  return { intent, product, qty:Number(qtyRaw||0), unit };
+}
+
+function getVoiceAuth(req, url, body={}){
+  const bearer = (req.headers.authorization||'').replace(/^Bearer\s+/, '').trim();
+  const suppliedToken = String(
+    url.searchParams.get('token') ||
+    body.token || body.voiceToken ||
+    body.sessionInfo?.parameters?.token ||
+    body.originalDetectIntentRequest?.payload?.token ||
+    body?.session?.user?.accessToken ||
+    bearer || ''
+  ).trim();
+  let householdId = String(
+    url.searchParams.get('householdId') ||
+    body.householdId ||
+    body.sessionInfo?.parameters?.householdId ||
+    body.originalDetectIntentRequest?.payload?.householdId ||
+    body?.session?.attributes?.householdId || ''
+  ).trim();
+  let h = householdId ? db.households[householdId] : null;
+  if(!h && suppliedToken){
+    h = Object.values(db.households||{}).find(x => x.token === suppliedToken) || null;
+    householdId = h?.id || householdId;
+  }
+  if(!h) return { error:'Account Spesa Pronta non collegato.' };
+  if(h.token !== suppliedToken) return { error:'Collegamento vocale non autorizzato. Ricopia endpoint/token dall’app.' };
+  return { h, householdId };
+}
+
+async function handleVoiceIntent(h, {intent='', product='', qty=0, unit='', phrase=''}={}){
+  if(intent === 'ReadListIntent' || intent === 'ReadShoppingListIntent' || intent === 'ReadGroceryListIntent'){
+    const list = shoppingList(h);
+    if(!list.length) return 'La lista della spesa è vuota.';
+    return 'Devi comprare: ' + list.map(x=>`${x.name}, ${x.qty} ${x.unit||''}`).join('; ') + '.';
+  }
+  if(intent === 'AddItemIntent'){
+    const item = findItem(h, product);
+    if(!item) return `Non trovo ${product}. Apri l'app e aggiungilo al catalogo.`;
+    item.qty = 0; item.updatedAt = Date.now(); item.usage = Number(item.usage||0)+1; ensureHouseholdMemory(h); rememberMessage(h.aiMemory,'user',`Aggiungi ${product}`,{channel:'voice'}); rememberMessage(h.aiMemory,'assistant',`Ok, ho aggiunto ${itemName(item,h.settings?.lang)} alla lista della spesa.`,{channel:'voice'}); updateGlobalBrain({message:`aggiungi ${product}`, action:'voice'}); h.updatedAt=Date.now(); await saveDb();
+    return `Ok, ho aggiunto ${itemName(item,h.settings?.lang)} alla lista della spesa.`;
+  }
+  if(intent === 'SetQuantityIntent' || intent === 'UpdateItemIntent'){
+    const item = findItem(h, product);
+    if(!item) return `Non trovo ${product}.`;
+    if(!Number.isFinite(Number(qty))) return 'Dimmi una quantità valida.';
+    item.qty = Number(qty); if(unit) item.unit = unit; item.updatedAt = Date.now(); ensureHouseholdMemory(h); rememberMessage(h.aiMemory,'user',`Imposta ${product} a ${qty} ${unit||''}`,{channel:'voice'}); updateGlobalBrain({message:`imposta ${product}`, action:'voice', productName:product}); h.updatedAt=Date.now(); await saveDb();
+    return `Ok, ${itemName(item,h.settings?.lang)} ora è a ${item.qty} ${item.unit||''}.`;
+  }
+  if(intent === 'ResetListIntent'){
+    h.items = (h.items||[]).map(i => ({ ...i, qty: i.recommendedBuy || i.maxQty || 5, updatedAt:Date.now() }));
+    ensureHouseholdMemory(h); rememberMessage(h.aiMemory,'user','Ho fatto la spesa',{channel:'voice'}); rememberMessage(h.aiMemory,'assistant','Perfetto, ho segnato la spesa come fatta.',{channel:'voice'}); updateGlobalBrain({message:'ho fatto la spesa', action:'voice'}); h.updatedAt=Date.now(); await saveDb();
+    return 'Perfetto, ho segnato la spesa come fatta.';
+  }
+  const mem=ensureHouseholdMemory(h);
+  const userPhrase = phrase || product || intent || 'Aiutami con la spesa';
+  rememberMessage(mem,'user',userPhrase,{channel:'voice-chat'});
+  const reply=await llmChatReply({message:userPhrase,state:h.items||[],settings:h.settings||{},memory:mem,globalMemory:publicGlobalBrain()});
+  rememberMessage(mem,'assistant',reply,{channel:'voice-chat'});
+  updateGlobalBrain({message:userPhrase, action:'voice'});
+  h.updatedAt=Date.now(); await saveDb();
+  return reply || 'Puoi chiedermi cosa devi comprare, aggiungere un prodotto o modificare una quantità.';
+}
+
+
 
 function normalizeText(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
 function localAiReply({message,state=[],settings={},memory={}}){
@@ -259,13 +656,16 @@ function outputText(resp){
   for(const out of resp.output||[]) for(const c of out.content||[]) if(c.text) chunks.push(c.text);
   return chunks.join('\n').trim();
 }
-async function llmChatReply({message,state,settings,memory}){
+async function llmChatReply({message,state,settings,memory,globalMemory={}}){
   const key=process.env.OPENAI_API_KEY;
   if(!key) return localAiReply({message,state,settings,memory});
   const compactState=(state||[]).map(i=>({id:i.id,name:itemName(i,settings?.lang||'it'),qty:i.qty,unit:i.unit,category:i.category,threshold:smartThreshold(i,settings)}));
   const payload={
     model:OPENAI_MODEL,
-    input:[{role:'system',content:'Sei Spesa Pronta AI, assistente domestico caldo e pratico. Ricordi chat, consumi e preferenze. Rispondi in italiano. Puoi suggerire modifiche ma non inventare dati. Se serve una modifica alla lista, descrivila chiaramente.'},{role:'user',content:JSON.stringify({message,state:compactState,settings,memory:(memory||{})}).slice(0,60000)}]
+    input:[
+      {role:'system',content:'Sei Spesa Pronta AI, un assistente domestico vocale e testuale stile ChatGPT. Rispondi in italiano, con tono caldo e pratico. Usa la memoria personale solo per aiutare quell’utente. Usa la memoria globale solo come esperienza anonima aggregata, senza nominare altri utenti e senza inventare dati privati. Puoi ragionare sui consumi, suggerire acquisti, spiegare foto, correggere quantità e preparare azioni sulla lista. Se non hai certezza, chiedi conferma.'},
+      {role:'user',content:JSON.stringify({message,state:compactState,settings,memory:(memory||{}),globalAssistantExperience:globalMemory||{}}).slice(0,90000)}
+    ]
   };
   const resp=await openAiResponse(payload);
   return outputText(resp) || localAiReply({message,state,settings,memory});
@@ -275,7 +675,7 @@ async function visionAnalyze({image,catalog,settings,memory}){
     return { needsManual:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.25, reason:'Backend AI Vision non collegato: inserisci nome e quantità manualmente.' };
   }
   const compact=(catalog||[]).map(i=>({id:i.id,names:i.names,unit:i.unit,category:i.category,qty:i.qty})).slice(0,200);
-  const prompt='Analizza la foto di un prodotto della spesa. Rispondi SOLO JSON valido con: needsRetake boolean, reason string, productName string, quantity number, unit string, category tra food/drinks/pets/house/pharmacy/aquarium/fruit/veg, confidence 0..1. Se foto sfocata, buia, prodotto non identificabile o quantità non stimabile, needsRetake true e reason breve. Se il prodotto sembra già nel catalogo usa lo stesso nome.';
+  const prompt='Analizza SOLO quello che si vede realmente nella foto. Non inventare marca, prodotto o quantità se non sono visibili. Rispondi SOLO JSON valido con: needsRetake boolean, reason string, productName string, quantity number, unit string, category tra food/drinks/pets/house/pharmacy/aquarium/fruit/veg, confidence 0..1, visibleEvidence array di brevi prove visive. Se foto sfocata, buia, tagliata, prodotto non identificabile o quantità non stimabile, needsRetake true e reason breve. Se il prodotto sembra già nel catalogo usa lo stesso nome. Se vedi più prodotti, scegli quello principale e segnala nel reason che servono foto separate.';
   const payload={
     model:OPENAI_VISION_MODEL,
     input:[{role:'user',content:[{type:'input_text',text:prompt+' Catalogo: '+JSON.stringify(compact).slice(0,30000)},{type:'input_image',image_url:image}]}]
@@ -295,7 +695,8 @@ const server = http.createServer(async (req,res)=>{
     if(req.method === 'GET' && pathName === '/api/health') return send(res, 200, { ok:true, service:'spesa-pronta-cloud', dbMode, dbConnected: dbMode !== 'file', time:new Date().toISOString() });
 
     if(req.method === 'GET' && pathName === '/api/db/status') {
-      return send(res, 200, { ok:true, mode:dbMode, connected:dbMode !== 'file', users:Object.keys(db.users||{}).length, households:Object.keys(db.households||{}).length });
+      const users=Object.values(db.users||{});
+      return send(res, 200, { ok:true, mode:dbMode, connected:dbMode !== 'file', users:users.length, verifiedUsers:users.filter(u=>u.emailVerified !== false && !u.emailVerifyTokenHash).length, pendingEmailUsers:users.filter(u=>u.emailVerified === false || u.emailVerifyTokenHash).length, households:Object.keys(db.households||{}).length });
     }
 
     if(req.method === 'GET' && pathName === '/api/ai/status') {
@@ -308,30 +709,67 @@ const server = http.createServer(async (req,res)=>{
         visionReady: aiConnected(),
         dbMode,
         databaseConnected: dbMode !== 'file',
+        memoryReady: dbMode !== 'file',
+        globalLearning: 'anonymous_aggregate',
         note: aiConnected() ? 'AI Chat + Vision attive dal backend' : 'Manca OPENAI_API_KEY: usa motore locale e inserimento guidato foto'
       });
     }
 
     if(req.method === 'POST' && pathName === '/api/auth/register'){
-      const { firstName='', lastName='', username,email,password,people=1,animals=0,autoSmart=true,items=[], aiMemory=null } = body;
+      const { firstName='', lastName='', username, password, people=1, animals=0, autoSmart=true, items=[], aiMemory=null } = body;
+      const email = normalizeEmail(body.email);
       if(!username || !email || !password) return send(res, 400, { error:'missing_fields' });
-      const found = Object.values(db.users).find(u=>u.email===email);
+      if(!isValidEmail(email)) return send(res, 400, { error:'invalid_email' });
+      if(String(password).length < 8) return send(res, 400, { error:'weak_password' });
+      const found = Object.values(db.users).find(u=>normalizeEmail(u.email)===email);
       if(found) return send(res, 409, { error:'email_exists' });
-      const userId=id('user'), householdId=id('home'), tkn=token();
-      db.users[userId]={ id:userId, firstName, lastName, username, email, passwordHash:hashPassword(password), householdId };
-      db.households[householdId]={ id:householdId, ownerUserId:userId, token:tkn, settings:{ people, animals, autoSmart, alexaConnected:false, lang:'it', inventorySetupDone:false, inventoryStatus:'required', inventoryUpdatedAt:null }, items, aiMemory: aiMemory || {messages:[],facts:[],events:[],scanHistory:[]}, updatedAt:Date.now() };
+      const userId=id('user'), householdId=id('home'), tkn=token(), verifyRaw=token();
+      db.users[userId]={ id:userId, firstName, lastName, username, email, passwordHash:hashPassword(password), householdId, emailVerified:false, emailVerifyTokenHash:tokenHash(verifyRaw), emailVerifyTokenExpiresAt:Date.now()+24*60*60*1000, emailVerifySentAt:Date.now() };
+      db.households[householdId]={ id:householdId, ownerUserId:userId, token:tkn, settings:{ people, animals, autoSmart, alexaConnected:false, googleAssistantConnected:false, lang:'it', inventorySetupDone:false, inventoryStatus:'required', inventoryUpdatedAt:null }, items, aiMemory: aiMemory || {messages:[],facts:[],events:[],scanHistory:[],summary:'',preferences:{},updatedAt:Date.now()}, updatedAt:Date.now() };
       await saveDb();
-      sendWelcomeEmail(db.users[userId]);
-      return send(res, 200, { ok:true, user:safeUser(db.users[userId]), householdId, token:tkn, welcomeEmail:true });
+      sendVerificationEmail(db.users[userId], verifyRaw);
+      return send(res, 200, { ok:true, requiresEmailVerification:true, email, message:'verification_email_sent' });
     }
 
     if(req.method === 'POST' && pathName === '/api/auth/login'){
       const { email,password } = body;
       const user = Object.values(db.users).find(u=>String(u.email||'').toLowerCase()===String(email||'').toLowerCase());
       if(!user || !verifyPassword(password, user.passwordHash)) return send(res, 401, { error:'invalid_credentials' });
+      if(user.emailVerified === false || user.emailVerifyTokenHash) return send(res, 403, { error:'email_not_verified', email:user.email });
       if(!String(user.passwordHash||'').startsWith('pbkdf2$')){ user.passwordHash=hashPassword(password); await saveDb(); }
       const h = db.households[user.householdId];
       return send(res, 200, { ok:true, user:safeUser(user), householdId:h.id, token:h.token, settings:h.settings, items:h.items, aiMemory:h.aiMemory||null });
+    }
+
+
+    if(req.method === 'POST' && pathName === '/api/auth/verify-email'){
+      const raw=String(body.token||'').trim();
+      if(!raw) return send(res, 400, { error:'missing_token' });
+      const hsh=tokenHash(raw);
+      const user=Object.values(db.users||{}).find(u=>u.emailVerifyTokenHash===hsh && Number(u.emailVerifyTokenExpiresAt||0)>Date.now());
+      if(!user) return send(res, 400, { error:'invalid_or_expired_token' });
+      user.emailVerified=true;
+      user.emailVerifiedAt=Date.now();
+      delete user.emailVerifyTokenHash; delete user.emailVerifyTokenExpiresAt; delete user.emailVerifySentAt;
+      if(!String(user.passwordHash||'').startsWith('pbkdf2$')) user.passwordHash=hashPassword(user.passwordHash || token());
+      await saveDb();
+      sendWelcomeEmail(user);
+      const h=db.households[user.householdId];
+      return send(res, 200, { ok:true, user:safeUser(user), householdId:h.id, token:h.token, settings:h.settings, items:h.items, aiMemory:h.aiMemory||null, welcomeEmail:true });
+    }
+
+    if(req.method === 'POST' && pathName === '/api/auth/resend-verification'){
+      const email=normalizeEmail(body.email);
+      const user=Object.values(db.users||{}).find(u=>normalizeEmail(u.email)===email);
+      if(user && (user.emailVerified === false || user.emailVerifyTokenHash)){
+        const raw=token();
+        user.emailVerifyTokenHash=tokenHash(raw);
+        user.emailVerifyTokenExpiresAt=Date.now()+24*60*60*1000;
+        user.emailVerifySentAt=Date.now();
+        await saveDb();
+        sendVerificationEmail(user, raw);
+      }
+      return send(res, 200, { ok:true, message:'if_email_exists_verification_sent' });
     }
 
 
@@ -340,11 +778,19 @@ const server = http.createServer(async (req,res)=>{
       const user=Object.values(db.users||{}).find(u=>String(u.email||'').toLowerCase()===email);
       if(user){
         const raw=token();
-        user.resetTokenHash=tokenHash(raw);
-        user.resetTokenExpiresAt=Date.now()+30*60*1000;
-        user.resetRequestedAt=Date.now();
-        await saveDb();
-        sendResetEmail(user, raw);
+        if(user.emailVerified === false || user.emailVerifyTokenHash){
+          user.emailVerifyTokenHash=tokenHash(raw);
+          user.emailVerifyTokenExpiresAt=Date.now()+24*60*60*1000;
+          user.emailVerifySentAt=Date.now();
+          await saveDb();
+          sendVerificationEmail(user, raw);
+        } else {
+          user.resetTokenHash=tokenHash(raw);
+          user.resetTokenExpiresAt=Date.now()+30*60*1000;
+          user.resetRequestedAt=Date.now();
+          await saveDb();
+          sendResetEmail(user, raw);
+        }
       }
       return send(res, 200, { ok:true, message:'if_email_exists_reset_sent' });
     }
@@ -359,7 +805,7 @@ const server = http.createServer(async (req,res)=>{
       user.passwordHash=hashPassword(newPassword);
       delete user.resetTokenHash; delete user.resetTokenExpiresAt; delete user.resetRequestedAt;
       await saveDb();
-      sendEmail({to:user.email,subject:'Password Spesa Pronta aggiornata',text:'La password del tuo account Spesa Pronta è stata aggiornata. Se non sei stato tu, contatta subito il supporto.'}).catch(()=>{});
+      sendPasswordChangedEmail(user);
       return send(res, 200, { ok:true });
     }
 
@@ -395,15 +841,53 @@ const server = http.createServer(async (req,res)=>{
 
     if(req.method === 'POST' && pathName === '/api/ai/chat'){
       const { message='', state=[], settings={}, memory={} } = body;
-      const reply = await llmChatReply({message,state,settings,memory});
-      return send(res, 200, { ok:true, reply });
+      let h=null;
+      const householdId=String(body.householdId||'').trim();
+      const bearer=(req.headers.authorization||'').replace(/^Bearer\s+/,'').trim();
+      if(householdId && db.households[householdId] && db.households[householdId].token===bearer) h=db.households[householdId];
+      const activeMemory=h ? ensureHouseholdMemory(h) : memory;
+      if(h) rememberMessage(activeMemory,'user',message,{channel:'app-chat'});
+      for(const fact of extractMemoryFacts(message)) if(h) rememberFact(activeMemory,fact,'chat');
+      const reply = await llmChatReply({
+        message,
+        state: h ? (h.items||[]) : state,
+        settings: h ? (h.settings||{}) : settings,
+        memory: activeMemory,
+        globalMemory: publicGlobalBrain()
+      });
+      if(h){
+        rememberMessage(activeMemory,'assistant',reply,{channel:'app-chat'});
+        updateGlobalBrain({message, action:'chat'});
+        h.updatedAt=Date.now();
+        await saveDb();
+      }
+      return send(res, 200, { ok:true, reply, memory: h ? activeMemory : memory, globalExperience: publicGlobalBrain(), persistent:!!h });
     }
 
     if(req.method === 'POST' && pathName === '/api/ai/vision'){
       const { image='', catalog=[], settings={}, memory={} } = body;
       if(!image || !String(image).startsWith('data:image/')) return send(res, 400, { error:'image_required' });
-      const result = await visionAnalyze({image,catalog,settings,memory});
-      return send(res, 200, { ok:true, result });
+      let h=null;
+      const householdId=String(body.householdId||'').trim();
+      const bearer=(req.headers.authorization||'').replace(/^Bearer\s+/,'').trim();
+      if(householdId && db.households[householdId] && db.households[householdId].token===bearer) h=db.households[householdId];
+      const activeMemory=h ? ensureHouseholdMemory(h) : memory;
+      const result = await visionAnalyze({image,catalog:h?(h.items||[]):catalog,settings:h?(h.settings||{}):settings,memory:activeMemory});
+      if(h){
+        activeMemory.scanHistory.push({
+          productName:result.productName||'', quantity:result.quantity||null, unit:result.unit||'', category:result.category||'', confidence:result.confidence||0, needsRetake:!!result.needsRetake, reason:result.reason||'', visibleEvidence:result.visibleEvidence||[], at:Date.now()
+        });
+        activeMemory.scanHistory=activeMemory.scanHistory.slice(-500);
+        rememberMessage(activeMemory,'assistant', result.needsRetake ? `Foto non abbastanza chiara: ${result.reason||'rifalla meglio.'}` : `Ho analizzato la foto: ${result.productName||'prodotto'} (${result.quantity||1} ${result.unit||'pz'}).`, {channel:'vision'});
+        updateGlobalBrain({action:'photo', productName:result.productName, category:result.category, confidence:result.confidence});
+        h.updatedAt=Date.now();
+        await saveDb();
+      }
+      return send(res, 200, { ok:true, result, memory:h?activeMemory:memory, persistent:!!h });
+    }
+
+    if(req.method === 'GET' && pathName === '/api/ai/global-memory'){
+      return send(res, 200, { ok:true, globalExperience: publicGlobalBrain(), privacy:'aggregated_anonymous_only' });
     }
 
     const aiAnalysisMatch = pathName.match(/^\/api\/households\/([^/]+)\/ai-analysis$/);
@@ -417,40 +901,32 @@ const server = http.createServer(async (req,res)=>{
       return send(res, 200, {ok:true, analysis, memory:h.aiMemory||{}});
     }
 
+    if(req.method === 'GET' && pathName === '/api/voice/status'){
+      const voice = getVoiceAuth(req, url, body);
+      if(voice.error) return send(res, 401, { ok:false, error:voice.error });
+      return send(res, 200, { ok:true, connected:true, householdId:voice.householdId, shoppingItems:shoppingList(voice.h).length, alexaConnected:!!voice.h.settings?.alexaConnected, googleAssistantConnected:!!voice.h.settings?.googleAssistantConnected });
+    }
+
     if(req.method === 'POST' && pathName === '/api/alexa'){
-      const householdId = url.searchParams.get('householdId') || body?.session?.user?.accessToken || body?.householdId;
-      const h = db.households[householdId] || Object.values(db.households)[0];
-      if(!h) return send(res, 200, alexaSpeak('Account Spesa Pronta non collegato.'));
+      const voice = getVoiceAuth(req, url, body);
+      if(voice.error) return send(res, 200, alexaSpeak(voice.error));
+      const h = voice.h;
       const intent = body?.request?.intent?.name || body?.intent || '';
       const slots = body?.request?.intent?.slots || body?.slots || {};
       const product = slots.Product?.value || slots.product?.value || body?.product;
       const qty = Number(slots.Quantity?.value || slots.quantity?.value || body?.qty || 0);
       const unit = slots.Unit?.value || slots.unit?.value || body?.unit;
 
-      if(intent === 'ReadListIntent' || intent === 'ReadShoppingListIntent'){
-        const list = shoppingList(h);
-        if(!list.length) return send(res, 200, alexaSpeak('La lista della spesa è vuota.'));
-        return send(res, 200, alexaSpeak('Devi comprare: ' + list.map(x=>`${x.name}, ${x.qty} ${x.unit||''}`).join('; ') + '.'));
-      }
-      if(intent === 'AddItemIntent'){
-        const item = findItem(h, product);
-        if(!item) return send(res, 200, alexaSpeak(`Non trovo ${product}. Apri l'app e aggiungilo al catalogo.`));
-        item.qty = 0; item.updatedAt = Date.now(); item.usage = Number(item.usage||0)+1; h.updatedAt=Date.now(); await saveDb();
-        return send(res, 200, alexaSpeak(`Ok, ho aggiunto ${itemName(item,h.settings?.lang)} alla lista della spesa.`));
-      }
-      if(intent === 'SetQuantityIntent' || intent === 'UpdateItemIntent'){
-        const item = findItem(h, product);
-        if(!item) return send(res, 200, alexaSpeak(`Non trovo ${product}.`));
-        if(!Number.isFinite(qty)) return send(res, 200, alexaSpeak('Dimmi una quantità valida.'));
-        item.qty = qty; if(unit) item.unit = unit; item.updatedAt = Date.now(); h.updatedAt=Date.now(); await saveDb();
-        return send(res, 200, alexaSpeak(`Ok, ${itemName(item,h.settings?.lang)} ora è a ${item.qty} ${item.unit||''}.`));
-      }
-      if(intent === 'ResetListIntent'){
-        h.items = (h.items||[]).map(i => ({ ...i, qty: i.recommendedBuy || i.maxQty || 5, updatedAt:Date.now() }));
-        h.updatedAt=Date.now(); await saveDb();
-        return send(res, 200, alexaSpeak('Perfetto, ho segnato la spesa come fatta.'));
-      }
-      return send(res, 200, alexaSpeak('Puoi chiedermi cosa devi comprare, aggiungere un prodotto o modificare una quantità.'));
+      const text = await handleVoiceIntent(h, { intent, product, qty, unit, phrase: body?.request?.intent?.slots?.Phrase?.value || body?.text || product || intent });
+      return send(res, 200, alexaSpeak(text));
+    }
+
+    if(req.method === 'POST' && (pathName === '/api/google-assistant' || pathName === '/api/google' || pathName === '/api/gemini-assistant')){
+      const voice = getVoiceAuth(req, url, body);
+      if(voice.error) return send(res, 200, googleAssistantSpeak(voice.error));
+      const parsed = parseGoogleAssistantRequest(body);
+      const text = await handleVoiceIntent(voice.h, {...parsed, phrase: body.queryResult?.queryText || body.text || body.transcript || body.query || parsed.product || parsed.intent});
+      return send(res, 200, googleAssistantSpeak(text));
     }
 
     if(serveStatic(req,res,url)) return;
