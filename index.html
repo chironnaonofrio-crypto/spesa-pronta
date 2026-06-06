@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#071b34">
-  <meta name="description" content="Spesa Pronta: gestione spesa intelligente con cloud, Alexa e suggerimenti automatici.">
+  <meta name="description" content="Spesa Pronta: gestione spesa intelligente con cloud, Alexa, Google Assistant e suggerimenti automatici.">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="assets/styles.css">
+  <link rel="stylesheet" href="assets/styles.css?v=17">
   <title>Spesa Pronta</title>
 </head>
 <body>
@@ -103,10 +103,11 @@
             </section>
 
             <section class="panel mini-panel">
-              <div class="mini-head"><div><h3 data-i18n="alexaTitle">Collegamento Alexa</h3><p data-i18n="alexaTextShort">Alexa legge e aggiorna la lista cloud.</p></div></div>
+              <div class="mini-head"><div><h3 data-i18n="voiceTitle">Assistenti vocali</h3><p data-i18n="voiceTextShort">Alexa e Google Assistant leggono e aggiornano la stessa lista cloud.</p></div></div>
               <div class="alexa-state"><span id="alexaDot"></span><strong id="alexaStatus">Non collegata</strong></div>
               <button class="primary-btn full" id="connectAlexaBtn" type="button" data-i18n="connectAlexa">Connetti Alexa</button>
               <button class="outline-btn full" id="copyAlexaBtn" type="button" data-i18n="copyAlexaEndpoint">Copia endpoint Alexa</button>
+              <button class="outline-btn full google-btn" id="copyGoogleBtn" type="button" data-i18n="copyGoogleEndpoint">Copia endpoint Google Assistant</button>
             </section>
           </aside>
         </div>
@@ -122,6 +123,7 @@
             <h3 class="wide">Accedi</h3>
             <label class="wide"><span>Email</span><input id="loginEmail" type="email" required placeholder="esempio@email.it"></label>
             <label class="wide"><span>Password</span><input id="loginPassword" type="password" required placeholder="La tua password"></label>
+            <button class="link-btn wide" id="forgotPasswordBtn" type="button">Hai dimenticato la password?</button>
             <button class="primary-btn wide" type="submit">Accedi a Spesa Pronta</button>
             <p class="wide auth-note">Nuovo utente? Compila la registrazione qui sotto.</p>
           </form>
@@ -131,26 +133,78 @@
             <label><span data-i18n="username">Nome utente</span><input id="regUsername" required data-i18n-placeholder="usernamePh" placeholder="Scegli un nome utente"></label>
             <label><span data-i18n="email">Email</span><input id="regEmail" type="email" required placeholder="esempio@email.it"></label>
             <label><span data-i18n="password">Password</span><input id="regPassword" type="password" required data-i18n-placeholder="passwordPh" placeholder="Minimo 8 caratteri"></label>
+            <label><span data-i18n="phonePrefix">Prefisso</span><select id="regPhoneCountry" required><option value="+39">🇮🇹 +39 Italia</option><option value="+1">🇺🇸 +1 USA/Canada</option><option value="+44">🇬🇧 +44 UK</option><option value="+49">🇩🇪 +49 Germania</option><option value="+33">🇫🇷 +33 Francia</option><option value="+34">🇪🇸 +34 Spagna</option><option value="+40">🇷🇴 +40 Romania</option><option value="+41">🇨🇭 +41 Svizzera</option><option value="+355">🇦🇱 +355 Albania</option></select></label>
+            <label><span data-i18n="phoneNumber">Numero telefono</span><input id="regPhoneNumber" inputmode="tel" required placeholder="Es. 3331234567"></label>
             <label><span data-i18n="peopleCount">Numero persone in casa</span><input id="regPeople" type="number" min="1" max="20" value="2"></label>
             <label><span data-i18n="animalCount">Numero animali</span><input id="regAnimals" type="number" min="0" max="30" value="3"></label>
-            <label><span data-i18n="captcha">Captcha</span><input id="regCaptcha" inputmode="numeric" required></label>
-            <label class="wide"><span data-i18n="apiEndpoint">API endpoint</span><input id="regEndpoint" value="/api"></label>
+            <div class="wide image-captcha-wrap">
+              <div class="captcha-title"><span data-i18n="captcha">Captcha</span><b id="captchaQuestion">Tocca l’immagine richiesta</b></div>
+              <div id="captchaBox" class="image-captcha" role="group" aria-label="Captcha con immagini">
+                <button class="captcha-choice" type="button" data-captcha="fridge"><span class="emoji">🧊</span><span>Frigo</span></button>
+                <button class="captcha-choice" type="button" data-captcha="lock"><span class="emoji">🔐</span><span>Lucchetto</span></button>
+                <button class="captcha-choice" type="button" data-captcha="milk"><img src="assets/illustrations/milk.png" alt="Latte"><span>Latte</span></button>
+                <button class="captcha-choice" type="button" data-captcha="bread"><img src="assets/illustrations/bread.png" alt="Pane"><span>Pane</span></button>
+              </div>
+              <input id="regCaptcha" type="hidden" required>
+            </div>
+            <input id="regEndpoint" type="hidden" value="/api">
             <label class="switch-row wide"><span data-i18n="autoSmartOrdering">Spesa intelligente automatica</span><input id="regAutoSmart" type="checkbox" checked></label>
-            <div class="form-actions wide">
+            <div class="form-actions wide single-action">
               <button class="primary-btn" type="submit" data-i18n="registerCreate">Registrati</button>
-              <button class="outline-btn" id="continueOfflineBtn" type="button">Usa profilo locale</button>
+              <button class="outline-btn hidden" id="continueOfflineBtn" type="button" aria-hidden="true" tabindex="-1">Usa profilo locale</button>
             </div>
           </form>
-          <aside class="register-benefits">
-            <div class="cloud-illus">☁️⇄📱</div>
-            <h3 data-i18n="whyRegister">Perché registrarsi?</h3>
-            <ul>
-              <li data-i18n="benefitCloud">Sincronizzazione sicura su cloud</li>
-              <li data-i18n="benefitDevices">Accesso da più dispositivi</li>
-              <li data-i18n="benefitSmart">Inventario iniziale con foto obbligatorio</li>
-              <li data-i18n="benefitAlexa">Integrazione con Alexa</li>
+          <aside class="register-benefits futuristic-benefits">
+            <div class="alexa-holo">
+              <span class="ring r1"></span><span class="ring r2"></span>
+              <img src="assets/illustrations/alexa.png" alt="Alexa"><img class="ga-icon" src="assets/illustrations/google-assistant.png" alt="Google Assistant">
+            </div>
+            <p class="benefits-kicker">ecosistema intelligente</p>
+            <h3>La tua dispensa diventa smart</h3>
+            <ul class="benefit-orbit-list">
+              <li><b>🧠 AI che impara</b><span>Ricorda preferenze, consumi e abitudini della tua casa.</span></li>
+              <li><b>📷 Visione reale</b><span>Riconosce ciò che fotografi e ti chiede conferma se non è sicura.</span></li>
+              <li><b>🔐 Account verificato</b><span>Email + SMS prima di attivare cloud e assistenti vocali.</span></li>
+              <li><b>🗣️ Alexa + Google</b><span>La lista è la stessa su app, voce e database.</span></li>
+              <li><b>📲 Lista WhatsApp</b><span>Quando esci, ricevi una lista pulita e pronta da seguire.</span></li>
             </ul>
           </aside>
+        </section>
+      </section>
+
+
+      <section class="view" id="view-verify-email">
+        <section class="panel verify-email-panel">
+          <div class="verify-orb">✉️</div>
+          <p class="welcome-kicker">Sicurezza account • Email obbligatoria</p>
+          <h2>Verifica la tua email</h2>
+          <p class="welcome-lead">Ti abbiamo inviato un link di verifica a <b id="verifyEmailTarget">questa email</b>. Prima di entrare nella dashboard devi confermare che l’indirizzo esiste davvero.</p>
+          <form id="verifyEmailForm" class="form-grid verify-form">
+            <label class="wide"><span>Token di verifica</span><input id="verifyToken" placeholder="Incolla qui il token ricevuto via email"></label>
+            <button class="primary-btn wide" type="submit">Verifica email e attiva account</button>
+            <button class="outline-btn wide" id="resendVerificationBtn" type="button">Invia di nuovo email di verifica</button>
+          </form>
+          <form id="verifyPhoneForm" class="form-grid verify-form phone-verify-form hidden">
+            <label class="wide"><span>Codice SMS</span><input id="verifyPhoneCode" inputmode="numeric" maxlength="6" placeholder="Inserisci il codice a 6 cifre ricevuto via SMS"></label>
+            <button class="primary-btn wide" type="submit">Verifica telefono e attiva cloud</button>
+            <button class="outline-btn wide" id="resendPhoneBtn" type="button">Invia di nuovo SMS</button>
+          </form>
+          <p class="onboarding-warning">Se non trovi l’email, controlla anche spam/promozioni. Il link scade dopo 24 ore.</p>
+        </section>
+      </section>
+
+      <section class="view" id="view-welcome">
+        <section class="panel welcome-panel">
+          <div class="welcome-orb dual-orb"><img src="assets/illustrations/alexa.png" alt="Alexa"><img src="assets/illustrations/google-assistant.png" alt="Google Assistant"></div>
+          <p class="welcome-kicker">Account creato • Cloud sicuro attivo</p>
+          <h2>Benvenuto in Spesa Pronta, <span id="welcomeName">amico</span> ✨</h2>
+          <p class="welcome-lead">Ti abbiamo inviato una email di benvenuto con il tuo nome utente. Ora partiamo con l’inventario iniziale: foto reali, quantità reali, zero prodotti inventati.</p>
+          <div class="welcome-grid">
+            <article><strong>🔐</strong><span>Dati salvati in cloud con cifratura lato server.</span></article>
+            <article><strong>📷</strong><span>Inventario iniziale obbligatorio con foto.</span></article>
+            <article><strong><img src="assets/illustrations/alexa.png" alt="Alexa"></strong><span>Alexa e Google Assistant leggeranno la stessa lista del database.</span></article>
+          </div>
+          <button class="primary-btn welcome-start" id="continueToInventoryBtn" type="button">Inizia inventario iniziale</button>
         </section>
       </section>
 
@@ -167,7 +221,7 @@
           </div>
           <div class="onboarding-actions">
             <button class="primary-btn" id="initialScanBtn" type="button">📷 Inizia inventario con foto</button>
-            <button class="outline-btn warning" id="initialVerifyLaterBtn" type="button">Non posso ora: segna da verificare</button>
+            <button class="outline-btn warning hidden" id="initialVerifyLaterBtn" type="button" aria-hidden="true" tabindex="-1">Inventario obbligatorio</button>
           </div>
           <p class="onboarding-warning">Finché non completi questo passaggio, non vengono caricati prodotti finti o quantità inventate.</p>
         </section>
@@ -182,7 +236,7 @@
 
       <section class="view" id="view-shopping">
         <section class="panel">
-          <div class="panel-head"><div><h2 data-i18n="navShopping">Lista della spesa</h2><p data-i18n="shoppingHint">Questa è la lista che Alexa leggerà dal cloud.</p></div><button class="done-btn" id="shoppingDoneBtn2" type="button">✓ <span data-i18n="shoppingDone">Ho fatto la spesa</span></button></div>
+          <div class="panel-head"><div><h2 data-i18n="navShopping">Lista della spesa</h2><p data-i18n="shoppingHint">Questa è la lista che Alexa, Google e WhatsApp leggeranno dal cloud.</p></div><div class="shopping-actions"><button class="whatsapp-btn" id="sendWhatsappListBtn" type="button">📲 Invia lista WhatsApp</button><button class="done-btn" id="shoppingDoneBtn2" type="button">✓ <span data-i18n="shoppingDone">Ho fatto la spesa</span></button></div></div>
           <div id="shoppingListFull" class="shopping-list-full"></div>
         </section>
       </section>
@@ -211,12 +265,13 @@
                   <option value="it">🇮🇹 Italiano</option><option value="en">🇬🇧 English</option><option value="es">🇪🇸 Español</option><option value="de">🇩🇪 Deutsch</option>
                 </select>
               </article>
-              <article class="setting-card wide">
+              <article class="setting-card wide cloud-card-clean">
                 <h3 data-i18n="cloudSync">Cloud & Sincronizzazione</h3>
-                <label class="switch-row"><span data-i18n="enableCloud">Abilita sync cloud</span><input id="cloudEnabled" type="checkbox"></label>
-                <label><span data-i18n="apiEndpoint">API Endpoint</span><input id="apiEndpoint" placeholder="/api"></label>
-                <label><span data-i18n="householdId">ID famiglia</span><input id="householdId" readonly></label>
-                <label><span data-i18n="apiToken">Token API</span><input id="apiToken" type="password" readonly></label>
+                <p class="clean-sync-text">Il collegamento cloud è automatico dopo accesso o registrazione. Nessun parametro tecnico da compilare.</p>
+                <input id="cloudEnabled" type="checkbox" hidden>
+                <input id="apiEndpoint" type="hidden" value="/api">
+                <input id="householdId" type="hidden" readonly>
+                <input id="apiToken" type="hidden" readonly>
                 <button class="primary-btn" id="saveSettingsBtn" type="button" data-i18n="saveSettings">Salva impostazioni</button>
               </article>
               <article class="setting-card profile-card">
@@ -255,11 +310,14 @@
                 <label class="switch-row"><span data-i18n="autoSmartOrdering">Ordina/consiglia in automatico</span><input id="autoSmartToggle" type="checkbox"></label>
                 <p data-i18n="autoSmartExplain">Se disattivato, l’app non aggiunge suggerimenti automatici alla lista.</p>
               </article>
-              <article class="setting-card">
-                <h3>Alexa</h3>
-                <p data-i18n="alexaLong">Collega Alexa allo stesso database: quando modifichi un articolo, la lista vocale si aggiorna.</p>
+              <article class="setting-card voice-card">
+                <h3 data-i18n="voiceTitle">Assistenti vocali</h3>
+                <p data-i18n="voiceLong">Collega Alexa e Google Assistant allo stesso database: quando modifichi un articolo, la lista vocale si aggiorna per entrambi.</p>
+                <div class="voice-icons"><img src="assets/illustrations/alexa.png" alt="Alexa"><img src="assets/illustrations/google-assistant.png" alt="Google Assistant"></div>
                 <button class="primary-btn full" id="connectAlexaBtn2" type="button" data-i18n="connectAlexa">Connetti Alexa</button>
                 <button class="outline-btn full" id="copyAlexaBtn2" type="button" data-i18n="copyAlexaEndpoint">Copia endpoint Alexa</button>
+                <button class="outline-btn full google-btn" id="connectGoogleBtn" type="button" data-i18n="connectGoogle">Connetti Google Assistant</button>
+                <button class="outline-btn full google-btn" id="copyGoogleBtn2" type="button" data-i18n="copyGoogleEndpoint">Copia endpoint Google Assistant</button>
               </article>
             </div>
           </section>
@@ -269,7 +327,7 @@
       <section class="view" id="view-help">
         <section class="panel">
           <h2 data-i18n="navHelp">Aiuto</h2>
-          <p data-i18n="helpText">Esempi Alexa: “Alexa, chiedi a Spesa Pronta cosa devo comprare”, “aggiungi acqua”, “segna crocchette cane a 10 kg”.</p>
+          <p data-i18n="helpText">Esempi vocali: “Alexa, chiedi a Spesa Pronta cosa devo comprare” oppure “Hey Google, chiedi a Spesa Pronta cosa manca”.</p>
           <pre id="alexaExamples"></pre>
         </section>
       </section>
@@ -302,6 +360,18 @@
       </form>
     </div>
   </section>
+
+
+  <dialog id="resetDialog" class="reset-dialog">
+    <form id="resetForm" class="reset-card">
+      <button class="icon-btn reset-close" id="resetCloseBtn" type="button" aria-label="Chiudi">×</button>
+      <h3>Recupera password</h3>
+      <p>Inserisci il token ricevuto via email e scegli una nuova password.</p>
+      <label><span>Token verifica</span><input id="resetToken" required placeholder="Incolla il token o apri il link email"></label>
+      <label><span>Nuova password</span><input id="resetPassword" type="password" required minlength="8" placeholder="Minimo 8 caratteri"></label>
+      <button class="primary-btn" type="submit">Aggiorna password</button>
+    </form>
+  </dialog>
 
   <dialog id="productDialog">
     <form method="dialog" id="customProductForm" class="dialog-card">
@@ -352,6 +422,6 @@
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/app.js" defer></script>
+  <script src="assets/app.js?v=14" defer></script>
 </body>
 </html>

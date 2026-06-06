@@ -62,7 +62,7 @@ Il backend va pubblicato su Render/Railway/Fly.io o un server Node HTTPS. Dopo l
 La Skill Alexa deve usare:
 
 ```text
-POST https://tuo-backend/api/alexa?householdId=ID_FAMIGLIA
+POST https://tuo-backend/api/alexa?householdId=ID_FAMIGLIA&token=TOKEN_CLOUD
 ```
 
 La lista che Alexa legge è la stessa lista cloud aggiornata dall'app.
