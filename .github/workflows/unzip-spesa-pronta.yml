@@ -1,0 +1,51 @@
+name: Unzip Spesa Pronta
+
+on:
+  push:
+    paths:
+      - "*.zip"
+
+permissions:
+  contents: write
+
+jobs:
+  unzip:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Scarica repository
+        uses: actions/checkout@v4
+
+      - name: Estrai file ZIP e prepara progetto
+        run: |
+          ZIP_FILE=$(ls *.zip | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "Nessun file ZIP trovato"
+            exit 0
+          fi
+
+          mkdir extracted
+          unzip -o "$ZIP_FILE" -d extracted
+
+          if [ -d "extracted/spesa-pronta-final" ]; then
+            cp -a extracted/spesa-pronta-final/. .
+          else
+            FIRST_DIR=$(find extracted -mindepth 1 -maxdepth 1 -type d | head -n 1)
+            if [ -n "$FIRST_DIR" ]; then
+              cp -a "$FIRST_DIR"/. .
+            else
+              cp -a extracted/. .
+            fi
+          fi
+
+          rm -rf extracted
+          rm -f "$ZIP_FILE"
+
+      - name: Salva file estratti nel repository
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add -A
+          git commit -m "Carica Spesa Pronta dal file ZIP" || echo "Nessuna modifica"
+          git push
