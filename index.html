@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#071b34">
+  <meta name="description" content="Spesa Pronta: gestione spesa intelligente con cloud, Alexa e suggerimenti automatici.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="assets/icon-192.png">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
+  <link rel="stylesheet" href="assets/styles.css">
+  <title>Spesa Pronta</title>
+</head>
+<body>
+  <div class="app-frame">
+    <aside class="sidebar">
+      <div class="side-brand">
+        <img src="assets/illustrations/brand-logo.png" alt="Spesa Pronta logo">
+        <strong>SPESA<br><span>PRONTA</span></strong>
+      </div>
+      <nav class="nav-menu" aria-label="Navigazione">
+        <button class="nav-item active" data-view="dashboard" type="button"><span>⌂</span><b data-i18n="navDashboard">Dashboard</b></button>
+        <button class="nav-item" data-view="products" type="button"><span>▣</span><b data-i18n="navProducts">Prodotti</b></button>
+        <button class="nav-item" data-view="shopping" type="button"><span>☷</span><b data-i18n="navShopping">Lista della spesa</b></button>
+        <button class="nav-item" data-view="suggestions" type="button"><span>◌</span><b data-i18n="navSuggestions">Suggerimenti</b></button>
+        <button class="nav-item" data-view="settings" type="button"><span>⚙</span><b data-i18n="navSettings">Impostazioni</b></button>
+        <button class="nav-item" data-view="help" type="button"><span>?</span><b data-i18n="navHelp">Aiuto</b></button>
+      </nav>
+    </aside>
+    <button class="mobile-nav-backdrop" id="mobileNavBackdrop" type="button" aria-label="Chiudi menu"></button>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="top-title">
+          <img src="assets/illustrations/brand-logo.png" alt="">
+          <div>
+            <small data-i18n="heroEyebrow">Organizzatore domestico</small>
+            <h1 data-i18n="appTitle">SPESA PRONTA</h1>
+            <p class="top-subtitle" data-i18n="subtitle">Quando finisce, scorri. Quando esci, compri.</p>
+          </div>
+        </div>
+        <div class="top-actions">
+          <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Apri menu">☰</button>
+          <select id="languageSelect" aria-label="Lingua">
+            <option value="it">IT</option>
+            <option value="en">EN</option>
+            <option value="es">ES</option>
+            <option value="de">DE</option>
+          </select>
+          <button class="icon-btn" id="syncNowBtn" type="button" title="Sync">☁</button>
+          <button class="user-pill guest" id="userShortcutBtn" type="button"><span id="userPillIcon">👤</span><div class="user-pill-text"><small id="userPillSub">Account</small><b id="userLabel">Registrati / Login</b></div></button>
+        </div>
+      </header>
+
+      <section class="view active" id="view-dashboard">
+        <section class="stats-grid">
+          <article class="stat-card blue"><span data-i18n="statusSituation">Situazione spesa</span><strong id="statTotal">0</strong><small data-i18n="totalItems">articoli totali</small><i>🧺</i></article>
+          <article class="stat-card green"><span data-i18n="inHome">In casa</span><strong id="statHome">0</strong><small data-i18n="readyAvailable">scorte sufficienti</small><i>⌂</i></article>
+          <article class="stat-card orange"><span data-i18n="toBuy">Da comprare</span><strong id="statBuy">0</strong><small data-i18n="missingItems">scorte in esaurimento</small><i>🛒</i></article>
+          <article class="stat-card cloud"><span data-i18n="syncStatus">Stato sync</span><strong id="statSync">Offline</strong><small id="statSyncSub">local</small><i>☁</i></article>
+        </section>
+
+        <div class="dashboard-grid">
+          <section class="panel products-panel">
+            <div class="panel-head">
+              <div>
+                <h2 data-i18n="statusSituation">Situazione spesa</h2>
+                <p data-i18n="dashboardHint">Tocca i menu sotto per vedere tutti gli articoli, quelli in casa o quelli da comprare.</p>
+              </div>
+              <div class="cta-row">
+                <button class="outline-btn" id="addProductBtn" type="button">＋ <span data-i18n="addArticle">Aggiungi articolo</span></button>
+                <button class="done-btn" id="shoppingDoneBtn" type="button">✓ <span data-i18n="shoppingDone">Ho fatto la spesa</span> ✨</button>
+              </div>
+            </div>
+
+            <div class="status-tabs">
+              <button class="status-tab active" data-filter="all" type="button">☷ <span data-i18n="statusSituation">Situazione spesa</span></button>
+              <button class="status-tab" data-filter="home" type="button">⌂ <span data-i18n="inHome">In casa</span></button>
+              <button class="status-tab" data-filter="buy" type="button">🛒 <span data-i18n="toBuy">Da comprare</span></button>
+            </div>
+
+            <div class="toolbar">
+              <label class="search-box"><span>⌕</span><input id="searchInput" type="search" data-i18n-placeholder="searchPlaceholder" placeholder="Cerca un articolo"></label>
+              <select id="categorySelect"></select>
+            </div>
+
+            <div class="info-strip"><span>i</span><p data-i18n="catalogNote">Qui trovi un menu generico con molti articoli comuni. Se qualcosa manca, aggiungilo tu.</p></div>
+            <div id="productList" class="product-list"></div>
+          </section>
+
+          <aside class="right-stack">
+            <section class="panel mini-panel">
+              <div class="mini-head">
+                <div><h3 data-i18n="quickList">Lista rapida</h3><p data-i18n="quickListHint">Solo ciò che devi comprare.</p></div>
+                <button class="outline-btn small" id="copyListBtn" type="button">⧉ <span data-i18n="copyList">Copia lista</span></button>
+              </div>
+              <div id="quickList" class="side-list"></div>
+            </section>
+
+            <section class="panel mini-panel">
+              <div class="mini-head"><div><h3 data-i18n="suggestedTitle">Consigliati per te</h3><p data-i18n="suggestedHint">Articoli che consumi spesso o che stanno per finire.</p></div></div>
+              <div id="suggestedMini" class="side-list"></div>
+            </section>
+
+            <section class="panel mini-panel">
+              <div class="mini-head"><div><h3 data-i18n="alexaTitle">Collegamento Alexa</h3><p data-i18n="alexaTextShort">Alexa legge e aggiorna la lista cloud.</p></div></div>
+              <div class="alexa-state"><span id="alexaDot"></span><strong id="alexaStatus">Non collegata</strong></div>
+              <button class="primary-btn full" id="connectAlexaBtn" type="button" data-i18n="connectAlexa">Connetti Alexa</button>
+              <button class="outline-btn full" id="copyAlexaBtn" type="button" data-i18n="copyAlexaEndpoint">Copia endpoint Alexa</button>
+            </section>
+          </aside>
+        </div>
+      </section>
+
+      <section class="view" id="view-registration">
+        <section class="panel registration-panel">
+          <div>
+            <h2 data-i18n="registerTitle">Accedi o registrati</h2>
+            <p data-i18n="registerText">Prima di vedere i prodotti devi accedere o creare un profilo. Poi Spesa Pronta ti guiderà nell’inventario iniziale con foto.</p>
+          </div>
+          <form id="loginForm" class="form-grid login-form">
+            <h3 class="wide">Accedi</h3>
+            <label class="wide"><span>Email</span><input id="loginEmail" type="email" required placeholder="esempio@email.it"></label>
+            <label class="wide"><span>Password</span><input id="loginPassword" type="password" required placeholder="La tua password"></label>
+            <button class="primary-btn wide" type="submit">Accedi a Spesa Pronta</button>
+            <p class="wide auth-note">Nuovo utente? Compila la registrazione qui sotto.</p>
+          </form>
+          <form id="registerForm" class="form-grid">
+            <label><span data-i18n="firstName">Nome</span><input id="regFirstName" required data-i18n-placeholder="firstNamePh" placeholder="Inserisci il tuo nome"></label>
+            <label><span data-i18n="lastName">Cognome</span><input id="regLastName" required data-i18n-placeholder="lastNamePh" placeholder="Inserisci il tuo cognome"></label>
+            <label><span data-i18n="username">Nome utente</span><input id="regUsername" required data-i18n-placeholder="usernamePh" placeholder="Scegli un nome utente"></label>
+            <label><span data-i18n="email">Email</span><input id="regEmail" type="email" required placeholder="esempio@email.it"></label>
+            <label><span data-i18n="password">Password</span><input id="regPassword" type="password" required data-i18n-placeholder="passwordPh" placeholder="Minimo 8 caratteri"></label>
+            <label><span data-i18n="peopleCount">Numero persone in casa</span><input id="regPeople" type="number" min="1" max="20" value="2"></label>
+            <label><span data-i18n="animalCount">Numero animali</span><input id="regAnimals" type="number" min="0" max="30" value="3"></label>
+            <label><span data-i18n="captcha">Captcha</span><input id="regCaptcha" inputmode="numeric" required></label>
+            <label class="wide"><span data-i18n="apiEndpoint">API endpoint</span><input id="regEndpoint" value="/api"></label>
+            <label class="switch-row wide"><span data-i18n="autoSmartOrdering">Spesa intelligente automatica</span><input id="regAutoSmart" type="checkbox" checked></label>
+            <div class="form-actions wide">
+              <button class="primary-btn" type="submit" data-i18n="registerCreate">Registrati</button>
+              <button class="outline-btn" id="continueOfflineBtn" type="button">Usa profilo locale</button>
+            </div>
+          </form>
+          <aside class="register-benefits">
+            <div class="cloud-illus">☁️⇄📱</div>
+            <h3 data-i18n="whyRegister">Perché registrarsi?</h3>
+            <ul>
+              <li data-i18n="benefitCloud">Sincronizzazione sicura su cloud</li>
+              <li data-i18n="benefitDevices">Accesso da più dispositivi</li>
+              <li data-i18n="benefitSmart">Inventario iniziale con foto obbligatorio</li>
+              <li data-i18n="benefitAlexa">Integrazione con Alexa</li>
+            </ul>
+          </aside>
+        </section>
+      </section>
+
+      <section class="view" id="view-onboarding">
+        <section class="panel onboarding-panel">
+          <div class="onboarding-badge">🧊📷</div>
+          <h2>Inventario iniziale obbligatorio</h2>
+          <p class="onboarding-lead">Prima di mostrarti la lista prodotti, Spesa Pronta deve sapere cosa hai davvero in casa.</p>
+          <div class="onboarding-steps">
+            <article><strong>1</strong><span>Tira fuori i prodotti dal frigo/dispensa.</span></article>
+            <article><strong>2</strong><span>Fotografa un articolo alla volta davanti al frigo.</span></article>
+            <article><strong>3</strong><span>L’AI propone nome, quantità, unità e categoria.</span></article>
+            <article><strong>4</strong><span>Confermi o correggi, poi rimetti il prodotto al suo posto.</span></article>
+          </div>
+          <div class="onboarding-actions">
+            <button class="primary-btn" id="initialScanBtn" type="button">📷 Inizia inventario con foto</button>
+            <button class="outline-btn warning" id="initialVerifyLaterBtn" type="button">Non posso ora: segna da verificare</button>
+          </div>
+          <p class="onboarding-warning">Finché non completi questo passaggio, non vengono caricati prodotti finti o quantità inventate.</p>
+        </section>
+      </section>
+
+      <section class="view" id="view-products">
+        <section class="panel">
+          <div class="panel-head"><div><h2 data-i18n="navProducts">Prodotti</h2><p data-i18n="productsHint">Catalogo completo e gestione articoli personalizzati.</p></div><button class="primary-btn" id="addProductBtn2" type="button">＋ <span data-i18n="addArticle">Aggiungi articolo</span></button></div>
+          <div id="allProductsList" class="product-list compact"></div>
+        </section>
+      </section>
+
+      <section class="view" id="view-shopping">
+        <section class="panel">
+          <div class="panel-head"><div><h2 data-i18n="navShopping">Lista della spesa</h2><p data-i18n="shoppingHint">Questa è la lista che Alexa leggerà dal cloud.</p></div><button class="done-btn" id="shoppingDoneBtn2" type="button">✓ <span data-i18n="shoppingDone">Ho fatto la spesa</span></button></div>
+          <div id="shoppingListFull" class="shopping-list-full"></div>
+        </section>
+      </section>
+
+      <section class="view" id="view-suggestions">
+        <section class="panel">
+          <div class="panel-head"><div><h2 data-i18n="suggestionsSmart">Suggerimenti intelligenti</h2><p data-i18n="suggestionsExplain">Raccomandazioni basate su persone, animali e consumo reale.</p></div></div>
+          <div class="smart-summary">
+            <article><strong id="smartPeople">2</strong><span data-i18n="peopleInHome">Persone in casa</span></article>
+            <article><strong id="smartAnimals">3</strong><span data-i18n="animalsInHome">Animali</span></article>
+            <article><strong id="smartMode">ON</strong><span data-i18n="smartAnalysis">Analisi consumi</span></article>
+          </div>
+          <div id="smartSuggestions" class="suggestion-grid"></div>
+          <div class="info-strip success"><span>✓</span><p data-i18n="smartHow">Analizziamo i consumi abituali e il numero di persone/animali per prevedere cosa sta per finire.</p></div>
+        </section>
+      </section>
+
+      <section class="view" id="view-settings">
+        <section class="settings-layout">
+          <section class="panel">
+            <h2 data-i18n="navSettings">Impostazioni</h2>
+            <div class="settings-grid">
+              <article class="setting-card">
+                <h3 data-i18n="language">Lingua dell’app</h3>
+                <select id="settingsLanguage">
+                  <option value="it">🇮🇹 Italiano</option><option value="en">🇬🇧 English</option><option value="es">🇪🇸 Español</option><option value="de">🇩🇪 Deutsch</option>
+                </select>
+              </article>
+              <article class="setting-card wide">
+                <h3 data-i18n="cloudSync">Cloud & Sincronizzazione</h3>
+                <label class="switch-row"><span data-i18n="enableCloud">Abilita sync cloud</span><input id="cloudEnabled" type="checkbox"></label>
+                <label><span data-i18n="apiEndpoint">API Endpoint</span><input id="apiEndpoint" placeholder="/api"></label>
+                <label><span data-i18n="householdId">ID famiglia</span><input id="householdId" readonly></label>
+                <label><span data-i18n="apiToken">Token API</span><input id="apiToken" type="password" readonly></label>
+                <button class="primary-btn" id="saveSettingsBtn" type="button" data-i18n="saveSettings">Salva impostazioni</button>
+              </article>
+              <article class="setting-card profile-card">
+                <h3 data-i18n="profileTitle">Profilo utente</h3>
+                <div class="profile-hero">
+                  <div class="profile-avatar" id="profileAvatar">SP</div>
+                  <div>
+                    <strong id="profileDisplayName">Registrati / Login</strong>
+                    <p id="profileStatusText">Accedi per sincronizzare tutto e usare Alexa.</p>
+                  </div>
+                </div>
+                <label><span data-i18n="firstName">Nome</span><input id="profileFirstName" placeholder="Mario"></label>
+                <label><span data-i18n="lastName">Cognome</span><input id="profileLastName" placeholder="Rossi"></label>
+                <label><span data-i18n="username">Nome utente</span><input id="profileUsername" placeholder="mariorossi"></label>
+                <label><span data-i18n="email">Email</span><input id="profileEmail" type="email" placeholder="mario@email.it"></label>
+                <div class="profile-home-block">
+                  <h4 data-i18n="homeDataTitle">Dati casa per i consumi intelligenti</h4>
+                  <p data-i18n="homeDataHint">Questi numeri servono per calcolare acqua, crocchette e scorte consigliate.</p>
+                  <div class="profile-home-grid">
+                    <label><span data-i18n="peopleCount">Persone in casa</span><input id="profilePeople" type="number" min="1" max="20" value="2"></label>
+                    <label><span data-i18n="animalCount">Animali in casa</span><input id="profileAnimals" type="number" min="0" max="30" value="3"></label>
+                  </div>
+                </div>
+                <div class="form-actions">
+                  <button class="primary-btn" id="saveProfileBtn" type="button" data-i18n="saveProfile">Salva profilo</button>
+                  <button class="outline-btn" id="goRegisterBtn" type="button" data-i18n="registerOrLogin">Registrati / Login</button>
+                </div>
+              </article>
+              <article class="setting-card">
+                <h3 data-i18n="household">Famiglia</h3>
+                <label><span data-i18n="peopleCount">Persone in casa</span><input id="settingsPeople" type="number" min="1" value="2"></label>
+                <label><span data-i18n="animalCount">Animali in casa</span><input id="settingsAnimals" type="number" min="0" value="3"></label>
+              </article>
+              <article class="setting-card">
+                <h3 data-i18n="smartShopping">Suggerimenti spesa intelligenti</h3>
+                <label class="switch-row"><span data-i18n="autoSmartOrdering">Ordina/consiglia in automatico</span><input id="autoSmartToggle" type="checkbox"></label>
+                <p data-i18n="autoSmartExplain">Se disattivato, l’app non aggiunge suggerimenti automatici alla lista.</p>
+              </article>
+              <article class="setting-card">
+                <h3>Alexa</h3>
+                <p data-i18n="alexaLong">Collega Alexa allo stesso database: quando modifichi un articolo, la lista vocale si aggiorna.</p>
+                <button class="primary-btn full" id="connectAlexaBtn2" type="button" data-i18n="connectAlexa">Connetti Alexa</button>
+                <button class="outline-btn full" id="copyAlexaBtn2" type="button" data-i18n="copyAlexaEndpoint">Copia endpoint Alexa</button>
+              </article>
+            </div>
+          </section>
+        </section>
+      </section>
+
+      <section class="view" id="view-help">
+        <section class="panel">
+          <h2 data-i18n="navHelp">Aiuto</h2>
+          <p data-i18n="helpText">Esempi Alexa: “Alexa, chiedi a Spesa Pronta cosa devo comprare”, “aggiungi acqua”, “segna crocchette cane a 10 kg”.</p>
+          <pre id="alexaExamples"></pre>
+        </section>
+      </section>
+    </main>
+  </div>
+
+
+  <section class="ai-assistant" id="aiAssistant" aria-live="polite">
+    <button class="ai-fab" id="aiFab" type="button" aria-label="Apri assistente Spesa Pronta AI">
+      <span class="ai-fab-orb">AI</span>
+      <b>Hey Spesa Pronta</b>
+    </button>
+    <div class="ai-panel hidden" id="aiPanel">
+      <header class="ai-head">
+        <div class="ai-brand-dot">AI</div>
+        <div>
+          <h3>Spesa Pronta AI</h3>
+          <p id="aiStatusText">Buongiorno, sono la tua AI domestica. Ricordo chat, consumi e preferenze.</p>
+        </div>
+        <button class="ai-close" id="aiCloseBtn" type="button" aria-label="Chiudi">×</button>
+      </header>
+      <div class="ai-messages" id="aiMessages"></div>
+      <div class="ai-voice-row">
+        <button class="ai-voice-btn" id="aiVoiceBtn" type="button">🎙️ Parla</button><button class="ai-voice-btn camera" id="aiOpenScannerBtn" type="button">📷 Foto spesa</button>
+        <label class="ai-wake"><input id="aiWakeToggle" type="checkbox"> Wake: “Hey Spesa Pronta”</label>
+      </div>
+      <form class="ai-form" id="aiForm">
+        <input id="aiInput" autocomplete="off" placeholder="Scrivi o dì: hey spesa pronta, cosa ricordi di me?">
+        <button type="submit">Invia</button>
+      </form>
+    </div>
+  </section>
+
+  <dialog id="productDialog">
+    <form method="dialog" id="customProductForm" class="dialog-card">
+      <h3 data-i18n="addArticle">Aggiungi articolo</h3>
+      <label><span data-i18n="nameIt">Nome italiano</span><input id="customNameIt" required></label>
+      <label><span data-i18n="nameEn">Nome inglese</span><input id="customNameEn"></label>
+      <label><span data-i18n="nameEs">Nome spagnolo</span><input id="customNameEs"></label>
+      <label><span data-i18n="nameDe">Nome tedesco</span><input id="customNameDe"></label>
+      <label><span data-i18n="category">Categoria</span><select id="customCategory"></select></label>
+      <div class="dialog-actions">
+        <button class="outline-btn" value="cancel" type="button" id="closeDialogBtn">Annulla</button>
+        <button class="primary-btn" type="submit" data-i18n="add">Aggiungi</button>
+      </div>
+    </form>
+  </dialog>
+
+
+  <dialog id="groceryScannerDialog" class="scanner-dialog">
+    <section class="scanner-card">
+      <header class="scanner-head">
+        <div>
+          <small>Spesa Pronta Vision AI</small>
+          <h3>Controllo spesa con foto</h3>
+          <p>Fotografa un articolo alla volta. Se la foto è chiara, l’AI riconosce prodotto e quantità; se non vede bene ti chiede di rifarla.</p>
+        </div>
+        <button class="ai-close" id="scannerCloseBtn" type="button" aria-label="Chiudi">×</button>
+      </header>
+      <div class="scanner-actions">
+        <label class="scanner-capture primary-btn">
+          📷 Scatta foto articolo
+          <input id="groceryPhotoInput" type="file" accept="image/*" capture="environment">
+        </label>
+        <label class="scanner-capture outline-btn">
+          🖼️ Carica foto
+          <input id="groceryGalleryInput" type="file" accept="image/*" multiple>
+        </label>
+        <button class="outline-btn" id="fridgeModeBtn" type="button">🧊 Modalità frigo</button>
+        <button class="outline-btn warning" id="markVerifyBtn" type="button">Non posso ora: fatta da verificare</button>
+      </div>
+      <div class="scanner-status" id="scannerStatus">Quando rientri a casa, fotografa ogni prodotto prima di metterlo a posto.</div>
+      <div class="scanner-preview" id="scannerPreview"></div>
+      <div class="scanner-results" id="scannerResults"></div>
+      <footer class="scanner-footer">
+        <button class="primary-btn" id="scannerFinishBtn" type="button">Completa controllo</button>
+        <button class="outline-btn" id="scannerResetBtn" type="button">Svuota risultati</button>
+      </footer>
+    </section>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="assets/app.js" defer></script>
+</body>
+</html>
