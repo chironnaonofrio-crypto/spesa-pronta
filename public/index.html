@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="assets/styles.css">
+  <link rel="stylesheet" href="assets/styles.css?v=14">
   <title>Spesa Pronta</title>
 </head>
 <body>
@@ -138,7 +138,7 @@
             <label class="switch-row wide"><span data-i18n="autoSmartOrdering">Spesa intelligente automatica</span><input id="regAutoSmart" type="checkbox" checked></label>
             <div class="form-actions wide">
               <button class="primary-btn" type="submit" data-i18n="registerCreate">Registrati</button>
-              <button class="outline-btn" id="continueOfflineBtn" type="button">Usa profilo locale</button>
+              <button class="outline-btn hidden" id="continueOfflineBtn" type="button" aria-hidden="true" tabindex="-1">Usa profilo locale</button>
             </div>
           </form>
           <aside class="register-benefits">
@@ -167,7 +167,7 @@
           </div>
           <div class="onboarding-actions">
             <button class="primary-btn" id="initialScanBtn" type="button">📷 Inizia inventario con foto</button>
-            <button class="outline-btn warning" id="initialVerifyLaterBtn" type="button">Non posso ora: segna da verificare</button>
+            <button class="outline-btn warning hidden" id="initialVerifyLaterBtn" type="button" aria-hidden="true" tabindex="-1">Inventario obbligatorio</button>
           </div>
           <p class="onboarding-warning">Finché non completi questo passaggio, non vengono caricati prodotti finti o quantità inventate.</p>
         </section>
@@ -352,6 +352,6 @@
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/app.js" defer></script>
+  <script src="assets/app.js?v=14" defer></script>
 </body>
 </html>

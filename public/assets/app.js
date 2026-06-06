@@ -1,8 +1,8 @@
 
-const STORAGE_KEY = 'spesa-pronta-final:v12';
-const SETTINGS_KEY = 'spesa-pronta-final:settings:v12';
-const SESSION_KEY = 'spesa-pronta-final:session:v12';
-const AI_MEMORY_KEY = 'spesa-pronta-final:ai-memory:v2';
+const STORAGE_KEY = 'spesa-pronta-final:v14';
+const SETTINGS_KEY = 'spesa-pronta-final:settings:v14';
+const SESSION_KEY = 'spesa-pronta-final:session:v14';
+const AI_MEMORY_KEY = 'spesa-pronta-final:ai-memory:v14';
 const SYNC_WAIT = 650;
 
 const translations = {
@@ -245,7 +245,7 @@ function bind(){
   $('#customProductForm').addEventListener('submit', addCustom);
   $('#loginForm')?.addEventListener('submit', login);
   $('#registerForm').addEventListener('submit', register);
-  $('#continueOfflineBtn').addEventListener('click', continueLocalProfile);
+  $('#continueOfflineBtn')?.addEventListener('click', () => toast('Per usare Spesa Pronta serve accesso o registrazione cloud.'));
   $('#initialScanBtn')?.addEventListener('click', () => openGroceryScanner(true));
   $('#initialVerifyLaterBtn')?.addEventListener('click', markInitialInventoryToVerify);
   $('#saveSettingsBtn').addEventListener('click', saveSettingsFromForm);
@@ -517,7 +517,8 @@ async function register(e){
     const data=await res.json(); settings.token=data.token; settings.householdId=data.householdId; settings.cloudEnabled=true; session={mode:'registered',user:data.user};
     saveAll(); await syncCloud(true); toast(t('saved')); showView('onboarding');
   }catch(err){
-    session={mode:'offline',user:{firstName,lastName,username,email}}; settings.cloudEnabled=false; saveAll(); toast('Offline: account locale salvato. Ora fai l’inventario iniziale.'); showView('onboarding');
+    toast('Registrazione non riuscita: controlla connessione e riprova.');
+    showView('registration');
   }
 }
 function openAdd(){ $('#productDialog').showModal(); }
@@ -737,8 +738,8 @@ function completeShoppingDone(needsVerification=false){
 function finishScanner(){
   const confirmed=document.querySelectorAll('#scannerResults .scan-result.confirmed').length;
   if(!settings.inventorySetupDone && confirmed===0){
-    $('#scannerStatus').textContent='Per completare il primo inventario devi confermare almeno un prodotto, oppure scegliere “Non posso ora: fatta da verificare”.';
-    toast('Conferma almeno un prodotto o scegli da verificare');
+    $('#scannerStatus').textContent='Per completare il primo inventario devi confermare almeno un prodotto fotografato.';
+    toast('Conferma almeno un prodotto fotografato');
     return;
   }
   completeShoppingDone(false); closeGroceryScanner();
@@ -746,9 +747,8 @@ function finishScanner(){
   toast('Inventario completato ✅');
 }
 function markInitialInventoryToVerify(){
-  settings.inventorySetupDone=true; settings.inventoryStatus='to_verify'; settings.inventoryUpdatedAt=Date.now();
-  aiMemory.pendingVerification=true; saveAiMemory(); saveAll(); render(); showView('dashboard');
-  toast('Inventario segnato da verificare ⚠️');
+  toast('Inventario iniziale obbligatorio: fotografa e conferma almeno un prodotto.');
+  openGroceryScanner(true);
 }
 function markShoppingDoneToVerify(){
   completeShoppingDone(true); closeGroceryScanner();
