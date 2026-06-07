@@ -1,3 +1,4 @@
+<!-- SPESA_PRONTA_V27_PUBLIC_PHONE_FINAL -->
 # Spesa Pronta Final
 
 Versione funzionante del concept mostrato nel mockup.

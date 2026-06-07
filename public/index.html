@@ -1,17 +1,32 @@
 <!doctype html>
 <html lang="it">
 <head>
+  <!-- spesa-pronta-v26-phone-fields -->
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#071b34">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <!-- spesa-pronta-cache-killer-v27-6 -->
   <meta name="description" content="Spesa Pronta: gestione spesa intelligente con cloud, Alexa, Google Assistant e suggerimenti automatici.">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="assets/styles.css?v=17">
+  <link rel="stylesheet" href="assets/styles.v27-9-hard-reset.css?v=279999">
+
+  <script id="v27-9-hard-reset-inline">
+    try {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(regs){ regs.forEach(function(reg){ reg.unregister(); }); });
+      }
+      if (window.caches) { caches.keys().then(function(keys){ keys.forEach(function(k){ caches.delete(k); }); }); }
+    } catch(e) {}
+  </script>
   <title>Spesa Pronta</title>
 </head>
 <body>
+  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.9-HARD-RESET -->
   <div class="app-frame">
     <aside class="sidebar">
       <div class="side-brand">
@@ -120,28 +135,38 @@
             <p data-i18n="registerText">Prima di vedere i prodotti devi accedere o creare un profilo. Poi Spesa Pronta ti guiderà nell’inventario iniziale con foto.</p>
           </div>
           <form id="loginForm" class="form-grid login-form">
-            <h3 class="wide">Accedi</h3>
+            <div class="wide form-section-intro login-section-intro">
+              <span class="section-chip">Accesso rapido</span>
+              <h3>Accedi al tuo account</h3>
+              <p>Entra per sincronizzare dispensa, suggerimenti AI e assistenti vocali.</p>
+            </div>
             <label class="wide"><span>Email</span><input id="loginEmail" type="email" required placeholder="esempio@email.it"></label>
             <label class="wide"><span>Password</span><input id="loginPassword" type="password" required placeholder="La tua password"></label>
             <button class="link-btn wide" id="forgotPasswordBtn" type="button">Hai dimenticato la password?</button>
-            <button class="primary-btn wide" type="submit">Accedi a Spesa Pronta</button>
+            <button class="primary-btn wide login-submit-btn" type="submit"><span class="btn-main">Accedi a Spesa Pronta</span><small class="btn-sub">Entra e continua</small></button>
             <p class="wide auth-note">Nuovo utente? Compila la registrazione qui sotto.</p>
           </form>
           <form id="registerForm" class="form-grid">
+            <div class="wide form-section-intro register-section-intro">
+              <span class="section-chip">Nuovo account</span>
+              <h3>Crea il tuo profilo smart</h3>
+              <p>Attiva cloud, consumi intelligenti e sincronizzazione della tua dispensa.</p>
+            </div>
             <label><span data-i18n="firstName">Nome</span><input id="regFirstName" required data-i18n-placeholder="firstNamePh" placeholder="Inserisci il tuo nome"></label>
             <label><span data-i18n="lastName">Cognome</span><input id="regLastName" required data-i18n-placeholder="lastNamePh" placeholder="Inserisci il tuo cognome"></label>
             <label><span data-i18n="username">Nome utente</span><input id="regUsername" required data-i18n-placeholder="usernamePh" placeholder="Scegli un nome utente"></label>
             <label><span data-i18n="email">Email</span><input id="regEmail" type="email" required placeholder="esempio@email.it"></label>
             <label><span data-i18n="password">Password</span><input id="regPassword" type="password" required data-i18n-placeholder="passwordPh" placeholder="Minimo 8 caratteri"></label>
-            <label><span data-i18n="phonePrefix">Prefisso</span><select id="regPhoneCountry" required><option value="+39">🇮🇹 +39 Italia</option><option value="+1">🇺🇸 +1 USA/Canada</option><option value="+44">🇬🇧 +44 UK</option><option value="+49">🇩🇪 +49 Germania</option><option value="+33">🇫🇷 +33 Francia</option><option value="+34">🇪🇸 +34 Spagna</option><option value="+40">🇷🇴 +40 Romania</option><option value="+41">🇨🇭 +41 Svizzera</option><option value="+355">🇦🇱 +355 Albania</option></select></label>
-            <label><span data-i18n="phoneNumber">Numero telefono</span><input id="regPhoneNumber" inputmode="tel" required placeholder="Es. 3331234567"></label>
+            <label><span>Prefisso telefono</span><select id="regPhoneCountry" required><option value="+39">🇮🇹 +39 Italia</option><option value="+1">🇺🇸 +1 USA/Canada</option><option value="+44">🇬🇧 +44 UK</option><option value="+49">🇩🇪 +49 Germania</option><option value="+33">🇫🇷 +33 Francia</option><option value="+34">🇪🇸 +34 Spagna</option><option value="+40">🇷🇴 +40 Romania</option><option value="+41">🇨🇭 +41 Svizzera</option><option value="+355">🇦🇱 +355 Albania</option></select></label>
+            <label><span>Numero di telefono</span><input id="regPhoneNumber" inputmode="tel" required placeholder="Es. 3331234567"></label>
             <label><span data-i18n="peopleCount">Numero persone in casa</span><input id="regPeople" type="number" min="1" max="20" value="2"></label>
             <label><span data-i18n="animalCount">Numero animali</span><input id="regAnimals" type="number" min="0" max="30" value="3"></label>
             <div class="wide image-captcha-wrap">
-              <div class="captcha-title"><span data-i18n="captcha">Captcha</span><b id="captchaQuestion">Tocca l’immagine richiesta</b></div>
+              <div class="captcha-title"><span data-i18n="captcha">Captcha visivo</span><button class="captcha-refresh-btn" id="refreshCaptchaBtn" type="button">↻ Cambia</button></div>
+              <b id="captchaQuestion" class="captcha-question">Tocca l’immagine richiesta</b>
               <div id="captchaBox" class="image-captcha" role="group" aria-label="Captcha con immagini">
-                <button class="captcha-choice" type="button" data-captcha="fridge"><span class="emoji">🧊</span><span>Frigo</span></button>
-                <button class="captcha-choice" type="button" data-captcha="lock"><span class="emoji">🔐</span><span>Lucchetto</span></button>
+                <button class="captcha-choice" type="button" data-captcha="fridge"><img src="assets/illustrations/fridge.svg" alt="Frigo"><span>Frigo</span></button>
+                <button class="captcha-choice" type="button" data-captcha="lock"><img src="assets/illustrations/lock.svg" alt="Lucchetto"><span>Lucchetto</span></button>
                 <button class="captcha-choice" type="button" data-captcha="milk"><img src="assets/illustrations/milk.png" alt="Latte"><span>Latte</span></button>
                 <button class="captcha-choice" type="button" data-captcha="bread"><img src="assets/illustrations/bread.png" alt="Pane"><span>Pane</span></button>
               </div>
@@ -150,23 +175,58 @@
             <input id="regEndpoint" type="hidden" value="/api">
             <label class="switch-row wide"><span data-i18n="autoSmartOrdering">Spesa intelligente automatica</span><input id="regAutoSmart" type="checkbox" checked></label>
             <div class="form-actions wide single-action">
-              <button class="primary-btn" type="submit" data-i18n="registerCreate">Registrati</button>
+              <button class="primary-btn register-submit-btn" type="submit"><span class="btn-main" data-i18n="registerCreate">Registrati</span><small class="btn-sub">Attiva la tua dispensa smart</small></button>
               <button class="outline-btn hidden" id="continueOfflineBtn" type="button" aria-hidden="true" tabindex="-1">Usa profilo locale</button>
             </div>
           </form>
-          <aside class="register-benefits futuristic-benefits">
-            <div class="alexa-holo">
-              <span class="ring r1"></span><span class="ring r2"></span>
-              <img src="assets/illustrations/alexa.png" alt="Alexa"><img class="ga-icon" src="assets/illustrations/google-assistant.png" alt="Google Assistant">
+          <aside class="register-benefits futuristic-benefits ai-zone-upgraded">
+            <div class="ai-benefits-hero">
+              <img class="hero-main" src="assets/illustrations/smart-ai-hero.svg" alt="Assistente AI Spesa Pronta">
+              <div class="ai-badge-row">
+                <div class="ai-mini-badge"><img src="assets/illustrations/alexa.png" alt="Alexa"><span>Alexa</span></div>
+                <div class="ai-mini-badge"><img src="assets/illustrations/google-assistant.png" alt="Google Assistant"><span>Google</span></div>
+                <div class="ai-mini-badge"><img src="assets/illustrations/ai-brain.svg" alt="Intelligenza artificiale"><span>AI</span></div>
+              </div>
             </div>
-            <p class="benefits-kicker">ecosistema intelligente</p>
-            <h3>La tua dispensa diventa smart</h3>
-            <ul class="benefit-orbit-list">
-              <li><b>🧠 AI che impara</b><span>Ricorda preferenze, consumi e abitudini della tua casa.</span></li>
-              <li><b>📷 Visione reale</b><span>Riconosce ciò che fotografi e ti chiede conferma se non è sicura.</span></li>
-              <li><b>🔐 Account verificato</b><span>Email + SMS prima di attivare cloud e assistenti vocali.</span></li>
-              <li><b>🗣️ Alexa + Google</b><span>La lista è la stessa su app, voce e database.</span></li>
-              <li><b>📲 Lista WhatsApp</b><span>Quando esci, ricevi una lista pulita e pronta da seguire.</span></li>
+            <p class="benefits-kicker">ecosistema domestico intelligente</p>
+            <h3>La tua dispensa diventa davvero smart</h3>
+            <p class="benefits-lead">Un sistema visivo e intelligente che controlla consumi, riconosce i prodotti e ti aiuta a comprare solo quello che serve davvero.</p>
+            <ul class="benefit-orbit-list ai-benefits-list">
+              <li>
+                <img src="assets/illustrations/ai-brain.svg" alt="Apprendimento AI">
+                <div>
+                  <b>Apprendimento AI</b>
+                  <span>Analizza abitudini, preferenze e ritmo dei consumi della tua casa.</span>
+                </div>
+              </li>
+              <li>
+                <img src="assets/illustrations/vision-camera.svg" alt="Riconoscimento prodotti">
+                <div>
+                  <b>Riconoscimento prodotti</b>
+                  <span>Legge le foto, riconosce gli articoli e ti chiede conferma solo quando serve.</span>
+                </div>
+              </li>
+              <li>
+                <img src="assets/illustrations/shield-verify.svg" alt="Sicurezza account">
+                <div>
+                  <b>Sicurezza account</b>
+                  <span>Protezione con email e telefono prima di attivare cloud e automazioni.</span>
+                </div>
+              </li>
+              <li>
+                <img src="assets/illustrations/voice-assistant.svg" alt="Comandi vocali">
+                <div>
+                  <b>Comandi vocali</b>
+                  <span>Alexa e Google Assistant lavorano sulla stessa lista sincronizzata.</span>
+                </div>
+              </li>
+              <li>
+                <img src="assets/illustrations/whatsapp-list.svg" alt="Lista pronta">
+                <div>
+                  <b>Lista pronta all’uscita</b>
+                  <span>Quando esci, trovi una lista chiara, ordinata e pronta da seguire.</span>
+                </div>
+              </li>
             </ul>
           </aside>
         </section>
@@ -249,6 +309,7 @@
             <article><strong id="smartAnimals">3</strong><span data-i18n="animalsInHome">Animali</span></article>
             <article><strong id="smartMode">ON</strong><span data-i18n="smartAnalysis">Analisi consumi</span></article>
           </div>
+          <div id="aiConsumptionPanel" class="ai-consumption-panel"></div>
           <div id="smartSuggestions" class="suggestion-grid"></div>
           <div class="info-strip success"><span>✓</span><p data-i18n="smartHow">Analizziamo i consumi abituali e il numero di persone/animali per prevedere cosa sta per finire.</p></div>
         </section>
@@ -422,6 +483,6 @@
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/app.js?v=14" defer></script>
+  <script src="assets/app.v27-9-hard-reset.js?v=279999" defer></script>
 </body>
 </html>

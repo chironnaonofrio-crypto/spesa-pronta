@@ -35,6 +35,15 @@ const APP_BASE_URL = (process.env.APP_BASE_URL || process.env.PUBLIC_URL || 'htt
 const EMAIL_FROM = process.env.EMAIL_FROM || 'Spesa Pronta <noreply@spesa-pronta.it>';
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const APP_SECRET = process.env.APP_SECRET || process.env.ENCRYPTION_SECRET || DATABASE_URL || 'spesa-pronta-dev-secret-change-me';
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || '';
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || '';
+const TWILIO_FROM_NUMBER = process.env.TWILIO_FROM_NUMBER || '';
+const TWILIO_WHATSAPP_FROM = process.env.TWILIO_WHATSAPP_FROM || '';
+const TWILIO_VERIFY_SERVICE_SID = process.env.TWILIO_VERIFY_SERVICE_SID || '';
+const SMS_ENABLED = !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_FROM_NUMBER);
+const TWILIO_VERIFY_ENABLED = !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_VERIFY_SERVICE_SID);
+const PHONE_VERIFY_READY = SMS_ENABLED || TWILIO_VERIFY_ENABLED;
+const WHATSAPP_ENABLED = !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_WHATSAPP_FROM);
 let db = { users:{}, households:{} };
 let dbMode = 'file';
 let pgPool = null;
@@ -202,6 +211,66 @@ function publicGlobalBrain(){
 }
 function normalizeEmail(email){ return String(email||'').trim().toLowerCase(); }
 function isValidEmail(email){ return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(String(email||'')); }
+
+function onlyDigits(value=''){ return String(value||'').replace(/\D+/g,''); }
+function normalizePhone(country='', number='', full=''){
+  const rawFull=String(full||'').trim();
+  if(rawFull.startsWith('+')) return '+' + onlyDigits(rawFull);
+  const cc=String(country||'+39').trim().startsWith('+') ? String(country||'+39').trim() : '+' + onlyDigits(country||'39');
+  return cc + onlyDigits(number || rawFull);
+}
+function isValidPhone(phone){ return /^\+[1-9]\d{7,14}$/.test(String(phone||'')); }
+function maskPhone(phone=''){
+  const p=String(phone||'');
+  if(!p) return '';
+  return p.slice(0,4) + '••••' + p.slice(-3);
+}
+function makeSmsCode(){ return String(Math.floor(100000 + Math.random()*900000)); }
+function twilioAuthHeader(){ return 'Basic ' + Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString('base64'); }
+async function startTwilioVerifySms(phone){
+  if(!TWILIO_VERIFY_ENABLED){ return {sent:false, simulated:true, provider:'local'}; }
+  const params = new URLSearchParams();
+  params.set('To', phone);
+  params.set('Channel', 'sms');
+  params.set('Locale', 'it');
+  const r = await fetch(`https://verify.twilio.com/v2/Services/${TWILIO_VERIFY_SERVICE_SID}/Verifications`,{
+    method:'POST', headers:{'Authorization':twilioAuthHeader(),'Content-Type':'application/x-www-form-urlencoded'}, body:params
+  });
+  const text=await r.text().catch(()=>'');
+  if(!r.ok) console.error('[twilio-verify:start:error]', r.status, text.slice(0,500));
+  return {sent:r.ok, status:r.status, provider:'twilio_verify'};
+}
+async function checkTwilioVerifySms(phone, code){
+  if(!TWILIO_VERIFY_ENABLED){ return {ok:false, provider:'local'}; }
+  const params = new URLSearchParams();
+  params.set('To', phone);
+  params.set('Code', code);
+  const r = await fetch(`https://verify.twilio.com/v2/Services/${TWILIO_VERIFY_SERVICE_SID}/VerificationCheck`,{
+    method:'POST', headers:{'Authorization':twilioAuthHeader(),'Content-Type':'application/x-www-form-urlencoded'}, body:params
+  });
+  const json = await r.json().catch(async()=>({raw: await r.text().catch(()=> '')}));
+  if(!r.ok) console.error('[twilio-verify:check:error]', r.status, JSON.stringify(json).slice(0,500));
+  return {ok:r.ok && json.status === 'approved', status:r.status, provider:'twilio_verify', twilioStatus:json.status};
+}
+async function sendTwilioMessage({to, body, channel='sms'}={}){
+  const from = channel === 'whatsapp' ? TWILIO_WHATSAPP_FROM : TWILIO_FROM_NUMBER;
+  const enabled = channel === 'whatsapp' ? WHATSAPP_ENABLED : SMS_ENABLED;
+  if(!enabled){ console.log(`[${channel}:simulato]`, to, body.slice(0,140)); return {sent:false, simulated:true}; }
+  const params = new URLSearchParams();
+  params.set('From', channel === 'whatsapp' ? `whatsapp:${from.replace(/^whatsapp:/,'')}` : from);
+  params.set('To', channel === 'whatsapp' ? `whatsapp:${to.replace(/^whatsapp:/,'')}` : to);
+  params.set('Body', body);
+  const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`,{
+    method:'POST', headers:{'Authorization':twilioAuthHeader(),'Content-Type':'application/x-www-form-urlencoded'}, body:params
+  });
+  const text=await r.text().catch(()=>'');
+  if(!r.ok) console.error(`[${channel}:error]`, r.status, text.slice(0,300));
+  return {sent:r.ok, status:r.status, provider:'twilio'};
+}
+function sendPhoneVerificationSms(user, code){
+  if(TWILIO_VERIFY_ENABLED) return startTwilioVerifySms(user.phone);
+  return sendTwilioMessage({to:user.phone, channel:'sms', body:`Spesa Pronta: il tuo codice di verifica è ${code}. Scade tra 10 minuti. Non condividerlo con nessuno.`});
+}
 function escapeHtml(value){ return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch])); }
 function hashPassword(pwd){
   const salt=crypto.randomBytes(16).toString('hex');
@@ -218,7 +287,7 @@ function verifyPassword(pwd, stored=''){
   const legacy=crypto.createHash('sha256').update(String(pwd)).digest('hex');
   return legacy === stored;
 }
-function safeUser(u){ return { id:u.id, username:u.username, email:u.email, firstName:u.firstName || '', lastName:u.lastName || '', emailVerified: u.emailVerified !== false && !u.emailVerifyTokenHash }; }
+function safeUser(u){ return { id:u.id, username:u.username, email:u.email, firstName:u.firstName || '', lastName:u.lastName || '', emailVerified: u.emailVerified !== false && !u.emailVerifyTokenHash, phoneVerified: u.phoneVerified === true, phoneMasked: maskPhone(u.phone || '') }; }
 async function sendEmail({to,subject,text,html}){
   if(!RESEND_API_KEY){
     console.log('[mail:simulata]', subject, 'to', to, text?.slice(0,140)||'');
@@ -462,7 +531,14 @@ function serveStatic(req,res,url){
   if(!fs.existsSync(file)) file = path.join(STATIC_DIR, 'index.html');
   try{
     const data = fs.readFileSync(file);
-    res.writeHead(200, { 'Content-Type': contentType(file), 'Content-Length': data.length, 'Cache-Control': file.endsWith('index.html') ? 'no-cache' : 'public, max-age=86400' });
+    const isHardNoCache = /(?:index\.html|clear-cache\.html|service-worker\.js|app\.|styles\.|\.js$|\.css$)/.test(file);
+    res.writeHead(200, {
+      'Content-Type': contentType(file),
+      'Content-Length': data.length,
+      'Cache-Control': isHardNoCache ? 'no-store, no-cache, must-revalidate, max-age=0' : 'public, max-age=86400, immutable',
+      'Pragma': isHardNoCache ? 'no-cache' : undefined,
+      'Expires': isHardNoCache ? '0' : undefined
+    });
     if(req.method === 'HEAD') return res.end();
     res.end(data);
     return true;
@@ -499,21 +575,80 @@ function getHousehold(url, req){
   return { household, householdId };
 }
 function itemName(item, lang='it'){ return item.names?.[lang] || item.names?.it || item.name || item.id; }
-function smartThreshold(item, settings={}){
-  if(settings.autoSmart === false) return item.baseThreshold || 1;
-  const people = Number(settings.people || 1);
-  const animals = Number(settings.animals || 0);
-  let th = item.baseThreshold || 1;
-  if(item.perPersonMin) th = Math.max(th, Math.ceil(item.perPersonMin * people));
-  if(item.perAnimalMin) th = Math.max(th, Math.ceil(item.perAnimalMin * animals));
-  if(item.usage >= 6) th = Math.max(th, (item.baseThreshold || 1) + 2);
-  if(item.kind === 'water') th = Math.max(th, people * 2);
-  if(item.kind === 'petfood') th = Math.max(th, animals * 4);
-  return th;
+function clamp(value,min,max,fallback){ const n=Number(value); return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback; }
+function learnedDailyConsumption(item, memory={}){
+  const now=Date.now(), since=now-1000*60*60*24*45;
+  const ev=(memory.events||[]).filter(e=>e.itemId===item.id && e.type==='consume' && e.at>=since);
+  const total=ev.reduce((s,e)=>s+Math.abs(Number(e.delta)||0),0);
+  if(total<=0) return 0;
+  const first=Math.min(...ev.map(e=>e.at));
+  return total/Math.max(1,(now-first)/86400000);
 }
-function isBuy(item, settings){ return Number(item.qty||0) <= smartThreshold(item, settings); }
+function baseDailyConsumption(item, settings={}){
+  const people=clamp(settings.people,1,20,1), animals=clamp(settings.animals,0,30,0);
+  const label=normalizeText(`${item.id||''} ${item.category||''} ${itemName(item,settings.lang||'it')||''}`);
+  if(item.kind==='water' || label.includes('acqua')) return Math.max(.4, people*1.5);
+  if(item.kind==='petfood' || label.includes('crocchette')) return Math.max(.08, animals*.28);
+  if(label.includes('sacchetti')) return Math.max(.05, animals*2);
+  if(item.category==='pets') return Math.max(.03, animals*.15);
+  if(item.category==='drinks') return Math.max(.15, people*.55);
+  if(item.category==='fruit' || item.category==='veg') return Math.max(.12, people*.28);
+  if(item.category==='food') return Math.max(.08, people*.18);
+  if(item.category==='house') return Math.max(.03, people*.06);
+  if(item.category==='aquarium') return .035;
+  if(item.category==='pharmacy') return .018;
+  return Math.max(.03, people*.08);
+}
+function aiVelocity(item, settings={}, memory={}){
+  const learned=learnedDailyConsumption(item,memory), base=baseDailyConsumption(item,settings);
+  return learned>0 ? Math.max(.01, learned*.72 + base*.28) : Math.max(.01, base*.55);
+}
+function targetDaysFor(item){
+  if(item.kind==='water') return 7;
+  if(item.kind==='petfood' || item.category==='pets') return 18;
+  if(item.category==='fruit' || item.category==='veg') return 4;
+  if(item.category==='food') return 10;
+  if(item.category==='house') return 24;
+  if(item.category==='aquarium') return 30;
+  if(item.category==='pharmacy') return 35;
+  return 12;
+}
+function alertDaysFor(item){
+  if(item.category==='fruit' || item.category==='veg') return 2;
+  if(item.kind==='water') return 2;
+  if(item.kind==='petfood' || item.category==='pets') return 7;
+  return Math.max(2, Math.round(targetDaysFor(item)*.35));
+}
+function smartThreshold(item, settings={}, memory={}){
+  if(settings.autoSmart === false) return Math.max(1, Number(item.baseThreshold)||1);
+  const people=clamp(settings.people,1,20,1), animals=clamp(settings.animals,0,30,0);
+  let th=Math.max(1, Number(item.baseThreshold)||1);
+  if(item.perPersonMin) th=Math.max(th, Math.ceil(item.perPersonMin*people));
+  if(item.perAnimalMin) th=Math.max(th, Math.ceil(item.perAnimalMin*animals));
+  if(Number(item.usage||0)>=6) th=Math.max(th, (Number(item.baseThreshold)||1)+2);
+  if(item.kind==='water') th=Math.max(th, people*2);
+  if(item.kind==='petfood') th=Math.max(th, animals*4);
+  th=Math.max(th, Math.ceil(aiVelocity(item,settings,memory)*alertDaysFor(item)));
+  return Math.ceil(th);
+}
+function recommendedQty(item, settings={}, memory={}){
+  const people=clamp(settings.people,1,20,1), animals=clamp(settings.animals,0,30,0);
+  let r=Math.max(Number(item.recommendedBuy||0), Number(item.maxQty||0), smartThreshold(item,settings,memory));
+  if(item.kind==='water') r=Math.max(r, people*7);
+  if(item.kind==='petfood') r=Math.max(r, animals*6);
+  r=Math.max(r, Math.ceil(aiVelocity(item,settings,memory)*targetDaysFor(item)));
+  return Math.max(1, Math.ceil(r));
+}
+function daysLeft(item, settings={}, memory={}){ const v=aiVelocity(item,settings,memory); return v>0 ? Math.max(0, Number(item.qty||0)/v) : null; }
+function consumptionReason(item, settings={}, memory={}){
+  const th=smartThreshold(item,settings,memory), rec=recommendedQty(item,settings,memory), days=daysLeft(item,settings,memory);
+  const status=Number(item.qty||0)<=0?'Finito':Number(item.qty||0)<=th?'Da comprare':'Scorta ok';
+  return `${status}: ${days!==null?`circa ${days.toFixed(days<10?1:0)} giorni rimasti`:'giorni non stimabili'}, soglia ${th}, consiglio ${rec}.`;
+}
+function isBuy(item, settings, memory={}){ return Number(item.qty||0) <= smartThreshold(item, settings, memory); }
 function shoppingList(household){
-  return (household.items||[]).filter(i=>isBuy(i, household.settings||{})).map(i=>({ id:i.id, name:itemName(i, household.settings?.lang||'it'), qty:i.qty, unit:i.unit, image:i.image }));
+  const settings=household.settings||{}, memory=household.aiMemory||{};
+  return (household.items||[]).filter(i=>isBuy(i, settings, memory)).map(i=>({ id:i.id, name:itemName(i, settings?.lang||'it'), qty:i.qty, unit:i.unit, image:i.image, threshold:smartThreshold(i,settings,memory), recommended:recommendedQty(i,settings,memory), daysLeft:daysLeft(i,settings,memory), reason:consumptionReason(i,settings,memory) }));
 }
 function findItem(household, product){
   const p = String(product||'').toLowerCase().trim();
@@ -544,6 +679,35 @@ function textParam(params, ...keys){
   }
   return '';
 }
+
+function buildSmartShoppingMessage(household){
+  const lang=household.settings?.lang || 'it';
+  const list=shoppingList(household);
+  const people=Number(household.settings?.people||1);
+  const animals=Number(household.settings?.animals||0);
+  const header='🛍️ Spesa Pronta - lista intelligente';
+  const intro=`Casa: ${people} persone${animals?`, ${animals} animali`:''}. Lista generata in base a scorte, consumi e soglie intelligenti.`;
+  if(!list.length) return `${header}
+
+${intro}
+
+✅ Non risultano articoli urgenti da comprare. Dai comunque un'occhiata alle offerte e ai freschi.`;
+  const lines=list.slice(0,40).map((i,n)=>`${n+1}. ${itemName(i,lang)} — consigliato ${i.recommended || i.qty || 1} ${i.unit || 'pz'} (${i.reason || 'scorta bassa'})`);
+  return `${header}
+
+${intro}
+
+${lines.join('\n')}
+
+✨ Consiglio AI: compra prima gli articoli essenziali e controlla frigo/dispensa prima di uscire.`;
+}
+async function sendShoppingWhatsapp(user, household){
+  const text=buildSmartShoppingMessage(household);
+  if(!user?.phone || user.phoneVerified !== true) return {sent:false, reason:'phone_not_verified', text};
+  const result=await sendTwilioMessage({to:user.phone, channel:'whatsapp', body:text});
+  return {...result, text};
+}
+
 function parseVoiceFromNaturalText(text=''){
   const raw=String(text||'').trim();
   const q=normalizeText(raw);
@@ -676,7 +840,7 @@ function outputText(resp){
 async function llmChatReply({message,state,settings,memory,globalMemory={}}){
   const key=process.env.OPENAI_API_KEY;
   if(!key) return localAiReply({message,state,settings,memory});
-  const compactState=(state||[]).map(i=>({id:i.id,name:itemName(i,settings?.lang||'it'),qty:i.qty,unit:i.unit,category:i.category,threshold:smartThreshold(i,settings)}));
+  const compactState=(state||[]).map(i=>({id:i.id,name:itemName(i,settings?.lang||'it'),qty:i.qty,unit:i.unit,category:i.category,threshold:smartThreshold(i,settings,memory),recommended:recommendedQty(i,settings,memory),daysLeft:daysLeft(i,settings,memory)}));
   const payload={
     model:OPENAI_MODEL,
     input:[
@@ -728,6 +892,10 @@ const server = http.createServer(async (req,res)=>{
         databaseConnected: dbMode !== 'file',
         memoryReady: dbMode !== 'file',
         globalLearning: 'anonymous_aggregate',
+        smsReady: PHONE_VERIFY_READY,
+        twilioVerifyReady: TWILIO_VERIFY_ENABLED,
+        smsFromNumberReady: SMS_ENABLED,
+        whatsappReady: WHATSAPP_ENABLED,
         note: aiConnected() ? 'AI Chat + Vision attive dal backend' : 'Manca OPENAI_API_KEY: usa motore locale e inserimento guidato foto'
       });
     }
@@ -735,17 +903,27 @@ const server = http.createServer(async (req,res)=>{
     if(req.method === 'POST' && pathName === '/api/auth/register'){
       const { firstName='', lastName='', username, password, people=1, animals=0, autoSmart=true, items=[], aiMemory=null } = body;
       const email = normalizeEmail(body.email);
-      if(!username || !email || !password) return send(res, 400, { error:'missing_fields' });
+      const phone = normalizePhone(body.phoneCountry, body.phoneNumber, body.phone);
+      if(!firstName || !lastName || !username || !email || !password || !phone) return send(res, 400, { error:'missing_fields' });
+      if(String(firstName).trim().length < 2 || String(lastName).trim().length < 2) return send(res, 400, { error:'invalid_name' });
+      if(!/^[a-zA-Z0-9_.-]{3,32}$/.test(String(username||''))) return send(res, 400, { error:'invalid_username' });
       if(!isValidEmail(email)) return send(res, 400, { error:'invalid_email' });
+      if(!isValidPhone(phone)) return send(res, 400, { error:'invalid_phone' });
       if(String(password).length < 8) return send(res, 400, { error:'weak_password' });
-      const found = Object.values(db.users).find(u=>normalizeEmail(u.email)===email);
-      if(found) return send(res, 409, { error:'email_exists' });
-      const userId=id('user'), householdId=id('home'), tkn=token(), verifyRaw=token();
-      db.users[userId]={ id:userId, firstName, lastName, username, email, passwordHash:hashPassword(password), householdId, emailVerified:false, emailVerifyTokenHash:tokenHash(verifyRaw), emailVerifyTokenExpiresAt:Date.now()+24*60*60*1000, emailVerifySentAt:Date.now() };
-      db.households[householdId]={ id:householdId, ownerUserId:userId, token:tkn, settings:{ people, animals, autoSmart, alexaConnected:false, googleAssistantConnected:false, lang:'it', inventorySetupDone:false, inventoryStatus:'required', inventoryUpdatedAt:null }, items, aiMemory: aiMemory || {messages:[],facts:[],events:[],scanHistory:[],summary:'',preferences:{},updatedAt:Date.now()}, updatedAt:Date.now() };
+      if(Number(people)<1 || Number(people)>20 || Number(animals)<0 || Number(animals)>30) return send(res, 400, { error:'invalid_household_numbers' });
+      const found = Object.values(db.users).find(u=>normalizeEmail(u.email)===email || String(u.phone||'')===phone);
+      if(found && normalizeEmail(found.email)===email) return send(res, 409, { error:'email_exists' });
+      if(found && String(found.phone||'')===phone) return send(res, 409, { error:'phone_exists' });
+      const userId=id('user'), householdId=id('home'), tkn=token(), verifyRaw=token(), smsCode=makeSmsCode();
+      const phoneVerifyFields = TWILIO_VERIFY_ENABLED
+        ? { phoneVerified:false, phoneVerifyProvider:'twilio_verify', phoneVerifySentAt:Date.now() }
+        : { phoneVerified:false, phoneVerifyProvider:'local_sms', phoneVerifyCodeHash:tokenHash(smsCode), phoneVerifyCodeExpiresAt:Date.now()+10*60*1000, phoneVerifySentAt:Date.now() };
+      db.users[userId]={ id:userId, firstName, lastName, username, email, phone, passwordHash:hashPassword(password), householdId, emailVerified:false, emailVerifyTokenHash:tokenHash(verifyRaw), emailVerifyTokenExpiresAt:Date.now()+24*60*60*1000, emailVerifySentAt:Date.now(), ...phoneVerifyFields };
+      db.households[householdId]={ id:householdId, ownerUserId:userId, token:tkn, settings:{ people, animals, autoSmart, alexaConnected:false, googleAssistantConnected:false, lang:'it', inventorySetupDone:false, inventoryStatus:'required', inventoryUpdatedAt:null, phoneMasked:maskPhone(phone) }, items, aiMemory: aiMemory || {messages:[],facts:[],events:[],scanHistory:[],summary:'',preferences:{},updatedAt:Date.now()}, updatedAt:Date.now() };
       await saveDb();
       sendVerificationEmail(db.users[userId], verifyRaw);
-      return send(res, 200, { ok:true, requiresEmailVerification:true, email, message:'verification_email_sent' });
+      sendPhoneVerificationSms(db.users[userId], smsCode);
+      return send(res, 200, { ok:true, requiresEmailVerification:true, requiresPhoneVerification:true, email, phoneMasked:maskPhone(phone), smsReady:PHONE_VERIFY_READY, twilioVerifyReady:TWILIO_VERIFY_ENABLED, message:'verification_email_and_sms_sent' });
     }
 
     if(req.method === 'POST' && pathName === '/api/auth/login'){
@@ -753,6 +931,7 @@ const server = http.createServer(async (req,res)=>{
       const user = Object.values(db.users).find(u=>String(u.email||'').toLowerCase()===String(email||'').toLowerCase());
       if(!user || !verifyPassword(password, user.passwordHash)) return send(res, 401, { error:'invalid_credentials' });
       if(user.emailVerified === false || user.emailVerifyTokenHash) return send(res, 403, { error:'email_not_verified', email:user.email });
+      if(user.phone && user.phoneVerified !== true) return send(res, 403, { error:'phone_not_verified', email:user.email, phoneMasked:maskPhone(user.phone) });
       if(!String(user.passwordHash||'').startsWith('pbkdf2$')){ user.passwordHash=hashPassword(password); await saveDb(); }
       const h = db.households[user.householdId];
       return send(res, 200, { ok:true, user:safeUser(user), householdId:h.id, token:h.token, settings:h.settings, items:h.items, aiMemory:h.aiMemory||null });
@@ -769,9 +948,12 @@ const server = http.createServer(async (req,res)=>{
       user.emailVerifiedAt=Date.now();
       delete user.emailVerifyTokenHash; delete user.emailVerifyTokenExpiresAt; delete user.emailVerifySentAt;
       if(!String(user.passwordHash||'').startsWith('pbkdf2$')) user.passwordHash=hashPassword(user.passwordHash || token());
-      await saveDb();
-      sendWelcomeEmail(user);
       const h=db.households[user.householdId];
+      await saveDb();
+      if(user.phone && user.phoneVerified !== true){
+        return send(res, 200, { ok:true, emailVerified:true, requiresPhoneVerification:true, email:user.email, phoneMasked:maskPhone(user.phone), smsReady:SMS_ENABLED });
+      }
+      sendWelcomeEmail(user);
       return send(res, 200, { ok:true, user:safeUser(user), householdId:h.id, token:h.token, settings:h.settings, items:h.items, aiMemory:h.aiMemory||null, welcomeEmail:true });
     }
 
@@ -789,6 +971,51 @@ const server = http.createServer(async (req,res)=>{
       return send(res, 200, { ok:true, message:'if_email_exists_verification_sent' });
     }
 
+
+
+    if(req.method === 'POST' && pathName === '/api/auth/verify-phone'){
+      const email=normalizeEmail(body.email);
+      const code=String(body.code||'').replace(/\D+/g,'').trim();
+      if(!email || !code) return send(res, 400, { error:'missing_fields' });
+      const user=Object.values(db.users||{}).find(u=>normalizeEmail(u.email)===email);
+      if(!user) return send(res, 400, { error:'invalid_code' });
+      if(TWILIO_VERIFY_ENABLED || user.phoneVerifyProvider === 'twilio_verify'){
+        const checked = await checkTwilioVerifySms(user.phone, code);
+        if(!checked.ok) return send(res, 400, { error:'invalid_code', provider:'twilio_verify', twilioStatus:checked.twilioStatus||null });
+      } else {
+        if(!user.phoneVerifyCodeHash || Number(user.phoneVerifyCodeExpiresAt||0)<Date.now()) return send(res, 400, { error:'invalid_or_expired_code' });
+        if(user.phoneVerifyCodeHash !== tokenHash(code)) return send(res, 400, { error:'invalid_code' });
+      }
+      user.phoneVerified=true;
+      user.phoneVerifiedAt=Date.now();
+      delete user.phoneVerifyCodeHash; delete user.phoneVerifyCodeExpiresAt; delete user.phoneVerifySentAt; delete user.phoneVerifyProvider;
+      const h=db.households[user.householdId];
+      if(h?.settings) h.settings.phoneMasked=maskPhone(user.phone||'');
+      await saveDb();
+      if(user.emailVerified === false || user.emailVerifyTokenHash) return send(res, 200, { ok:true, phoneVerified:true, requiresEmailVerification:true, email:user.email });
+      sendWelcomeEmail(user);
+      return send(res, 200, { ok:true, user:safeUser(user), householdId:h.id, token:h.token, settings:h.settings, items:h.items, aiMemory:h.aiMemory||null, welcomeEmail:true });
+    }
+
+    if(req.method === 'POST' && pathName === '/api/auth/resend-phone'){
+      const email=normalizeEmail(body.email);
+      const user=Object.values(db.users||{}).find(u=>normalizeEmail(u.email)===email);
+      if(user && user.phone && user.phoneVerified !== true){
+        const code=makeSmsCode();
+        if(TWILIO_VERIFY_ENABLED){
+          user.phoneVerifyProvider='twilio_verify';
+          delete user.phoneVerifyCodeHash; delete user.phoneVerifyCodeExpiresAt;
+        } else {
+          user.phoneVerifyProvider='local_sms';
+          user.phoneVerifyCodeHash=tokenHash(code);
+          user.phoneVerifyCodeExpiresAt=Date.now()+10*60*1000;
+        }
+        user.phoneVerifySentAt=Date.now();
+        await saveDb();
+        sendPhoneVerificationSms(user, code);
+      }
+      return send(res, 200, { ok:true, message:'if_phone_exists_sms_sent', smsReady:PHONE_VERIFY_READY, twilioVerifyReady:TWILIO_VERIFY_ENABLED });
+    }
 
     if(req.method === 'POST' && pathName === '/api/auth/forgot'){
       const email=String(body.email||'').trim().toLowerCase();
@@ -856,6 +1083,22 @@ const server = http.createServer(async (req,res)=>{
     }
 
 
+
+    if(req.method === 'POST' && pathName === '/api/assistant/whatsapp-list'){
+      const householdId=String(body.householdId||'').trim();
+      const bearer=(req.headers.authorization||'').replace(/^Bearer\s+/,'').trim();
+      const h=db.households[householdId];
+      if(!h) return send(res, 404, { error:'household_not_found' });
+      if(h.token !== bearer) return send(res, 401, { error:'unauthorized' });
+      const user=db.users[h.ownerUserId];
+      const result=await sendShoppingWhatsapp(user,h);
+      ensureHouseholdMemory(h);
+      rememberMessage(h.aiMemory,'assistant','Lista spesa WhatsApp generata.',{channel:'whatsapp'});
+      h.updatedAt=Date.now();
+      await saveDb();
+      return send(res, 200, { ok:true, sent:!!result.sent, simulated:!!result.simulated, reason:result.reason||null, whatsappReady:WHATSAPP_ENABLED, phoneVerified:user?.phoneVerified===true, phoneMasked:maskPhone(user?.phone||''), text:result.text });
+    }
+
     if(req.method === 'POST' && pathName === '/api/ai/chat'){
       const { message='', state=[], settings={}, memory={} } = body;
       let h=null;
@@ -914,7 +1157,7 @@ const server = http.createServer(async (req,res)=>{
       if(!h) return send(res, 404, { error:'household_not_found' });
       const bearer = (req.headers.authorization||'').replace(/^Bearer\s+/, '');
       if(h.token !== bearer) return send(res, 401, { error:'unauthorized' });
-      const analysis=(h.items||[]).map(i=>({id:i.id,name:itemName(i,h.settings?.lang||'it'),qty:i.qty,unit:i.unit,threshold:smartThreshold(i,h.settings),toBuy:isBuy(i,h.settings)}));
+      const analysis=(h.items||[]).map(i=>({id:i.id,name:itemName(i,h.settings?.lang||'it'),qty:i.qty,unit:i.unit,threshold:smartThreshold(i,h.settings,h.aiMemory||{}),recommended:recommendedQty(i,h.settings,h.aiMemory||{}),daysLeft:daysLeft(i,h.settings,h.aiMemory||{}),reason:consumptionReason(i,h.settings,h.aiMemory||{}),toBuy:isBuy(i,h.settings,h.aiMemory||{})}));
       return send(res, 200, {ok:true, analysis, memory:h.aiMemory||{}});
     }
 
