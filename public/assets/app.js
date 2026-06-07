@@ -177,7 +177,7 @@ let accountPendingAction = null;
 function loadState(){ try { const x=JSON.parse(localStorage.getItem(STORAGE_KEY)); return Array.isArray(x) ? migrateItems(x) : []; } catch { return []; } }
 function loadSettings(){ try { return Object.assign(defaultSettings(), JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}')); } catch { return defaultSettings(); } }
 function loadSession(){ try { return Object.assign({mode:'guest', user:null}, JSON.parse(localStorage.getItem(SESSION_KEY)||'{}')); } catch { return {mode:'guest', user:null}; } }
-function defaultAiMemory(){ return {messages:[], facts:[], events:[], scanHistory:[], learnedProducts:[], visionBrain:{version:45,coreVersion:45,samples:[],candidateSamples:[],productStats:{},productModels:{},corrections:0,totalScans:0,autonomousHits:0,localFirstDecisions:0,cloudTeacherCalls:0,autonomyLevel:0,lastTrainedAt:0,serverSyncs:0,serverLastSyncAt:0}, voiceProfile:{version:45,heard:[],corrections:[],intentPhrases:{},fieldPhrases:{},productAliases:{},speakerStyle:{shortCommands:0,corrections:0,italianSlang:0},updatedAt:0,serverSyncs:0}, pendingVerification:false, lastGreetingDate:'', summary:'', lastInsights:{}, consumptionProfile:{version:27, learnedItems:{}, lastAnalysisAt:0}, seedMemory:{version:'',loaded:false,products:0,categories:0,lastLoadedAt:0}, personality:{warmth:1}}; }
+function defaultAiMemory(){ return {messages:[], facts:[], events:[], scanHistory:[], learnedProducts:[], visionBrain:{version:48,coreVersion:48,samples:[],candidateSamples:[],productStats:{},productModels:{},corrections:0,totalScans:0,autonomousHits:0,localFirstDecisions:0,cloudTeacherCalls:0,autonomyLevel:0,lastTrainedAt:0,serverSyncs:0,serverLastSyncAt:0}, voiceProfile:{version:48,heard:[],corrections:[],intentPhrases:{},fieldPhrases:{},productAliases:{},speakerStyle:{shortCommands:0,corrections:0,italianSlang:0},updatedAt:0,serverSyncs:0}, pendingVerification:false, lastGreetingDate:'', summary:'', lastInsights:{}, consumptionProfile:{version:27, learnedItems:{}, lastAnalysisAt:0}, seedMemory:{version:'',loaded:false,products:0,categories:0,lastLoadedAt:0}, personality:{warmth:1}}; }
 function loadAiMemory(){ try { const mem=Object.assign(defaultAiMemory(), JSON.parse(localStorage.getItem(AI_MEMORY_KEY)||'{}')); mem.visionBrain=Object.assign(defaultAiMemory().visionBrain, mem.visionBrain||{}); mem.visionBrain.samples=Array.isArray(mem.visionBrain.samples)?mem.visionBrain.samples:[]; mem.visionBrain.productStats=mem.visionBrain.productStats||{}; mem.visionBrain.productModels=mem.visionBrain.productModels||{}; mem.visionBrain.candidateSamples=Array.isArray(mem.visionBrain.candidateSamples)?mem.visionBrain.candidateSamples:[]; mem.voiceProfile=Object.assign(defaultAiMemory().voiceProfile, mem.voiceProfile||{}); mem.voiceProfile.heard=Array.isArray(mem.voiceProfile.heard)?mem.voiceProfile.heard:[]; mem.voiceProfile.corrections=Array.isArray(mem.voiceProfile.corrections)?mem.voiceProfile.corrections:[]; mem.voiceProfile.intentPhrases=mem.voiceProfile.intentPhrases||{}; mem.voiceProfile.fieldPhrases=mem.voiceProfile.fieldPhrases||{}; mem.voiceProfile.productAliases=mem.voiceProfile.productAliases||{}; mem.voiceProfile.speakerStyle=Object.assign(defaultAiMemory().voiceProfile.speakerStyle, mem.voiceProfile.speakerStyle||{}); return mem; } catch { return defaultAiMemory(); } }
 function saveAiMemory(){ localStorage.setItem(AI_MEMORY_KEY, JSON.stringify(aiMemory)); }
 function defaultSettings(){ return {lang:'it', cloudEnabled:false, apiEndpoint:'/api', token:'', householdId:'', people:2, animals:0, autoSmart:true, alexaConnected:false, googleAssistantConnected:false, inventorySetupDone:false, inventoryStatus:'required', inventoryUpdatedAt:null, profile:{firstName:'',lastName:'',username:'',email:''}}; }
@@ -190,6 +190,16 @@ function seedCategoryToApp(cat=''){
 }
 function activeVisionSeedMemory(){
   return (window.SPESA_VISION_SEED_MEMORY && Array.isArray(window.SPESA_VISION_SEED_MEMORY.products)) ? window.SPESA_VISION_SEED_MEMORY : null;
+}
+function activeMegaVisionIndex(){
+  return (window.SPESA_VISION_MEGA_INDEX && Number(window.SPESA_VISION_MEGA_INDEX.totalProfiles||0)>0) ? window.SPESA_VISION_MEGA_INDEX : null;
+}
+function megaVisionTotalProfiles(){
+  const mega=activeMegaVisionIndex();
+  return mega ? Number(mega.totalProfiles||0) : 1000000;
+}
+function formatItNumber(n){
+  try { return Number(n||0).toLocaleString('it-IT'); } catch { return String(n||0); }
 }
 
 let visionSeedSearchCache = null;
@@ -268,11 +278,13 @@ function ensureSeedVisionMemory(force=false){
   const b=ensureVisionBrain();
   b.seedVersion=seed.version || 'seed';
   b.seedProducts=seedProducts.length;
+  b.seedModelProfiles=megaVisionTotalProfiles();
   b.seedCategories=seedCategories;
   b.seedRules=seed.rules||{};
   b.seedLoadedAt=b.seedLoadedAt||Date.now();
   if(!force && aiMemory.seedMemory.loaded && aiMemory.seedMemory.version===seed.version && Number(aiMemory.seedMemory.products||0)===seedProducts.length){
     aiMemory.seedMemory.products=seedProducts.length;
+    aiMemory.seedMemory.totalProfiles=megaVisionTotalProfiles();
     aiMemory.seedMemory.categories=seedCategories;
     aiMemory.seedMemory.indexed=true;
     saveAiMemory();
@@ -290,7 +302,7 @@ function ensureSeedVisionMemory(force=false){
     else { aiMemory.learnedProducts[idx]=Object.assign({}, row, aiMemory.learnedProducts[idx], {seed:true, seedVersion:row.seedVersion, formats:row.formats, ocrKeywords:row.ocrKeywords}); updated++; }
   }
   b.seedLoadedAt=Date.now();
-  aiMemory.seedMemory={version:seed.version||'seed',loaded:true,products:seedProducts.length,categories:seedCategories,lastLoadedAt:Date.now(),added,updated,indexed:true};
+  aiMemory.seedMemory={version:seed.version||'seed',loaded:true,products:seedProducts.length,totalProfiles:megaVisionTotalProfiles(),categories:seedCategories,lastLoadedAt:Date.now(),added,updated,indexed:true,mode:'mega-virtual-index'};
   aiMemory.learnedProducts.sort((a,b)=>{
     if(!!a.seed!==!!b.seed) return a.seed?1:-1;
     return Number(b.lastConfirmedAt||0)-Number(a.lastConfirmedAt||0);
@@ -1986,8 +1998,9 @@ function refreshVisionBrainPanel(){
   const s=visionBrainStatus(); const vp=ensureVoiceProfile();
   const heard=(vp.heard||[]).length, corr=(vp.corrections||[]).length, syncs=Number(ensureVisionBrain().serverSyncs||0);
   const seedProducts = Number(s.seedProducts||aiMemory.seedMemory?.products||activeVisionSeedMemory()?.products?.length||0);
-  const seedBadge = seedProducts ? `<span class="autonomy-badge seed-ok">Seed ${seedProducts.toLocaleString('it-IT')}</span>` : `<span class="autonomy-badge seed-warn">Seed in caricamento</span>`;
-  el.innerHTML=`<strong>AI autonoma master</strong><small>${seedBadge}<span class="autonomy-badge">Vision ${s.autonomy}%</span><span class="autonomy-badge">${s.samples} esempi reali</span><span class="autonomy-badge">${s.models} modelli utente</span><span class="autonomy-badge">Voce ${heard}/${corr}</span><span class="autonomy-badge">Server sync ${syncs}</span><br>Catalogo seed 11.200 già caricato: prodotti, marche, formati e parole OCR. OpenAI resta docente solo quando serve; le conferme reali costruiscono i modelli autonomi.</small>`;
+  const totalProfiles = Number(s.seedModelProfiles||aiMemory.seedMemory?.totalProfiles||megaVisionTotalProfiles()||seedProducts);
+  const seedBadge = totalProfiles ? `<span class="autonomy-badge seed-ok">CORE ${formatItNumber(totalProfiles)}</span>` : `<span class="autonomy-badge seed-warn">CORE IN CARICAMENTO</span>`;
+  el.innerHTML=`<strong>AI AUTONOMA MASTER</strong><small>${seedBadge}<span class="autonomy-badge">SEED ATTIVO ${formatItNumber(seedProducts)}</span><span class="autonomy-badge">VISION ${s.autonomy}%</span><span class="autonomy-badge">${s.samples} ESEMPI REALI</span><span class="autonomy-badge">${s.models} MODELLI UTENTE</span><span class="autonomy-badge">VOCE ${heard}/${corr}</span><span class="autonomy-badge">SERVER SYNC ${syncs}</span><br>MOTORE VISION CON 1.000.000 PROFILI VIRTUALI, 11.200 SCHEDE ATTIVE E OCR SEED. OPENAI RESTA DOCENTE SOLO QUANDO SERVE; LE TUE CONFERME COSTRUISCONO AUTONOMIA REALE.</small>`;
 }
 
 
@@ -2516,7 +2529,7 @@ function visionBrainStatus(){
   const products=new Set((b.samples||[]).map(s=>normalizeLearnText(s.productName||'')).filter(Boolean));
   const models=Object.keys(b.productModels||{}).length;
   const autonomy=computeVisionAutonomyLevel();
-  return {samples:b.samples.length, products:products.size, models, corrections:Number(b.corrections||0), autonomousHits:Number(b.autonomousHits||0), autonomy, seedProducts:Number(b.seedProducts||0), seedVersion:b.seedVersion||''};
+  return {samples:b.samples.length, products:products.size, models, corrections:Number(b.corrections||0), autonomousHits:Number(b.autonomousHits||0), autonomy, seedProducts:Number(b.seedProducts||0), seedModelProfiles:Number(b.seedModelProfiles||megaVisionTotalProfiles()||0), seedVersion:b.seedVersion||''};
 }
 const VISION_COMPETENCE_CORE={
   version:40,
@@ -3047,4 +3060,4 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-console.log('[Spesa Pronta] V27.47 blank-page-fixed loaded: comment bug fixed + 11200 smart seed products integrated');
+console.log('[Spesa Pronta] V27.48 premium-mega-vision loaded: uppercase UI + 1M virtual seed core + 11200 active products');

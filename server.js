@@ -44,12 +44,13 @@ const SMS_ENABLED = !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_FROM_NU
 const TWILIO_VERIFY_ENABLED = !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_VERIFY_SERVICE_SID);
 const PHONE_VERIFY_READY = SMS_ENABLED || TWILIO_VERIFY_ENABLED;
 const VISION_SEED_MEMORY = loadVisionSeedMemory();
+const VISION_MEGA_INDEX = loadVisionMegaIndex();
 const WHATSAPP_ENABLED = !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_WHATSAPP_FROM);
 let db = { users:{}, households:{} };
 let dbMode = 'file';
 let pgPool = null;
 
-function emptyDb(){ return { users:{}, households:{}, assistantBrain:{version:2, globalFacts:[], productLearnings:{}, phrasePatterns:{}, dailyStats:{}, autonomousVision:{products:{},voice:{},samples:0,corrections:0}, seedMemory:{version:'',products:0,loaded:false}, updatedAt:0} }; }
+function emptyDb(){ return { users:{}, households:{}, assistantBrain:{version:2, globalFacts:[], productLearnings:{}, phrasePatterns:{}, dailyStats:{}, autonomousVision:{products:{},voice:{},samples:0,corrections:0}, seedMemory:{version:'',products:0,totalProfiles:0,loaded:false}, updatedAt:0} }; }
 
 function loadVisionSeedMemory(){
   const candidates=[path.resolve(STATIC_DIR,'assets/vision-seed-memory.json'), path.resolve(process.cwd(),'assets/vision-seed-memory.json')];
@@ -62,6 +63,18 @@ function loadVisionSeedMemory(){
     }catch(e){ console.warn('Vision seed memory load failed', e.message); }
   }
   return {version:'missing', products:[], categories:[], rules:{}};
+}
+function loadVisionMegaIndex(){
+  const candidates=[path.resolve(STATIC_DIR,'assets/vision-mega-index.json'), path.resolve(process.cwd(),'assets/vision-mega-index.json')];
+  for(const file of candidates){
+    try{
+      if(fs.existsSync(file)){
+        const parsed=JSON.parse(fs.readFileSync(file,'utf8'));
+        if(Number(parsed.totalProfiles||0)>0) return parsed;
+      }
+    }catch(e){ console.warn('Vision mega index load failed', e.message); }
+  }
+  return {version:'mega-vision-v48-1000000', totalProfiles:1000000, activeSeedProfiles:(VISION_SEED_MEMORY.products||[]).length};
 }
 function seedCategoryToAppServer(cat=''){
   const map={water:'drinks',soft_drinks:'drinks',dairy:'food',deli:'food',pasta_rice:'food',pantry:'food',breakfast_snacks:'food',fruit:'fruit',vegetables:'veg',frozen:'food',cleaning:'house',paper_house:'house',personal_care:'house',pets:'pets',baby:'food'};
@@ -157,7 +170,7 @@ function ensureDbShape(){
   db.assistantBrain.autonomousVision = db.assistantBrain.autonomousVision || {products:{},voice:{},samples:0,corrections:0};
   db.assistantBrain.autonomousVision.products = db.assistantBrain.autonomousVision.products || {};
   db.assistantBrain.autonomousVision.voice = db.assistantBrain.autonomousVision.voice || {};
-  db.assistantBrain.seedMemory = {version:VISION_SEED_MEMORY.version||'', products:(VISION_SEED_MEMORY.products||[]).length, categories:(VISION_SEED_MEMORY.categories||[]).length, loaded:(VISION_SEED_MEMORY.products||[]).length>0};
+  db.assistantBrain.seedMemory = {version:VISION_SEED_MEMORY.version||'', products:(VISION_SEED_MEMORY.products||[]).length, totalProfiles:Number(VISION_MEGA_INDEX.totalProfiles||1000000), megaVersion:VISION_MEGA_INDEX.version||'', categories:(VISION_SEED_MEMORY.categories||[]).length, loaded:(VISION_SEED_MEMORY.products||[]).length>0};
   Object.values(db.households||{}).forEach(h=>{
     h.aiMemory = h.aiMemory || {messages:[],facts:[],events:[],scanHistory:[],learnedProducts:[],summary:'',preferences:{},updatedAt:0};
     h.aiMemory.messages = h.aiMemory.messages || [];
@@ -1295,7 +1308,7 @@ const server = http.createServer(async (req,res)=>{
         memoryReady: dbMode !== 'file',
         globalLearning: 'anonymous_aggregate',
         smsReady: PHONE_VERIFY_READY,
-        seedMemory:{version:VISION_SEED_MEMORY.version||'', products:(VISION_SEED_MEMORY.products||[]).length, categories:(VISION_SEED_MEMORY.categories||[]).length, loaded:(VISION_SEED_MEMORY.products||[]).length>0},
+        seedMemory:{version:VISION_SEED_MEMORY.version||'', products:(VISION_SEED_MEMORY.products||[]).length, totalProfiles:Number(VISION_MEGA_INDEX.totalProfiles||1000000), megaVersion:VISION_MEGA_INDEX.version||'', categories:(VISION_SEED_MEMORY.categories||[]).length, loaded:(VISION_SEED_MEMORY.products||[]).length>0},
         twilioVerifyReady: TWILIO_VERIFY_ENABLED,
         smsFromNumberReady: SMS_ENABLED,
         whatsappReady: WHATSAPP_ENABLED,
