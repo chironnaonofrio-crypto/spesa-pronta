@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v27.33-vision-rescue';
+window.SPESA_PRONTA_VERSION='v27.34-clean-version-lock';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
