@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v27.32-cloud-force-html-fix';
+window.SPESA_PRONTA_VERSION='v27.33-vision-rescue';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -2129,7 +2129,15 @@ async function analyzeGroceryDataUrl(dataUrl,fileName='photo.jpg', visualSignatu
   }
   let visionError=null;
   let result=await askVisionAi(dataUrl).catch((err)=>{ visionError=err; return null; });
-  if(!result || result.needsManual){ result=await guessScanFallback(fileName,dataUrl,result); if(visionError?.visionError?.error){ result.reason = result.reason || ('Vision AI cloud non pronta: '+visionError.visionError.error); } }
+  const cloudActuallyFailed = !result || result.cloudError || result.cloudOffline;
+  if(cloudActuallyFailed){
+    result=await guessScanFallback(fileName,dataUrl,result);
+    result.cloudFallback=true;
+    result.cloudError = result.cloudError || visionError?.visionError?.error || visionError?.message || result.cloudError || '';
+    if(result.cloudError && !result.reason) result.reason='Cloud OpenAI chiamata ma risposta non utilizzabile: '+String(result.cloudError).slice(0,120);
+  } else {
+    result.cloudVision=true; result.cloudOffline=false; result.cloudFallback=false;
+  }
   if(result.needsRetake){ setScannerStatus(result.reason || 'Non vedo bene, rifai la foto.', voiceLine('retake',['La foto non è abbastanza chiara. Riproviamo con il prodotto più fermo e ben visibile.','Non riesco a riconoscerlo bene. Prova a centrarlo meglio e rifare la scansione.']), true); addScannerResult({...result,dataUrl}); document.querySelector('.scanning-preview')?.remove(); return; }
   result.dataUrl=dataUrl; result.quality=quality; result.visualSignature=visualSignature || liveScanLastMetrics?.signature || '';
   const summary=presentVisionResults(result,dataUrl);
@@ -2210,10 +2218,10 @@ async function guessProductFromImage(dataUrl=''){
 }
 async function guessScanFallback(fileName='',dataUrl='',previous=null){
   const visual=await guessProductFromImage(dataUrl);
-  if(visual) return {...previous,...visual, needsManual:true, shouldAskConfirmation:true, cloudOffline:true, confidence:Math.min(Number(visual.confidence||0),.58)};
+  if(visual) return {...previous,...visual, needsManual:true, shouldAskConfirmation:true, cloudOffline:false, cloudFallback:true, confidence:Math.min(Number(visual.confidence||0),.58)};
   const fromName=cleanFileProductName(fileName);
-  if(fromName) return {...previous, needsManual:true, productName:fromName, quantity:1, unit:'pz', category:'food', confidence:.32, productPlaceholder:'Nome prodotto', cloudOffline:true, reason:'Cloud OpenAI richiesta ma risposta non disponibile: stima locale da controllare.'};
-  return {...previous, needsManual:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.18, productPlaceholder:'Es. Coca-Cola, latte, acqua...', cloudOffline:true, reason:'Cloud OpenAI richiesta ma non ha risposto: inserisci manualmente nome e quantità. Non userò nomi tecnici tipo manual-live.'};
+  if(fromName) return {...previous, needsManual:true, productName:fromName, quantity:1, unit:'pz', category:'food', confidence:.32, productPlaceholder:'Nome prodotto', cloudOffline:false, cloudFallback:true, reason:'Cloud OpenAI chiamata ma risposta non utilizzabile: stima locale da controllare.'};
+  return {...previous, needsManual:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.18, productPlaceholder:'Es. Coca-Cola, latte, acqua...', cloudOffline:false, cloudFallback:true, reason:'Cloud OpenAI chiamata ma non ha prodotto un risultato utilizzabile: inserisci manualmente nome e quantità. Non userò nomi tecnici tipo manual-live.'};
 }
 function visionApiBase(){
   const raw=(settings.apiEndpoint || '/api').trim() || '/api';
@@ -2287,8 +2295,9 @@ function addScannerResult(result){
         ${result.expiryDate?`<span class="good">Scadenza: ${esc(result.expiryDate)}</span>`:''}
         ${result.isDamaged?`<span class="danger">Danneggiato${result.damageType?`: ${esc(result.damageType)}`:''}</span>`:'<span class="good">Confezione ok</span>'}
         ${result.estimatedSize?`<span class="info">Formato: ${esc(result.estimatedSize)}</span>`:''}
-        ${result.cloudVision?'<span class="good">Cloud OpenAI attiva</span>':''}${result.cloudOffline?'<span class="cloud-warn">Cloud AI non collegata: stima locale</span>':''}${result.localVision?'<span class="info">Stima locale prudente</span>':''}
+        ${result.cloudVision?'<span class="cloud-ok">Cloud OpenAI attiva</span>':''}${result.cloudError?`<span class="cloud-error">Cloud errore: ${esc(String(result.cloudError).slice(0,48))}</span>`:''}${result.cloudFallback?'<span class="cloud-fallback">Fallback locale prudente</span>':''}${result.localVision?'<span class="info">Stima locale prudente</span>':''}
       </div>
+      ${result.cloudError?`<div class="scan-cloud-debug">Cloud OpenAI chiamata ma risposta non valida. Errore: <code>${esc(String(result.cloudError).slice(0,160))}</code></div>`:''}
       <div class="scan-voice-helper ${helperMode}" data-scan-voice-note><span class="dot"></span><div><strong>Assistente live</strong><br>${esc(helperText)}</div></div>
       <div class="scan-summary-box" data-scan-summary></div>
       <div class="scan-warning-box ${result.isDamaged?'':'good'}" data-scan-warning><strong>${result.isDamaged?'Controllo qualità':'Controllo qualità OK'}</strong>${result.isDamaged?`Possibile irregolarità: ${esc(result.damageType||'da verificare')}. Conferma a voce se è integro o danneggiato.`:'Nessun danno evidente rilevato. Puoi correggere se noti qualcosa.'}</div>

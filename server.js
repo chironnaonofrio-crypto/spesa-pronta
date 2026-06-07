@@ -834,6 +834,7 @@ async function openAiResponse(payload){
   } finally { clearTimeout(timeout); }
 }
 function outputText(resp){
+  if(!resp) return '';
   if(resp.output_text) return resp.output_text;
   const chunks=[];
   for(const out of resp.output||[]) for(const c of out.content||[]) if(c.text) chunks.push(c.text);
@@ -954,6 +955,7 @@ function applyVisionMatching(result, candidates){
 async function visionJsonCall(systemText, userText, image){
   const payload={
     model:OPENAI_VISION_MODEL,
+    max_output_tokens: 1100,
     input:[
       {role:'system',content:systemText},
       {role:'user',content:[{type:'input_text',text:userText},{type:'input_image',image_url:image}]}
@@ -1035,55 +1037,48 @@ function normalizeVisionResult(obj={}){
 }
 async function visionAnalyze({image,catalog,settings,memory}){
   if(!aiConnected()){
-    return { needsManual:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.25, shouldAskConfirmation:true, reason:'AI Vision reale non collegata: aggiungi OPENAI_API_KEY nelle variabili Render.' };
+    return { needsManual:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.25, shouldAskConfirmation:true, cloudVision:false, cloudOffline:true, cloudError:'missing_openai_key', reason:'AI Vision reale non collegata: aggiungi OPENAI_API_KEY nelle variabili Render.' };
   }
-  const compact=(catalog||[]).map(i=>({id:i.id,name:itemName(i,settings?.lang||'it'),names:i.names,unit:i.unit,category:i.category,qty:i.qty})).slice(0,240);
-  const learned=summarizeLearnedProducts(memory);
-  const candidates=buildVisionCandidatePool(catalog, settings, memory);
-  const primaryPrompt=`Sei la Vision AI di Spesa Pronta. Devi leggere una foto reale di un prodotto domestico/spesa.
-Obiettivo: riconoscere SOLO ciò che si vede davvero nella foto, senza inventare.
+  const compact=(catalog||[]).map(i=>({id:i.id,name:itemName(i,settings?.lang||'it'),names:i.names,unit:i.unit,category:i.category,qty:i.qty})).slice(0,80);
+  const learned=summarizeLearnedProducts(memory).slice(0,35);
+  const candidates=buildVisionCandidatePool(catalog, settings, memory).slice(0,45);
+  const oneShotPrompt=`Sei la Vision AI cloud di Spesa Pronta. Analizza la foto reale e rispondi SOLO con JSON valido.
+Obiettivo: riconoscere prodotto e marca guardando soprattutto etichetta e testo OCR, non lo sfondo.
 Regole severe:
-- Dai priorità a nome prodotto, marca, formato, quantità visibile, scadenza, tipologia, categoria e stato del prodotto. Rileva anche irregolarità: ammaccato, aperto, rotto, bucato, perdita, etichetta rovinata, scaduto, congelato/ghiacciato quando non dovrebbe.
-- Se il prodotto o la marca sono visibili, scrivi un nome umano breve ma specifico: es. Coca-Cola Original Taste, Divella Pennette Rigate, Acqua naturale, Latte intero, Crocchette cane.
-- Non usare mai nomi file, numeri casuali o testo illeggibile come nome prodotto.
-- Riconosci anche prodotti freschi o senza etichetta: frutta, verdura, ortaggi, pane, pasta, riso, latte, biscotti, detersivi, acquario, farmacia, animali.
-- Per la pasta prova a distinguere formati come rigatoni, penne rigate, pennette, spaghetti, fusilli, orecchiette.
-- Se la foto è sfocata, buia, troppo tagliata, o il prodotto non è identificabile, needsRetake true.
+- NON inventare mai. Se non sei sicuro, usa needsManual true ma compila ciò che leggi davvero.
+- Dai priorità al testo visibile su etichetta: marca, nome, formato, capacità, scadenza/TMC.
+- Se vedi una bottiglia d'acqua trasparente con etichetta blu/bianca, categoria drinks, unit bt, isLiquid true. Se leggi “Vero”, “Vera”, “Sepina”, “naturale”, usali in brand/variant/productName.
+- Non chiamare Coca-Cola o cola solo per uno sfondo rosso: Coca-Cola serve testo/brand Coca-Cola o etichetta/prodotto rosso centrale.
+- Rileva danni/irregolarità: ammaccato, aperto, rotto, bucato, perdita, etichetta rovinata, congelato/ghiacciato se anomalo.
+- Se la foto è davvero troppo sfocata/buia/tagliata, needsRetake true.
 - Scegli categoria fra: food, drinks, pets, house, pharmacy, aquarium, fruit, veg.
-- Se nella scena sono visibili più prodotti distinti, multipleItems true e compila items con fino a 8 articoli.
-- La risposta deve essere SOLO JSON valido, nessun markdown.
-Schema obbligatorio: {"needsRetake":boolean,"needsManual":boolean,"multipleItems":boolean,"shouldAskConfirmation":boolean,"reason":"motivo breve in italiano","productName":"nome prodotto","brand":"marca","variant":"variante/gusto/formato","productType":"tipo prodotto","packageType":"tipo confezione","estimatedSize":"formato visibile","expiryDate":"data visibile o vuota","isLiquid":boolean,"isDamaged":boolean,"damageType":"tipo danno o vuota, es. ammaccato, perdita, rotto, congelato","quantity":number,"unit":"pz|bt|lattina|conf|kg|g|lt|ml|busta|scatola","category":"food|drinks|pets|house|pharmacy|aquarium|fruit|veg","confidence":number,"detectedText":["testi letti"],"visibleEvidence":["forme/colori/testi visibili"],"items":[{"productName":"..."}]}`;
-  const ocrPrompt=`Sei un motore OCR + product disambiguation per Spesa Pronta. Guarda la stessa immagine e leggi in modo aggressivo i testi visibili di etichetta, confezione o stampa: marca, nome, formato, grammatura, capacità, gusto, scadenza/TMC.
-Regole:
-- Rileva parole utili e mettile in detectedText.
-- Se leggi una data plausibile di scadenza/TMC, scrivila in expiryDate.
-- Se capisci il prodotto dal testo, proponi productName preciso.
-- Se ci sono più prodotti, puoi usare multipleItems true e items.
-- Non inventare. SOLO JSON valido, stesso schema del prompt principale.`;
-  const context='\nCatalogo utente: '+JSON.stringify(compact).slice(0,36000)+'\nProdotti già imparati e confermati: '+JSON.stringify(learned).slice(0,24000)+'\nMemoria recente foto: '+JSON.stringify((memory?.scanHistory||[]).slice(-20)).slice(0,12000)+'\nCandidati frequenti: '+JSON.stringify(candidates.slice(0,80)).slice(0,18000);
+Schema JSON: {"needsRetake":boolean,"needsManual":boolean,"multipleItems":boolean,"shouldAskConfirmation":boolean,"reason":"breve in italiano","productName":"nome prodotto","brand":"marca","variant":"variante/gusto/formato","productType":"tipo prodotto","packageType":"tipo confezione","estimatedSize":"formato visibile","expiryDate":"data visibile o vuota","isLiquid":boolean,"isDamaged":boolean,"damageType":"tipo danno o vuota","quantity":number,"unit":"pz|bt|lattina|conf|kg|g|lt|ml|busta|scatola","category":"food|drinks|pets|house|pharmacy|aquarium|fruit|veg","confidence":number,"detectedText":["testi letti"],"visibleEvidence":["prove visive"],"items":[]}
+Contesto utile, ma non deve sovrascrivere ciò che vedi nella foto:
+Catalogo ridotto: ${JSON.stringify(compact).slice(0,12000)}
+Prodotti imparati: ${JSON.stringify(learned).slice(0,9000)}
+Candidati memoria: ${JSON.stringify(candidates).slice(0,9000)}`;
   try{
-    const [primaryRaw, ocrRaw] = await Promise.all([
-      visionJsonCall('Rispondi solo con JSON valido. Non inventare dati non visibili. Sei preciso, pratico e affidabile.', primaryPrompt + context, image),
-      visionJsonCall('Rispondi solo con JSON valido. Agisci come OCR intelligente e disambiguatore di prodotto. Non inventare dati non visibili.', ocrPrompt + context, image)
-    ]);
-    if(!primaryRaw && !ocrRaw) return {needsManual:true, shouldAskConfirmation:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.2, reason:'Risposta AI non leggibile: inserisci manualmente nome e quantità.'};
-    let result=mergeVisionOutputs(primaryRaw||{}, ocrRaw||{});
-    if(Array.isArray(result.items) && result.items.length){
-      result.items = result.items.map(it=>applyVisionMatching(it, candidates));
-      result.multipleItems = result.items.length>1;
+    let raw=null;
+    try{
+      raw = await visionJsonCall('Rispondi solo con JSON valido. Analizza immagine + testo visibile. Non usare lo sfondo come marca/prodotto.', oneShotPrompt, image);
+    }catch(firstErr){
+      // Secondo tentativo ultra-leggero: serve quando il modello configurato è lento o il contesto pesa troppo.
+      const shortPrompt=`Analizza la foto. Rispondi SOLO JSON. Riconosci prodotto, marca, testo etichetta, quantità, categoria, scadenza, danni. Non inventare. Non chiamare Coca-Cola se il rosso è solo sfondo. Se è bottiglia d'acqua, productName acqua in bottiglia, category drinks, unit bt. Schema: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","variant":"","quantity":1,"unit":"pz","category":"food","confidence":0.1,"isLiquid":false,"isDamaged":false,"damageType":"","expiryDate":"","detectedText":[],"visibleEvidence":[],"reason":""}`;
+      raw = await visionJsonCall('Solo JSON valido.', shortPrompt, image);
     }
+    if(!raw) throw new Error('empty_json_from_openai');
+    let result=normalizeVisionResult(raw||{});
     result=applyVisionMatching(result, candidates);
-    if(result.bestMatchName && !result.reason) result.reason='Ho riconosciuto il prodotto incrociando immagine, testo letto e memoria locale.';
-    if(result.bestMatchScore>=6.5 && result.confidence>=0.9 && !result.isDamaged && !result.needsRetake){
-      result.shouldAskConfirmation = false;
-      result.needsManual = false;
-    }
-    return normalizeVisionResult(result);
+    result.cloudVision=true;
+    result.cloudOffline=false;
+    result.cloudError='';
+    if(!result.reason) result.reason='Cloud OpenAI ha analizzato la foto.';
+    return result;
   }catch(err){
-    return {needsManual:true, shouldAskConfirmation:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.2, reason:'AI Vision non raggiungibile ora: controlla OPENAI_API_KEY/credito oppure inserisci manualmente.'};
+    const msg=String(err?.message||err||'openai_unknown_error').slice(0,220);
+    return {needsManual:true, shouldAskConfirmation:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.16, cloudVision:false, cloudOffline:true, cloudError:msg, reason:'Cloud OpenAI chiamata ma risposta non utilizzabile: '+msg};
   }
 }
-
 
 const server = http.createServer(async (req,res)=>{
   if(req.method === 'OPTIONS') return send(res, 204, {});
@@ -1390,8 +1385,9 @@ const server = http.createServer(async (req,res)=>{
       if(householdId && db.households[householdId] && db.households[householdId].token===bearer) h=db.households[householdId];
       const activeMemory=h ? ensureHouseholdMemory(h) : memory;
       const result = await visionAnalyze({image,catalog:h?(h.items||[]):catalog,settings:h?(h.settings||{}):settings,memory:activeMemory});
-      result.cloudVision = aiConnected();
-      result.cloudOffline = !aiConnected();
+      result.cloudVision = !!result.cloudVision && !result.cloudError;
+      result.cloudOffline = !result.cloudVision;
+      result.cloudFallback = false;
       if(h){
         activeMemory.scanHistory.push({
           productName:result.productName||'', quantity:result.quantity||null, unit:result.unit||'', category:result.category||'', confidence:result.confidence||0, needsRetake:!!result.needsRetake, reason:result.reason||'', visibleEvidence:result.visibleEvidence||[], at:Date.now()
