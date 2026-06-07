@@ -13,10 +13,10 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="assets/styles.css?v=2765">
+  <link rel="stylesheet" href="assets/styles.css?v=2767">
   <title>Spesa Pronta</title>
 
-<style id="v2765-responsive-fix">
+<style id="v2767-responsive-fix">
   .deploy-version-pill{display:inline-flex!important;align-items:center!important;justify-content:center!important;min-height:34px!important;padding:0 12px!important;border-radius:999px!important;background:linear-gradient(135deg,#1266f1,#18bf72)!important;color:#fff!important;font-size:.74rem!important;font-weight:1000!important;letter-spacing:.08em!important;white-space:nowrap!important;box-shadow:0 12px 28px rgba(18,102,241,.22)!important;z-index:20!important}
   .deploy-floating-version{position:fixed!important;right:12px!important;bottom:calc(74px + env(safe-area-inset-bottom,0px))!important;z-index:99999!important;background:linear-gradient(135deg,#1266f1,#18bf72)!important;color:#fff!important;border-radius:999px!important;padding:9px 12px!important;font:1000 11px/1 Inter,Arial,sans-serif!important;letter-spacing:.08em!important;box-shadow:0 14px 34px rgba(18,102,241,.28)!important;pointer-events:none!important}
   .premium-hero-image img,.hero-ref-img,.step-visual,.quick-card-art,.seed-proof-visual{opacity:1!important;visibility:visible!important;display:block!important;filter:none!important;mix-blend-mode:normal!important}
@@ -53,8 +53,8 @@
 </style>
 
 
-<style id="v2765-final-visible-cleanup">
-  /* V27.65: niente badge grandi, solo micro versione basso/sinistra */
+<style id="v2767-final-visible-cleanup">
+  /* V27.67: niente badge grandi, solo micro versione basso/sinistra */
   .deploy-version-pill,
   .deploy-floating-version{
     display:none!important;
@@ -67,7 +67,7 @@
   }
 
   body::after{
-    content:'V27.65 HEADER FIX'!important;
+    content:'V27.67 CLOUD PANEL'!important;
     position:fixed!important;
     left:9px!important;
     right:auto!important;
@@ -167,10 +167,10 @@
 </style>
 
 
-<style id="v2765-square-grid-fix">
-/* V27.65 square compact grid fix */
+<style id="v2767-square-grid-fix">
+/* V27.67 square compact grid fix */
 .deploy-version-pill,.deploy-floating-version{display:none!important}
-body::after{content:'V27.65 HEADER FIX'!important;position:fixed!important;left:8px!important;bottom:7px!important;right:auto!important;z-index:9999!important;font:900 8.5px/1 Inter,Arial,sans-serif!important;letter-spacing:.045em!important;color:rgba(7,27,52,.30)!important;pointer-events:none!important;background:transparent!important;padding:0!important;border:0!important;box-shadow:none!important}
+body::after{content:'V27.67 CLOUD PANEL'!important;position:fixed!important;left:8px!important;bottom:7px!important;right:auto!important;z-index:9999!important;font:900 8.5px/1 Inter,Arial,sans-serif!important;letter-spacing:.045em!important;color:rgba(7,27,52,.30)!important;pointer-events:none!important;background:transparent!important;padding:0!important;border:0!important;box-shadow:none!important}
 
 /* Head text smaller inside modal */
 .scanner-title-block p{font-size:.9rem!important;line-height:1.22!important;letter-spacing:.015em!important;overflow-wrap:anywhere!important;word-break:normal!important}
@@ -277,9 +277,9 @@ body::after{content:'V27.65 HEADER FIX'!important;position:fixed!important;left:
 }
 </style>
 
-<style id="v2765-title-hero-fix">
-/* V27.65 title + hero image fix */
-body::after{content:'V27.65 HEADER FIX'!important}
+<style id="v2767-title-hero-fix">
+/* V27.67 title + hero image fix */
+body::after{content:'V27.67 CLOUD PANEL'!important}
 
 /* Make title adapt nicely */
 .topbar{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;gap:12px!important;align-items:start!important}
@@ -323,9 +323,9 @@ body::after{content:'V27.65 HEADER FIX'!important}
   .premium-hero-image .hero-ref-img,.premium-hero-image img,.premium-hero img{border-radius:24px!important}
 }
 </style>
-<style id="v2765-brand-title-fix">
-/* V27.65 brand title fully responsive */
-body::after{content:'V27.65 HEADER FIX'!important}
+<style id="v2767-brand-title-fix">
+/* V27.67 brand title fully responsive */
+body::after{content:'V27.67 CLOUD PANEL'!important}
 .topbar{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;align-items:center!important;gap:14px!important}
 .top-title{display:grid!important;grid-template-columns:68px minmax(0,1fr)!important;align-items:center!important;gap:12px!important;min-width:0!important;width:100%!important}
 .top-title .brand-mark.top{width:68px!important;height:68px!important;min-width:68px!important;flex:none!important}
@@ -364,9 +364,9 @@ body::after{content:'V27.65 HEADER FIX'!important}
 }
 </style>
 
-<style id="v2765-header-brand-lock">
-/* V27.65 header brand lock: titolo mai tagliato */
-body::after{content:'V27.65 HEADER FIX'!important}
+<style id="v2767-header-brand-lock">
+/* V27.67 header brand lock: titolo mai tagliato */
+body::after{content:'V27.67 CLOUD PANEL'!important}
 
 .topbar{
   display:flex!important;
@@ -544,9 +544,59 @@ body::after{content:'V27.65 HEADER FIX'!important}
 }
 </style>
 
+<style id="v2767-lang-right-bugfix">
+/* V27.67 lang trigger right + menu bug fix */
+body::after{content:'V27.67 CLOUD PANEL'!important}
+
+.lang-picker{position:relative!important;z-index:30!important}
+.lang-trigger{
+  justify-content:flex-start!important;
+  text-align:left!important;
+  padding:0 14px!important;
+}
+.lang-trigger .lang-mini-flag{margin-right:6px!important}
+.lang-trigger strong#langTriggerCode{
+  margin-left:auto!important;
+  text-align:right!important;
+  min-width:26px!important;
+  font-size:1rem!important;
+  letter-spacing:.06em!important;
+  color:#16305d!important;
+}
+.lang-trigger .lang-trigger-caret{
+  margin-left:8px!important;
+  flex:0 0 auto!important;
+}
+
+/* When left menu opens, hide top language pill so it never floats in front */
+body.menu-open .top-actions .lang-picker{
+  opacity:0!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+  transform:translateY(-6px)!important;
+}
+body.menu-open .top-actions .lang-trigger{
+  pointer-events:none!important;
+}
+body.menu-open .lang-overlay{
+  display:none!important;
+}
+.sidebar.open{
+  z-index:250!important;
+}
+#mobileNavBackdrop.show{
+  z-index:240!important;
+}
+.topbar,.top-actions{overflow:visible!important}
+
+@media (max-width:560px){
+  .lang-trigger{padding:0 12px!important}
+  .lang-trigger strong#langTriggerCode{font-size:.96rem!important}
+}
+</style>
 </head>
 <body>
-  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.65-HEADER-FIX -->
+  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.67-CLOUD-PANEL -->
   <div class="app-frame">
     <aside class="sidebar">
       <div class="side-brand">
@@ -1110,9 +1160,67 @@ body::after{content:'V27.65 HEADER FIX'!important}
     <button id="accountNoticeCloseBtn" type="button" aria-label="Chiudi notifica">×</button>
   </div>
 
+
+  <dialog id="cloudDialog" class="cloud-dialog">
+    <section class="cloud-card" aria-labelledby="cloudTitle">
+      <header class="cloud-head">
+        <div class="cloud-orb" aria-hidden="true">☁</div>
+        <div>
+          <small>Spesa Pronta Cloud</small>
+          <h3 id="cloudTitle">Centro sincronizzazione</h3>
+          <p>Controlla stato, backup e ripristino dati.</p>
+        </div>
+        <button class="cloud-close" id="cloudCloseBtn" type="button" aria-label="Chiudi">×</button>
+      </header>
+
+      <div class="cloud-status-card" id="cloudStatusCard">
+        <span class="cloud-pulse" id="cloudPulse" aria-hidden="true"></span>
+        <div>
+          <strong id="cloudStatusText">Controllo cloud…</strong>
+          <p id="cloudStatusSub">Verifico configurazione e ultima sincronizzazione.</p>
+        </div>
+      </div>
+
+      <div class="cloud-info-grid">
+        <article>
+          <span>Ultima sync</span>
+          <b id="cloudLastSync">Mai</b>
+        </article>
+        <article>
+          <span>Prodotti</span>
+          <b id="cloudItemsCount">0</b>
+        </article>
+        <article>
+          <span>Backup locale</span>
+          <b id="cloudBackupState">Pronto</b>
+        </article>
+        <article>
+          <span>Household</span>
+          <b id="cloudHousehold">Non configurato</b>
+        </article>
+      </div>
+
+      <div class="cloud-endpoint-box">
+        <span>Endpoint cloud</span>
+        <strong id="cloudEndpoint">Non configurato</strong>
+      </div>
+
+      <div class="cloud-actions">
+        <button class="primary-btn" id="cloudSyncNowBtn" type="button"><span>↻</span> Sincronizza ora</button>
+        <button class="outline-btn" id="cloudBackupBtn" type="button"><span>⬇</span> Scarica backup</button>
+        <button class="outline-btn" id="cloudRestoreBtn" type="button"><span>⬆</span> Ripristina backup</button>
+        <button class="outline-btn" id="cloudCopyIdBtn" type="button"><span>⧉</span> Copia ID cloud</button>
+        <button class="outline-btn" id="cloudSettingsBtn" type="button"><span>⚙</span> Configura cloud</button>
+      </div>
+
+      <input id="cloudRestoreInput" type="file" accept="application/json,.json" hidden>
+      <p class="cloud-note">Il backup resta sul tuo dispositivo. La sync usa endpoint, token e household configurati nelle impostazioni.</p>
+    </section>
+  </dialog>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/vision-seed-memory.js?v=2765" defer></script>
-  <script src="assets/vision-mega-index.js?v=2765" defer></script>
-  <script src="assets/app.v27-48-premium-mega-vision.js?v=2765" defer></script>
+  <script src="assets/vision-seed-memory.js?v=2767" defer></script>
+  <script src="assets/vision-mega-index.js?v=2767" defer></script>
+  <script src="assets/app.v27-48-premium-mega-vision.js?v=2767" defer></script>
 </body>
 </html>

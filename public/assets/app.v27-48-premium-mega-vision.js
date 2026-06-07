@@ -701,14 +701,125 @@ function bindLanguagePicker(){
   });
   syncLanguagePicker();
 }
+
+function cloudConfigured(){
+  return !!(settings.cloudEnabled && settings.apiEndpoint && settings.token && settings.householdId);
+}
+function formatCloudDate(ts){
+  if(!ts) return 'Mai';
+  try { return new Date(ts).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}); } catch { return 'Mai'; }
+}
+function updateCloudPanel(status=''){
+  const configured = cloudConfigured();
+  const card = $('#cloudStatusCard');
+  if(card){
+    card.classList.remove('online','offline','config');
+    card.classList.add(configured ? (settings.cloudLastStatus==='offline' ? 'offline' : 'online') : 'config');
+  }
+  const statusText = $('#cloudStatusText');
+  const statusSub = $('#cloudStatusSub');
+  if(statusText) statusText.textContent = status || (configured ? 'Cloud configurato' : 'Cloud non configurato');
+  if(statusSub) statusSub.textContent = configured
+    ? `Pronto a sincronizzare ${state.length} prodotti.`
+    : 'Inserisci endpoint, token e household nelle impostazioni.';
+  const last = $('#cloudLastSync'); if(last) last.textContent = formatCloudDate(settings.lastCloudSyncAt);
+  const count = $('#cloudItemsCount'); if(count) count.textContent = String(state.length || 0);
+  const backup = $('#cloudBackupState'); if(backup) backup.textContent = 'Locale OK';
+  const household = $('#cloudHousehold'); if(household) household.textContent = settings.householdId || 'Non configurato';
+  const endpoint = $('#cloudEndpoint'); if(endpoint) endpoint.textContent = settings.apiEndpoint || 'Non configurato';
+}
+function openCloudPanel(){
+  updateCloudPanel();
+  const d = $('#cloudDialog');
+  if(d?.showModal) d.showModal();
+  else d?.setAttribute('open','open');
+}
+function closeCloudPanel(){
+  const d = $('#cloudDialog');
+  if(d?.close) d.close();
+  else d?.removeAttribute('open');
+}
+async function cloudSyncNow(){
+  updateCloudPanel('Sincronizzazione in corso…');
+  const ok = await syncCloud(true);
+  updateCloudPanel(ok ? 'Sincronizzato adesso' : 'Sync non riuscita');
+}
+function downloadCloudBackup(){
+  const backup = {
+    app:'Spesa Pronta',
+    version:'V27.67 CLOUD PANEL',
+    exportedAt:new Date().toISOString(),
+    items:state,
+    settings,
+    session,
+    aiMemory
+  };
+  const blob = new Blob([JSON.stringify(backup,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `spesa-pronta-backup-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1200);
+  toast('Backup scaricato ✅');
+  updateCloudPanel('Backup creato');
+}
+function restoreCloudBackupFile(file){
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const data = JSON.parse(String(reader.result||'{}'));
+      if(!Array.isArray(data.items)) throw new Error('backup invalid');
+      state = migrateItems(data.items);
+      if(data.settings && typeof data.settings==='object') settings = Object.assign(defaultSettings(), data.settings);
+      if(data.session && typeof data.session==='object') session = Object.assign({mode:'guest',user:null}, data.session);
+      if(data.aiMemory && typeof data.aiMemory==='object') aiMemory = Object.assign(defaultAiMemory(), data.aiMemory);
+      saveAll();
+      saveAiMemory();
+      applyLang();
+      render();
+      updateCloudPanel('Backup ripristinato');
+      toast('Backup ripristinato ✅');
+    }catch(e){
+      toast('Backup non valido');
+      updateCloudPanel('Backup non valido');
+    }
+  };
+  reader.readAsText(file);
+}
+async function copyCloudId(){
+  const value = settings.householdId || settings.apiEndpoint || '';
+  if(!value){ toast('Cloud non configurato'); return; }
+  try{
+    await navigator.clipboard.writeText(value);
+    toast('ID cloud copiato ✅');
+  }catch{
+    toast(value);
+  }
+}
+function bindCloudPanel(){
+  $('#cloudCloseBtn')?.addEventListener('click', closeCloudPanel);
+  $('#cloudDialog')?.addEventListener('click', e => { if(e.target?.id==='cloudDialog') closeCloudPanel(); });
+  $('#cloudSyncNowBtn')?.addEventListener('click', cloudSyncNow);
+  $('#cloudBackupBtn')?.addEventListener('click', downloadCloudBackup);
+  $('#cloudRestoreBtn')?.addEventListener('click', () => $('#cloudRestoreInput')?.click());
+  $('#cloudRestoreInput')?.addEventListener('change', e => restoreCloudBackupFile(e.target.files?.[0]));
+  $('#cloudCopyIdBtn')?.addEventListener('click', copyCloudId);
+  $('#cloudSettingsBtn')?.addEventListener('click', () => { closeCloudPanel(); showView('settings'); });
+}
+
 function bind(){
   $all('.nav-item').forEach(b => b.addEventListener('click', () => showView(b.dataset.view)));
-  $('#mobileMenuBtn')?.addEventListener('click', () => toggleMobileMenu(true));
+  $('#mobileMenuBtn')?.addEventListener('click', () => { closeLangMenu?.(); toggleMobileMenu(true); });
   $('#mobileNavBackdrop')?.addEventListener('click', () => toggleMobileMenu(false));
   $all('[data-view-shortcut]').forEach(b => b.addEventListener('click', () => showView(b.dataset.viewShortcut)));
   $('#userShortcutBtn').addEventListener('click', handleUserShortcut);
   $('#languageSelect')?.addEventListener('change', e => { settings.lang=e.target.value; saveAll(); applyLang(); render(); });
   bindLanguagePicker();
+  bindCloudPanel();
   $('#settingsLanguage').addEventListener('change', e => { settings.lang=e.target.value; saveAll(); applyLang(); render(); });
   $('#searchInput').addEventListener('input', e => { searchTerm=e.target.value.toLowerCase(); renderProducts(); });
   $('#categorySelect').addEventListener('change', e => { categoryFilter=e.target.value; renderProducts(); });
@@ -743,7 +854,7 @@ function bind(){
   $('#initialScanBtn')?.addEventListener('click', () => openGroceryScanner(true));
   $('#initialVerifyLaterBtn')?.addEventListener('click', markInitialInventoryToVerify);
   $('#saveSettingsBtn').addEventListener('click', saveSettingsFromForm);
-  $('#syncNowBtn').addEventListener('click', () => syncCloud(true));
+  $('#syncNowBtn').addEventListener('click', openCloudPanel);
   $('#saveProfileBtn').addEventListener('click', saveProfile);
   $('#goRegisterBtn').addEventListener('click', () => showView(session.user ? 'settings' : 'registration'));
   $('#logoutAccountBtn')?.addEventListener('click', requestLogoutAccount);
@@ -794,6 +905,7 @@ function applyLang(){
   renderCaptcha();
 }
 function toggleMobileMenu(open){
+  if(open){ try{ closeLangMenu(); }catch(e){} }
   document.querySelector('.sidebar')?.classList.toggle('open', !!open);
   $('#mobileNavBackdrop')?.classList.toggle('show', !!open);
   document.body.classList.toggle('menu-open', !!open);
