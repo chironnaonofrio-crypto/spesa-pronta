@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v27.46-seed-real-ui';
+window.SPESA_PRONTA_VERSION='v27.47-blank-page-fixed';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -3047,4 +3047,4 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-console.log('[Spesa Pronta] V27.46 seed-real-ui loaded: 11200 smart seed products integrated + visible UI');
+console.log('[Spesa Pronta] V27.47 blank-page-fixed loaded: comment bug fixed + 11200 smart seed products integrated');
