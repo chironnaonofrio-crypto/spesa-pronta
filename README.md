@@ -139,3 +139,13 @@ Usa `render.yaml` oppure imposta:
 - Start command: `npm start`
 
 L'app usa `/api` come endpoint cloud, quindi se frontend e backend sono sullo stesso dominio la sincronizzazione funziona senza configurare URL esterni.
+
+
+## V27.71 - Sincronizzazione Alexa + Google
+
+Nel pannello cloud sono stati aggiunti due pulsanti puliti con immagini:
+- Alexa
+- Google Assistant
+
+Quando l'utente clicca un assistente, l'app lo collega nelle impostazioni, salva lo stato e sincronizza automaticamente la stessa lista cloud.
+Non vengono più mostrati dettagli tecnici come `/api`, token o household nel pannello utente.

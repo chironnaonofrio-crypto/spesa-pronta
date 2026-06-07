@@ -1,4 +1,4 @@
-// Spesa Pronta V27.69 - backend cloud reale per /api
+// Spesa Pronta V27.71 - backend cloud reale per /api
 // Avvio: npm install && npm start
 const express = require('express');
 const fs = require('fs');
@@ -69,7 +69,7 @@ function authPayload(db, user, householdId, rawToken){
 }
 
 app.get('/api/health', (req,res) => {
-  res.json({ ok:true, app:'Spesa Pronta', version:'V27.69 SYNC FIX', time:new Date().toISOString() });
+  res.json({ ok:true, app:'Spesa Pronta', version:'V27.71 VOICE SYNC', time:new Date().toISOString() });
 });
 
 app.post('/api/auth/register', (req,res) => {
@@ -190,6 +190,16 @@ app.post('/api/assistant/whatsapp-list', (req,res) => {
   res.json({ ok:true, text });
 });
 
+
+app.post('/api/google-assistant', (req,res) => {
+  const db = readDb();
+  const householdId = String(req.query.householdId || req.body?.householdId || '');
+  const h = db.households[householdId];
+  const items = h ? (h.items || []).filter(i => !i.inStock || i.buy || Number(i.qty||0) <= Number(i.baseThreshold||0)) : [];
+  const text = items.length ? `Devi comprare: ${items.map(i => i.names?.it || i.name || i.id).join(', ')}` : 'Non hai niente da comprare.';
+  res.json({ ok:true, fulfillmentText:text, speech:text });
+});
+
 app.post('/api/alexa', (req,res) => {
   const db = readDb();
   const householdId = String(req.query.householdId || req.body?.householdId || '');
@@ -204,5 +214,5 @@ app.get('*', (req,res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
 
 app.listen(PORT, () => {
   ensureDb();
-  console.log(`Spesa Pronta cloud backend V27.69 attivo su http://localhost:${PORT}`);
+  console.log(`Spesa Pronta cloud backend V27.71 attivo su http://localhost:${PORT}`);
 });

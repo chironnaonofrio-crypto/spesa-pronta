@@ -749,7 +749,7 @@ function updateCloudPanel(status=''){
   let sub = '';
   if(!configured){
     title = status || 'Cloud non configurato';
-    sub = 'Accedi o configura endpoint, token e household nelle impostazioni.';
+    sub = 'Accedi o configura il cloud nelle impostazioni.';
   }else if(settings.cloudMode === 'local'){
     title = status || 'Backup locale sincronizzato';
     sub = 'Server API non raggiunto: i dati sono salvati su questo dispositivo. Per sync tra dispositivi avvia il backend incluso.';
@@ -769,7 +769,7 @@ function updateCloudPanel(status=''){
   const count = $('#cloudItemsCount'); if(count) count.textContent = String(state.length || 0);
   const backup = $('#cloudBackupState'); if(backup) backup.textContent = settings.cloudMode === 'local' ? 'Locale' : 'Pronto';
   const household = $('#cloudHousehold'); if(household) household.textContent = settings.householdId || 'Non configurato';
-  const endpoint = $('#cloudEndpoint'); if(endpoint) endpoint.textContent = cleanApiEndpoint();
+  const endpoint = $('#cloudEndpoint'); if(endpoint) endpoint.textContent = 'Configurato';
 }
 async function openCloudPanel(){
   updateCloudPanel('Controllo cloud…');
@@ -859,7 +859,42 @@ async function copyCloudId(){
     toast(value);
   }
 }
+
+function updateVoiceSyncPanel(){
+  const alexa = !!settings.alexaConnected;
+  const google = !!settings.googleAssistantConnected;
+  const alexaBtn = $('#cloudAlexaBtn');
+  const googleBtn = $('#cloudGoogleBtn');
+  const alexaState = $('#cloudAlexaState');
+  const googleState = $('#cloudGoogleState');
+  if(alexaBtn) alexaBtn.classList.toggle('connected', alexa);
+  if(googleBtn) googleBtn.classList.toggle('connected', google);
+  if(alexaState) alexaState.textContent = alexa ? 'Collegata' : 'Tocca per collegare';
+  if(googleState) googleState.textContent = google ? 'Collegato' : 'Tocca per collegare';
+}
+async function connectVoiceAssistant(kind){
+  if(kind === 'alexa') settings.alexaConnected = true;
+  if(kind === 'google') settings.googleAssistantConnected = true;
+  settings.cloudEnabled = true;
+  if(!settings.apiEndpoint) settings.apiEndpoint = '/api';
+  if(!settings.householdId) settings.householdId = `home_${Math.random().toString(16).slice(2,14)}`;
+  if(!settings.token) settings.token = `local_${Math.random().toString(36).slice(2,18)}`;
+  saveAll();
+  updateVoiceSyncPanel();
+  updateCloudPanel(kind === 'alexa' ? 'Alexa collegata' : 'Google collegato');
+  await syncCloud(false);
+  updateVoiceSyncPanel();
+  updateCloudPanel(kind === 'alexa' ? 'Alexa sincronizzata' : 'Google sincronizzato');
+  toast(kind === 'alexa' ? 'Alexa collegata ✅' : 'Google collegato ✅');
+}
+function bindVoiceSyncPanel(){
+  $('#cloudAlexaBtn')?.addEventListener('click', () => connectVoiceAssistant('alexa'));
+  $('#cloudGoogleBtn')?.addEventListener('click', () => connectVoiceAssistant('google'));
+  updateVoiceSyncPanel();
+}
+
 function bindCloudPanel(){
+  bindVoiceSyncPanel();
   $('#cloudCloseBtn')?.addEventListener('click', closeCloudPanel);
   $('#cloudDialog')?.addEventListener('click', e => { if(e.target?.id==='cloudDialog') closeCloudPanel(); });
   $('#cloudSyncNowBtn')?.addEventListener('click', cloudSyncNow);
@@ -1561,14 +1596,14 @@ async function sendWhatsappList(){
     else toast(t('whatsappListReady'));
   }catch(err){ toast('Invio WhatsApp non riuscito. Controlla configurazione Twilio/numero.'); }
 }
-function connectAlexa(){ settings.alexaConnected=true; saveAll(); render(); syncCloud(true); toast(t('alexaConnected')); }
+function connectAlexa(){ connectVoiceAssistant('alexa'); }
 function voiceEndpoint(path){
   const base=settings.apiEndpoint.replace(/\/$/,'');
   const params=new URLSearchParams({ householdId:settings.householdId||'DEMO', token:settings.token||'TOKEN_DA_LOGIN' });
   return `${base}/${path}?${params.toString()}`;
 }
 async function copyAlexaEndpoint(){ const url=voiceEndpoint('alexa'); await navigator.clipboard.writeText(url).catch(()=>{}); toast(t('copied')); }
-function connectGoogleAssistant(){ settings.googleAssistantConnected=true; saveAll(); render(); syncCloud(true); toast(t('googleConnected')); }
+function connectGoogleAssistant(){ connectVoiceAssistant('google'); }
 async function copyGoogleEndpoint(){ const url=voiceEndpoint('google-assistant'); await navigator.clipboard.writeText(url).catch(()=>{}); toast(t('copied')); }
 function scheduleSync(){ clearTimeout(syncTimer); if(settings.cloudEnabled) syncTimer=setTimeout(()=>syncCloud(false), SYNC_WAIT); }
 async function syncCloud(show){
