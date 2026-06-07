@@ -13,10 +13,10 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="assets/styles.css?v=2758">
+  <link rel="stylesheet" href="assets/styles.css?v=2759">
   <title>Spesa Pronta</title>
 
-<style id="v2758-responsive-fix">
+<style id="v2759-responsive-fix">
   .deploy-version-pill{display:inline-flex!important;align-items:center!important;justify-content:center!important;min-height:34px!important;padding:0 12px!important;border-radius:999px!important;background:linear-gradient(135deg,#1266f1,#18bf72)!important;color:#fff!important;font-size:.74rem!important;font-weight:1000!important;letter-spacing:.08em!important;white-space:nowrap!important;box-shadow:0 12px 28px rgba(18,102,241,.22)!important;z-index:20!important}
   .deploy-floating-version{position:fixed!important;right:12px!important;bottom:calc(74px + env(safe-area-inset-bottom,0px))!important;z-index:99999!important;background:linear-gradient(135deg,#1266f1,#18bf72)!important;color:#fff!important;border-radius:999px!important;padding:9px 12px!important;font:1000 11px/1 Inter,Arial,sans-serif!important;letter-spacing:.08em!important;box-shadow:0 14px 34px rgba(18,102,241,.28)!important;pointer-events:none!important}
   .premium-hero-image img,.hero-ref-img,.step-visual,.quick-card-art,.seed-proof-visual{opacity:1!important;visibility:visible!important;display:block!important;filter:none!important;mix-blend-mode:normal!important}
@@ -52,9 +52,123 @@
   }
 </style>
 
+
+<style id="v2759-final-visible-cleanup">
+  /* V27.59: niente badge grandi, solo micro versione basso/sinistra */
+  .deploy-version-pill,
+  .deploy-floating-version{
+    display:none!important;
+    visibility:hidden!important;
+    opacity:0!important;
+    width:0!important;
+    height:0!important;
+    overflow:hidden!important;
+    pointer-events:none!important;
+  }
+
+  body::after{
+    content:'V27.59 MICRO BADGE'!important;
+    position:fixed!important;
+    left:9px!important;
+    right:auto!important;
+    bottom:8px!important;
+    z-index:9999!important;
+    pointer-events:none!important;
+    font:900 9px/1.1 Inter,Arial,sans-serif!important;
+    letter-spacing:.045em!important;
+    color:rgba(7,27,52,.30)!important;
+    background:transparent!important;
+    box-shadow:none!important;
+    padding:0!important;
+    border:0!important;
+    border-radius:0!important;
+  }
+
+  /* Card immagini: quadrate futuristiche, non tonde */
+  .onboarding-steps.pro-steps article strong{
+    width:92px!important;
+    height:92px!important;
+    flex:0 0 92px!important;
+    border-radius:18px!important;
+    overflow:hidden!important;
+    background:linear-gradient(145deg,#f9fcff,#edf5ff)!important;
+    border:1px solid rgba(18,102,241,.20)!important;
+    box-shadow:
+      0 12px 28px rgba(18,102,241,.12),
+      inset 0 0 0 1px rgba(255,255,255,.70)!important;
+  }
+
+  .step-visual{
+    width:100%!important;
+    height:100%!important;
+    border-radius:16px!important;
+    object-fit:cover!important;
+    border:0!important;
+    box-shadow:none!important;
+  }
+
+  .scanner-card-premium .scanner-quick-cards > span > img.quick-card-art,
+  .scanner-quick-cards img.quick-card-art{
+    width:88px!important;
+    height:88px!important;
+    flex:0 0 88px!important;
+    border-radius:18px!important;
+    object-fit:cover!important;
+    border:1px solid rgba(18,102,241,.22)!important;
+    background:linear-gradient(145deg,#f9fcff,#edf5ff)!important;
+    box-shadow:
+      0 12px 30px rgba(18,102,241,.14),
+      inset 0 0 0 1px rgba(255,255,255,.72)!important;
+  }
+
+  .scanner-card-premium .scanner-quick-cards > span{
+    grid-template-columns:88px minmax(0,1fr)!important;
+    align-items:center!important;
+  }
+
+  @media(max-width:700px){
+    .onboarding-steps.pro-steps article strong{
+      width:82px!important;
+      height:82px!important;
+      flex-basis:82px!important;
+      border-radius:17px!important;
+    }
+    .scanner-card-premium .scanner-quick-cards > span{
+      grid-template-columns:74px minmax(0,1fr)!important;
+    }
+    .scanner-card-premium .scanner-quick-cards > span > img.quick-card-art,
+    .scanner-quick-cards img.quick-card-art{
+      width:74px!important;
+      height:74px!important;
+      flex-basis:74px!important;
+      border-radius:16px!important;
+    }
+  }
+
+  @media(max-width:420px){
+    body::after{left:8px!important;bottom:7px!important;font-size:8.5px!important}
+    .onboarding-steps.pro-steps article strong{
+      width:72px!important;
+      height:72px!important;
+      flex-basis:72px!important;
+      border-radius:15px!important;
+    }
+    .scanner-card-premium .scanner-quick-cards > span{
+      grid-template-columns:64px minmax(0,1fr)!important;
+    }
+    .scanner-card-premium .scanner-quick-cards > span > img.quick-card-art,
+    .scanner-quick-cards img.quick-card-art{
+      width:64px!important;
+      height:64px!important;
+      flex-basis:64px!important;
+      border-radius:15px!important;
+    }
+  }
+</style>
+
 </head>
 <body>
-  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.58-FUTURE-UI -->
+  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.59-MICRO-BADGE -->
   <div class="app-frame">
     <aside class="sidebar">
       <div class="side-brand">
@@ -82,7 +196,6 @@
             <p class="top-subtitle" data-i18n="subtitle">Quando finisce, scorri. Quando esci, compri.</p>
           </div>
         </div>
-        <span class="deploy-version-pill" title="Versione build">V27.58 FUTURE UI</span>
         <div class="top-actions">
           <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Apri menu">☰</button>
           <select id="languageSelect" aria-label="Lingua">
@@ -596,9 +709,8 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <div class="deploy-floating-version" aria-label="Versione attiva">V27.58 FUTURE UI</div>
-  <script src="assets/vision-seed-memory.js?v=2758" defer></script>
-  <script src="assets/vision-mega-index.js?v=2758" defer></script>
-  <script src="assets/app.v27-48-premium-mega-vision.js?v=2758" defer></script>
+  <script src="assets/vision-seed-memory.js?v=2759" defer></script>
+  <script src="assets/vision-mega-index.js?v=2759" defer></script>
+  <script src="assets/app.v27-48-premium-mega-vision.js?v=2759" defer></script>
 </body>
 </html>
