@@ -25,18 +25,22 @@ jobs:
             exit 0
           fi
 
+          rm -rf extracted
           mkdir extracted
           unzip -o "$ZIP_FILE" -d extracted
 
-          if [ -d "extracted/spesa-pronta-final" ]; then
-            cp -a extracted/spesa-pronta-final/. .
+          # Se lo ZIP contiene una sola cartella contenitore, copio il contenuto di quella cartella.
+          # Se invece contiene già public/, assets/, index.html ecc., copio tutto extracted/.
+          TOP_DIRS=$(find extracted -mindepth 1 -maxdepth 1 -type d | wc -l)
+          TOP_FILES=$(find extracted -mindepth 1 -maxdepth 1 -type f | wc -l)
+
+          if [ "$TOP_DIRS" -eq 1 ] && [ "$TOP_FILES" -eq 0 ]; then
+            ONLY_DIR=$(find extracted -mindepth 1 -maxdepth 1 -type d | head -n 1)
+            echo "ZIP con una cartella contenitore: $ONLY_DIR"
+            cp -a "$ONLY_DIR"/. .
           else
-            FIRST_DIR=$(find extracted -mindepth 1 -maxdepth 1 -type d | head -n 1)
-            if [ -n "$FIRST_DIR" ]; then
-              cp -a "$FIRST_DIR"/. .
-            else
-              cp -a extracted/. .
-            fi
+            echo "ZIP con progetto già in root: copio tutto extracted/"
+            cp -a extracted/. .
           fi
 
           rm -rf extracted
@@ -47,5 +51,6 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add -A
+          git status
           git commit -m "Carica Spesa Pronta dal file ZIP" || echo "Nessuna modifica"
           git push
