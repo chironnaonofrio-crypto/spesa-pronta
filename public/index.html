@@ -8,12 +8,12 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <!-- spesa-pronta-v27-14-inline-images-account-actions -->
+  <!-- spesa-pronta-v27-18-real-vision-ai -->
   <meta name="description" content="Spesa Pronta: gestione spesa intelligente con cloud, Alexa, Google Assistant e suggerimenti automatici.">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="assets/styles.v27-16-register-busy-fix.css?v=2716">
+  <link rel="stylesheet" href="assets/styles.v27-25-live-mic-dialog.css?v=2725">
   <title>Spesa Pronta</title>
 </head>
 <body>
@@ -455,8 +455,8 @@
       <header class="scanner-head">
         <div>
           <small>Spesa Pronta Vision AI</small>
-          <h3>Controllo spesa con foto</h3>
-          <p>Fotografa un articolo alla volta. Se la foto è chiara, l’AI riconosce prodotto e quantità; se non vede bene ti chiede di rifarla.</p>
+          <h3>Scansione live Vision AI conversazionale</h3>
+          <p>Metti il prodotto davanti alla videocamera: la Vision AI usa riconoscimento prodotto + OCR etichetta + memoria locale, attiva anche il microfono e parla con te fino al completamento della scheda prodotto.</p>
         </div>
         <button class="ai-close" id="scannerCloseBtn" type="button" aria-label="Chiudi">×</button>
       </header>
@@ -469,6 +469,8 @@
           🖼️ Carica foto
           <input id="groceryGalleryInput" type="file" accept="image/*" multiple>
         </label>
+        <button class="primary-btn" id="liveVisionBtn" type="button">🎥 Diretta AI auto-scan</button>
+        <button class="outline-btn" id="scannerCaptureNowBtn" type="button">⚡ Scatta ora</button>
         <button class="outline-btn" id="fridgeModeBtn" type="button">🧊 Modalità frigo</button>
         <button class="outline-btn warning" id="markVerifyBtn" type="button">Non posso ora: fatta da verificare</button>
       </div>
@@ -509,6 +511,6 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/app.v27-16-register-busy-fix.js?v=2716" defer></script>
+  <script src="assets/app.v27-25-live-mic-dialog.js?v=2725" defer></script>
 </body>
 </html>

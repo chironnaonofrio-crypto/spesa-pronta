@@ -136,20 +136,22 @@ function ensureDbShape(){
   db.assistantBrain.phrasePatterns = db.assistantBrain.phrasePatterns || {};
   db.assistantBrain.dailyStats = db.assistantBrain.dailyStats || {};
   Object.values(db.households||{}).forEach(h=>{
-    h.aiMemory = h.aiMemory || {messages:[],facts:[],events:[],scanHistory:[],summary:'',preferences:{},updatedAt:0};
+    h.aiMemory = h.aiMemory || {messages:[],facts:[],events:[],scanHistory:[],learnedProducts:[],summary:'',preferences:{},updatedAt:0};
     h.aiMemory.messages = h.aiMemory.messages || [];
     h.aiMemory.facts = h.aiMemory.facts || [];
     h.aiMemory.events = h.aiMemory.events || [];
     h.aiMemory.scanHistory = h.aiMemory.scanHistory || [];
+  h.aiMemory.learnedProducts = h.aiMemory.learnedProducts || [];
     h.aiMemory.preferences = h.aiMemory.preferences || {};
   });
 }
 function ensureHouseholdMemory(h){
-  h.aiMemory = h.aiMemory || {messages:[],facts:[],events:[],scanHistory:[],summary:'',preferences:{},updatedAt:0};
+  h.aiMemory = h.aiMemory || {messages:[],facts:[],events:[],scanHistory:[],learnedProducts:[],summary:'',preferences:{},updatedAt:0};
   h.aiMemory.messages = h.aiMemory.messages || [];
   h.aiMemory.facts = h.aiMemory.facts || [];
   h.aiMemory.events = h.aiMemory.events || [];
   h.aiMemory.scanHistory = h.aiMemory.scanHistory || [];
+  h.aiMemory.learnedProducts = h.aiMemory.learnedProducts || [];
   h.aiMemory.preferences = h.aiMemory.preferences || {};
   return h.aiMemory;
 }
@@ -851,20 +853,237 @@ async function llmChatReply({message,state,settings,memory,globalMemory={}}){
   const resp=await openAiResponse(payload);
   return outputText(resp) || localAiReply({message,state,settings,memory});
 }
-async function visionAnalyze({image,catalog,settings,memory}){
-  if(!process.env.OPENAI_API_KEY){
-    return { needsManual:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.25, reason:'Backend AI Vision non collegato: inserisci nome e quantità manualmente.' };
+function extractJsonObject(text=''){
+  const raw=String(text||'').trim().replace(/^```(?:json)?\s*/i,'').replace(/```$/,'').trim();
+  try{ return JSON.parse(raw); }catch(_){ }
+  const start=raw.indexOf('{'), end=raw.lastIndexOf('}');
+  if(start>=0 && end>start){
+    try{ return JSON.parse(raw.slice(start,end+1)); }catch(_){ }
   }
-  const compact=(catalog||[]).map(i=>({id:i.id,names:i.names,unit:i.unit,category:i.category,qty:i.qty})).slice(0,200);
-  const prompt='Analizza SOLO quello che si vede realmente nella foto. Non inventare marca, prodotto o quantità se non sono visibili. Rispondi SOLO JSON valido con: needsRetake boolean, reason string, productName string, quantity number, unit string, category tra food/drinks/pets/house/pharmacy/aquarium/fruit/veg, confidence 0..1, visibleEvidence array di brevi prove visive. Se foto sfocata, buia, tagliata, prodotto non identificabile o quantità non stimabile, needsRetake true e reason breve. Se il prodotto sembra già nel catalogo usa lo stesso nome. Se vedi più prodotti, scegli quello principale e segnala nel reason che servono foto separate.';
+  return null;
+}
+function cleanVisionString(value, fallback=''){
+  return String(value||fallback||'').replace(/[\u0000-\u001f<>]/g,'').trim().slice(0,80);
+}
+
+function summarizeLearnedProducts(memory){
+  const list=Array.isArray(memory?.learnedProducts) ? memory.learnedProducts : [];
+  return list.slice(0,80).map(x=>({
+    productName: cleanVisionString(x.productName||''),
+    brand: cleanVisionString(x.brand||''),
+    variant: cleanVisionString(x.variant||''),
+    category: cleanVisionString(x.category||''),
+    unit: cleanVisionString(x.unit||''),
+    productType: cleanVisionString(x.productType||''),
+    packageType: cleanVisionString(x.packageType||''),
+    estimatedSize: cleanVisionString(x.estimatedSize||''),
+    isLiquid: !!x.isLiquid,
+    seenCount: Number(x.seenCount||0),
+    aliases: Array.isArray(x.aliases)?x.aliases.map(a=>cleanVisionString(a)).filter(Boolean).slice(0,6):[],
+    visualHints: Array.isArray(x.visualHints)?x.visualHints.map(a=>cleanVisionString(a)).filter(Boolean).slice(0,6):[]
+  })).filter(x=>x.productName);
+}
+
+function normalizeVisionText(v=''){ return String(v||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,' ').trim(); }
+function uniqueStrings(list=[], limit=10){ return [...new Set((list||[]).map(x=>cleanVisionString(x)).filter(Boolean))].slice(0,limit); }
+function buildVisionCandidatePool(catalog=[], settings={}, memory={}){
+  const out=[];
+  for(const item of (catalog||[]).slice(0,300)){
+    const names=[];
+    try{ names.push(itemName(item,settings?.lang||'it')); }catch(_){ }
+    if(item?.names && typeof item.names==='object') names.push(...Object.values(item.names));
+    out.push({
+      source:'catalog',
+      id:item.id||'',
+      name: cleanVisionString(names.find(Boolean)||''),
+      category: cleanVisionString(item.category||''),
+      brand:'',
+      aliases: uniqueStrings(names,8),
+      unit: cleanVisionString(item.unit||'')
+    });
+  }
+  for(const row of (Array.isArray(memory?.learnedProducts)?memory.learnedProducts:[]).slice(0,220)){
+    out.push({
+      source:'memory',
+      id:row.key||'',
+      name: cleanVisionString(row.productName||''),
+      category: cleanVisionString(row.category||''),
+      brand: cleanVisionString(row.brand||''),
+      aliases: uniqueStrings([row.productName,row.brand,row.variant,...(row.aliases||[])],10),
+      unit: cleanVisionString(row.unit||''),
+      visualHints: uniqueStrings(row.visualHints||[],8)
+    });
+  }
+  return out.filter(x=>x.name);
+}
+function scoreVisionCandidate(result, candidate){
+  const hay = normalizeVisionText([result.productName,result.brand,result.variant,result.productType,result.packageType,result.estimatedSize,...(result.detectedText||[]),...(result.visibleEvidence||[])].join(' '));
+  const tokens = new Set(hay.split(/\s+/).filter(t=>t.length>=2));
+  let score=0;
+  const aliases=[candidate.name,...(candidate.aliases||[])].map(normalizeVisionText).filter(Boolean);
+  for(const alias of aliases){
+    if(!alias) continue;
+    if(hay===alias) score+=8;
+    if(hay.includes(alias) || alias.includes(hay)) score+=4;
+    const parts=alias.split(/\s+/).filter(t=>t.length>=2);
+    for(const p of parts){ if(tokens.has(p)) score += (p.length>=5?1.6:1); }
+  }
+  const brand=normalizeVisionText(candidate.brand||'');
+  if(brand && tokens.has(brand)) score+=4;
+  if(candidate.category && result.category && candidate.category===result.category) score+=1.2;
+  for(const hint of (candidate.visualHints||[]).map(normalizeVisionText)){ if(hint && hay.includes(hint)) score+=1.4; }
+  return Number(score.toFixed(2));
+}
+function applyVisionMatching(result, candidates){
+  if(!result || !Array.isArray(candidates) || !candidates.length) return result;
+  const ranked=candidates.map(c=>({candidate:c,score:scoreVisionCandidate(result,c)})).sort((a,b)=>b.score-a.score);
+  const best=ranked[0];
+  if(best && best.score>=4.5){
+    result.bestMatchName = best.candidate.name;
+    result.bestMatchSource = best.candidate.source;
+    result.bestMatchScore = best.score;
+    if((!result.productName || result.productName.length<3 || result.confidence<0.78 || ['acqua','latte','pasta'].includes(normalizeVisionText(result.productName))) && best.candidate.name){
+      result.productName = best.candidate.name;
+    }
+    if(!result.brand && best.candidate.brand) result.brand = best.candidate.brand;
+    if(!result.category || result.category==='food') result.category = best.candidate.category || result.category;
+    result.confidence = Math.min(0.99, Math.max(result.confidence||0, 0.78 + Math.min(0.18,best.score/50)));
+  }
+  return result;
+}
+async function visionJsonCall(systemText, userText, image){
   const payload={
     model:OPENAI_VISION_MODEL,
-    input:[{role:'user',content:[{type:'input_text',text:prompt+' Catalogo: '+JSON.stringify(compact).slice(0,30000)},{type:'input_image',image_url:image}]}]
+    input:[
+      {role:'system',content:systemText},
+      {role:'user',content:[{type:'input_text',text:userText},{type:'input_image',image_url:image}]}
+    ]
   };
   const resp=await openAiResponse(payload);
-  const txt=outputText(resp).replace(/^```json\s*/,'').replace(/```$/,'').trim();
-  try{ return JSON.parse(txt); }catch{ return {needsRetake:true, reason:'Risposta AI non leggibile, rifai la foto o inserisci manualmente.', productName:'', quantity:1, unit:'pz', category:'food', confidence:.1}; }
+  return extractJsonObject(outputText(resp));
 }
+function mergeVisionOutputs(primaryRaw, ocrRaw){
+  const primary=normalizeVisionResult(primaryRaw||{});
+  const ocr=normalizeVisionResult(ocrRaw||{});
+  const merged=Object.assign({}, primary);
+  const preferOcr = (!primary.productName || primary.confidence<0.8) && ocr.productName;
+  if(preferOcr) merged.productName=ocr.productName;
+  for(const f of ['brand','variant','estimatedSize','expiryDate','productType','packageType','damageType']){ if(!merged[f] && ocr[f]) merged[f]=ocr[f]; }
+  if((!merged.category || merged.category==='food') && ['fruit','veg','drinks','pets','house','pharmacy','aquarium'].includes(ocr.category)) merged.category=ocr.category;
+  if(!merged.isDamaged && ocr.isDamaged){ merged.isDamaged=true; merged.damageType=ocr.damageType||merged.damageType; }
+  if(!merged.isLiquid && ocr.isLiquid) merged.isLiquid=true;
+  if((!Number.isFinite(merged.quantity) || merged.quantity===1) && Number(ocr.quantity)>1) merged.quantity=ocr.quantity;
+  if((!merged.unit || merged.unit==='pz') && ocr.unit) merged.unit=ocr.unit;
+  merged.detectedText = uniqueStrings([...(primary.detectedText||[]), ...(ocr.detectedText||[]), ...(primary.visibleEvidence||[]), ...(ocr.visibleEvidence||[])], 10);
+  merged.visibleEvidence = uniqueStrings([...(primary.visibleEvidence||[]), ...(ocr.visibleEvidence||[])], 8);
+  const agreeName = normalizeVisionText(primary.productName) && normalizeVisionText(primary.productName)===normalizeVisionText(ocr.productName);
+  merged.confidence = Math.min(0.99, Math.max(primary.confidence||0, ocr.confidence||0, agreeName ? ((Math.max(primary.confidence||0,ocr.confidence||0))+0.06) : 0));
+  if(merged.detectedText.length && merged.confidence<0.74) merged.confidence=Math.min(0.9, merged.confidence+0.05);
+  merged.reason = primary.reason || ocr.reason || '';
+  merged.shouldAskConfirmation = (primary.shouldAskConfirmation !== false) || (ocr.shouldAskConfirmation !== false);
+  merged.needsManual = primary.needsManual || ocr.needsManual;
+  merged.needsRetake = primary.needsRetake && ocr.needsRetake;
+  if(Array.isArray(primary.items) && primary.items.length){
+    merged.items = primary.items.map(it=>normalizeVisionResult(it));
+  } else if(Array.isArray(ocr.items) && ocr.items.length){
+    merged.items = ocr.items.map(it=>normalizeVisionResult(it));
+  }
+  if(Array.isArray(merged.items) && merged.items.length){ merged.multipleItems = merged.items.length>1; }
+  return normalizeVisionResult(merged);
+}
+
+function normalizeVisionResult(obj={}){
+  const allowedCats=new Set(['food','drinks','pets','house','pharmacy','aquarium','fruit','veg']);
+  const allowedUnits=new Set(['pz','pc','bt','lt','ml','kg','g','conf','pack','lattina','busta','scatola']);
+  const result={
+    needsRetake: !!obj.needsRetake,
+    needsManual: !!obj.needsManual,
+    reason: cleanVisionString(obj.reason, ''),
+    productName: cleanVisionString(obj.productName || obj.name || obj.product || ''),
+    brand: cleanVisionString(obj.brand || ''),
+    variant: cleanVisionString(obj.variant || ''),
+    quantity: Number(obj.quantity || obj.count || 1),
+    unit: cleanVisionString(obj.unit || 'pz'),
+    category: cleanVisionString(obj.category || 'food'),
+    confidence: Math.max(0, Math.min(1, Number(obj.confidence ?? 0.1))),
+    visibleEvidence: Array.isArray(obj.visibleEvidence) ? obj.visibleEvidence.map(x=>cleanVisionString(x)).filter(Boolean).slice(0,6) : [],
+    expiryDate: cleanVisionString(obj.expiryDate || obj.expiry || ''),
+    productType: cleanVisionString(obj.productType || obj.type || ''),
+    packageType: cleanVisionString(obj.packageType || obj.shape || obj.container || ''),
+    estimatedSize: cleanVisionString(obj.estimatedSize || obj.size || ''),
+    isLiquid: !!obj.isLiquid,
+    isDamaged: !!obj.isDamaged,
+    damageType: cleanVisionString(obj.damageType || ''),
+    detectedText: Array.isArray(obj.detectedText) ? obj.detectedText.map(x=>cleanVisionString(x)).filter(Boolean).slice(0,8) : [],
+    bestMatchName: cleanVisionString(obj.bestMatchName || ''),
+    bestMatchSource: cleanVisionString(obj.bestMatchSource || ''),
+    bestMatchScore: Number(obj.bestMatchScore || 0),
+    multipleItems: !!obj.multipleItems,
+    shouldAskConfirmation: obj.shouldAskConfirmation !== false
+  };
+  if(Array.isArray(obj.items)){
+    result.items=obj.items.slice(0,8).map(it=>normalizeVisionResult(Object.assign({},it,{items:undefined}))).filter(it=>!it.needsRetake || it.productName || it.reason);
+    if(result.items.length) result.multipleItems = result.items.length>1;
+  }
+  if(!Number.isFinite(result.quantity) || result.quantity<=0) result.quantity=1;
+  if(!allowedCats.has(result.category)) result.category='food';
+  if(!allowedUnits.has(result.unit)) result.unit='pz';
+  if(result.productName && /^(image|img|foto|photo|screenshot|whatsapp|camera|pxl|dsc|dcim|\d{5,})/i.test(result.productName.replace(/\s+/g,''))) result.productName='';
+  if(result.productName.length<2 && !result.needsRetake){ result.needsManual=true; result.shouldAskConfirmation=true; }
+  if(result.confidence<0.72 && !result.needsRetake) result.shouldAskConfirmation=true;
+  return result;
+}
+async function visionAnalyze({image,catalog,settings,memory}){
+  if(!aiConnected()){
+    return { needsManual:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.25, shouldAskConfirmation:true, reason:'AI Vision reale non collegata: aggiungi OPENAI_API_KEY nelle variabili Render.' };
+  }
+  const compact=(catalog||[]).map(i=>({id:i.id,name:itemName(i,settings?.lang||'it'),names:i.names,unit:i.unit,category:i.category,qty:i.qty})).slice(0,240);
+  const learned=summarizeLearnedProducts(memory);
+  const candidates=buildVisionCandidatePool(catalog, settings, memory);
+  const primaryPrompt=`Sei la Vision AI di Spesa Pronta. Devi leggere una foto reale di un prodotto domestico/spesa.
+Obiettivo: riconoscere SOLO ciò che si vede davvero nella foto, senza inventare.
+Regole severe:
+- Dai priorità a nome prodotto, marca, formato, quantità visibile, scadenza, tipologia, categoria e stato del prodotto.
+- Se il prodotto o la marca sono visibili, scrivi un nome umano breve ma specifico: es. Coca-Cola Original Taste, Divella Pennette Rigate, Acqua naturale, Latte intero, Crocchette cane.
+- Non usare mai nomi file, numeri casuali o testo illeggibile come nome prodotto.
+- Riconosci anche prodotti freschi o senza etichetta: frutta, verdura, ortaggi, pane, pasta, riso, latte, biscotti, detersivi, acquario, farmacia, animali.
+- Per la pasta prova a distinguere formati come rigatoni, penne rigate, pennette, spaghetti, fusilli, orecchiette.
+- Se la foto è sfocata, buia, troppo tagliata, o il prodotto non è identificabile, needsRetake true.
+- Scegli categoria fra: food, drinks, pets, house, pharmacy, aquarium, fruit, veg.
+- Se nella scena sono visibili più prodotti distinti, multipleItems true e compila items con fino a 8 articoli.
+- La risposta deve essere SOLO JSON valido, nessun markdown.
+Schema obbligatorio: {"needsRetake":boolean,"needsManual":boolean,"multipleItems":boolean,"shouldAskConfirmation":boolean,"reason":"motivo breve in italiano","productName":"nome prodotto","brand":"marca","variant":"variante/gusto/formato","productType":"tipo prodotto","packageType":"tipo confezione","estimatedSize":"formato visibile","expiryDate":"data visibile o vuota","isLiquid":boolean,"isDamaged":boolean,"damageType":"tipo danno o vuota","quantity":number,"unit":"pz|bt|lattina|conf|kg|g|lt|ml|busta|scatola","category":"food|drinks|pets|house|pharmacy|aquarium|fruit|veg","confidence":number,"detectedText":["testi letti"],"visibleEvidence":["forme/colori/testi visibili"],"items":[{"productName":"..."}]}`;
+  const ocrPrompt=`Sei un motore OCR + product disambiguation per Spesa Pronta. Guarda la stessa immagine e leggi in modo aggressivo i testi visibili di etichetta, confezione o stampa: marca, nome, formato, grammatura, capacità, gusto, scadenza/TMC.
+Regole:
+- Rileva parole utili e mettile in detectedText.
+- Se leggi una data plausibile di scadenza/TMC, scrivila in expiryDate.
+- Se capisci il prodotto dal testo, proponi productName preciso.
+- Se ci sono più prodotti, puoi usare multipleItems true e items.
+- Non inventare. SOLO JSON valido, stesso schema del prompt principale.`;
+  const context='\nCatalogo utente: '+JSON.stringify(compact).slice(0,36000)+'\nProdotti già imparati e confermati: '+JSON.stringify(learned).slice(0,24000)+'\nMemoria recente foto: '+JSON.stringify((memory?.scanHistory||[]).slice(-20)).slice(0,12000)+'\nCandidati frequenti: '+JSON.stringify(candidates.slice(0,80)).slice(0,18000);
+  try{
+    const [primaryRaw, ocrRaw] = await Promise.all([
+      visionJsonCall('Rispondi solo con JSON valido. Non inventare dati non visibili. Sei preciso, pratico e affidabile.', primaryPrompt + context, image),
+      visionJsonCall('Rispondi solo con JSON valido. Agisci come OCR intelligente e disambiguatore di prodotto. Non inventare dati non visibili.', ocrPrompt + context, image)
+    ]);
+    if(!primaryRaw && !ocrRaw) return {needsManual:true, shouldAskConfirmation:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.2, reason:'Risposta AI non leggibile: inserisci manualmente nome e quantità.'};
+    let result=mergeVisionOutputs(primaryRaw||{}, ocrRaw||{});
+    if(Array.isArray(result.items) && result.items.length){
+      result.items = result.items.map(it=>applyVisionMatching(it, candidates));
+      result.multipleItems = result.items.length>1;
+    }
+    result=applyVisionMatching(result, candidates);
+    if(result.bestMatchName && !result.reason) result.reason='Ho riconosciuto il prodotto incrociando immagine, testo letto e memoria locale.';
+    if(result.bestMatchScore>=6.5 && result.confidence>=0.9 && !result.isDamaged && !result.needsRetake){
+      result.shouldAskConfirmation = false;
+      result.needsManual = false;
+    }
+    return normalizeVisionResult(result);
+  }catch(err){
+    return {needsManual:true, shouldAskConfirmation:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.2, reason:'AI Vision non raggiungibile ora: controlla OPENAI_API_KEY/credito oppure inserisci manualmente.'};
+  }
+}
+
 
 const server = http.createServer(async (req,res)=>{
   if(req.method === 'OPTIONS') return send(res, 204, {});

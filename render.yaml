@@ -14,5 +14,7 @@ services:
         value: gpt-5.5
       - key: OPENAI_VISION_MODEL
         value: gpt-5.5
+      - key: OPENAI_TIMEOUT_MS
+        value: 60000
       - key: DB_PATH
         value: ./cloud-db.json

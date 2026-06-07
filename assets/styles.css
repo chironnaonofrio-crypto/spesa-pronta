@@ -719,3 +719,22 @@ body::after{content:'V27.14'!important}
 .register-submit-btn.is-loading{opacity:.78;pointer-events:none;filter:saturate(.9)}
 .register-submit-btn.is-loading::after{content:'';width:18px;height:18px;border-radius:50%;border:3px solid rgba(255,255,255,.55);border-top-color:#fff;animation:spinReg .75s linear infinite;margin-left:8px}
 @keyframes spinReg{to{transform:rotate(360deg)}}
+
+
+/* V27.16 register busy state */
+.register-submit-btn.is-busy{opacity:.82;filter:saturate(.9);pointer-events:none}
+.register-submit-btn.is-busy::after{content:'';width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,.55);border-top-color:#fff;animation:spinBusy .75s linear infinite;margin-left:8px}
+@keyframes spinBusy{to{transform:rotate(360deg)}}
+
+
+/* V27.17 photo recognition fallback fix */
+.scan-result{min-width:0}
+.scan-fields{min-width:0}
+.scan-fields input,.scan-fields select{width:100%;min-width:0}
+.scan-result:not(.bad):not(.confirmed){background:linear-gradient(180deg,#ffffff,#f8fbff)}
+.scan-fields strong{letter-spacing:-.02em}
+@media(max-width:560px){
+  .scan-result{grid-template-columns:1fr!important}
+  .scan-result>img,.scanner-preview img{width:100%!important;height:170px!important}
+  .scanner-preview{grid-template-columns:1fr!important}
+}

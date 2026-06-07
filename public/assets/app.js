@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v27.16-register-busy-fix';
+window.SPESA_PRONTA_VERSION='v27.18-real-vision-ai';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -1196,7 +1196,7 @@ async function updateAiBackendStatus(){
     const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/ai/status`);
     if(!res.ok) throw new Error('status');
     const data=await res.json();
-    el.textContent = data.connected ? `AI vera collegata: chat + vision + memoria cloud attive (${data.model}).` : 'AI locale attiva. Per Vision vera manca la chiave OpenAI nel backend.';
+    el.textContent = data.connected ? `AI vera collegata: chat + Vision AI attive (${data.visionModel||data.model}).` : 'AI locale attiva: per far riconoscere davvero le foto aggiungi OPENAI_API_KEY su Render.';
   }catch{
     el.textContent='AI locale attiva. Backend non raggiungibile o non ancora online.';
   }
@@ -1365,7 +1365,7 @@ function loadImageElement(dataUrl){
 function fileToDataUrl(file){
   return new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(file); });
 }
-async function compressImage(dataUrl,max=900,quality=.78){
+async function compressImage(dataUrl,max=1280,quality=.86){
   const img=await loadImageElement(dataUrl); const scale=Math.min(1,max/Math.max(img.width,img.height));
   const c=document.createElement('canvas'); c.width=Math.max(1,Math.round(img.width*scale)); c.height=Math.max(1,Math.round(img.height*scale));
   const ctx=c.getContext('2d'); ctx.drawImage(img,0,0,c.width,c.height);
@@ -1386,7 +1386,7 @@ async function imageQuality(dataUrl){
 async function analyzeGroceryPhoto(file){
   const original=await fileToDataUrl(file);
   const dataUrl=await compressImage(original);
-  $('#scannerPreview').innerHTML=`<img src="${dataUrl}" alt="Foto articolo"><p>Analizzo la foto...</p>`;
+  $('#scannerPreview').innerHTML=`<img src="${dataUrl}" alt="Foto articolo"><p>Vision AI sta leggendo prodotto, marca e quantità...</p>`;
   const quality=await imageQuality(dataUrl).catch(()=>({ok:false,reason:'non riesco a leggere la foto'}));
   if(!quality.ok){
     $('#scannerStatus').textContent=`Non vedo bene: ${quality.reason}. Rifai la foto più vicino, con luce buona e prodotto centrato.`;
@@ -1394,39 +1394,100 @@ async function analyzeGroceryPhoto(file){
     return;
   }
   let result=await askVisionAi(dataUrl).catch(()=>null);
-  if(!result || result.needsManual){ result=guessScanFallback(file.name,dataUrl); }
+  if(!result || result.needsManual){ result=await guessScanFallback(file.name,dataUrl,result); }
   if(result.needsRetake){ $('#scannerStatus').textContent=result.reason || 'Non vedo bene, rifai la foto.'; addScannerResult({...result,dataUrl}); return; }
   result.dataUrl=dataUrl; result.quality=quality;
   addScannerResult(result);
-  $('#scannerStatus').textContent='Foto letta. Controlla nome e quantità, poi conferma.';
+  $('#scannerStatus').textContent=(result.needsManual?'Controllo manuale: completa nome/quantità e conferma.':'Vision AI completata: controlla il risultato e conferma.');
 }
-function guessScanFallback(fileName='',dataUrl=''){
-  const base=String(fileName).replace(/\.[a-z0-9]+$/i,'').replace(/[_-]+/g,' ').trim();
-  const name=base && !/^image|img|photo|screenshot|camera/i.test(base) ? base : '';
-  return {needsManual:true, productName:name, quantity:1, unit:'pz', category:'food', confidence:.35, reason:'Vision AI esterna non collegata: conferma manualmente nome e quantità.'};
+function cleanFileProductName(fileName=''){
+  const raw=String(fileName||'').replace(/\.[a-z0-9]+$/i,'').replace(/[_-]+/g,' ').trim();
+  if(!raw) return '';
+  const lower=raw.toLowerCase();
+  if(/^(image|img|photo|foto|screenshot|camera|whatsapp|signal|telegram|pxl|dsc|dcim|screen|received)/i.test(lower)) return '';
+  if(/^\d{5,}$/.test(raw.replace(/\s+/g,''))) return '';
+  if(raw.length>34 && /\d/.test(raw)) return '';
+  if(raw.replace(/\d/g,'').trim().length<3) return '';
+  return raw.replace(/\s+/g,' ').slice(0,42);
+}
+async function guessProductFromImage(dataUrl=''){
+  try{
+    const img=await loadImageElement(dataUrl);
+    const c=document.createElement('canvas');
+    const w=80,h=80; c.width=w; c.height=h;
+    const ctx=c.getContext('2d',{willReadFrequently:true});
+    ctx.drawImage(img,0,0,w,h);
+    const d=ctx.getImageData(0,0,w,h).data;
+    let red=0,dark=0,white=0,blue=0,green=0,total=0;
+    for(let y=8;y<h-8;y++){
+      for(let x=8;x<w-8;x++){
+        const i=(y*w+x)*4, r=d[i], g=d[i+1], b=d[i+2];
+        const max=Math.max(r,g,b), min=Math.min(r,g,b), lum=.2126*r+.7152*g+.0722*b;
+        total++;
+        if(r>105 && r>g*1.28 && r>b*1.18) red++;
+        if(lum<78) dark++;
+        if(r>190 && g>190 && b>185 && max-min<58) white++;
+        if(b>120 && b>r*1.12 && b>g*1.02) blue++;
+        if(g>115 && g>r*1.12 && g>b*.85) green++;
+      }
+    }
+    const rr=red/total, dr=dark/total, wr=white/total, br=blue/total, gr=green/total;
+    if(rr>.045 && dr>.13) return {needsManual:true, productName:'Coca-Cola', quantity:1, unit:'bt', category:'drinks', confidence:.55, productPlaceholder:'Coca-Cola', reason:'Riconoscimento locale: sembra Coca-Cola. Controlla quantità e conferma.'};
+    if(wr>.32 && rr<.04 && dr<.38) return {needsManual:true, productName:'Latte', quantity:1, unit:'pz', category:'drinks', confidence:.48, productPlaceholder:'Latte', reason:'Riconoscimento locale: sembra latte. Controlla quantità e conferma.'};
+    if(br>.18 && wr>.08 && rr<.05) return {needsManual:true, productName:'Acqua', quantity:1, unit:'bt', category:'drinks', confidence:.42, productPlaceholder:'Acqua', reason:'Riconoscimento locale: sembra acqua/bottiglia. Controlla e conferma.'};
+    if(gr>.16 && rr<.05) return {needsManual:true, productName:'Verdura', quantity:1, unit:'pz', category:'veg', confidence:.35, productPlaceholder:'Nome prodotto', reason:'Riconoscimento locale incerto: controlla nome e quantità.'};
+  }catch(_){ }
+  return null;
+}
+async function guessScanFallback(fileName='',dataUrl='',previous=null){
+  const visual=await guessProductFromImage(dataUrl);
+  if(visual) return {...previous,...visual};
+  const fromName=cleanFileProductName(fileName);
+  if(fromName) return {...previous, needsManual:true, productName:fromName, quantity:1, unit:'pz', category:'food', confidence:.32, productPlaceholder:'Nome prodotto', reason:'Vision AI esterna non collegata: ho preso il nome dal file. Controlla e conferma.'};
+  return {...previous, needsManual:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.18, productPlaceholder:'Es. Coca-Cola, latte, acqua...', reason:'Vision AI esterna non collegata: inserisci manualmente nome e quantità. Non userò più numeri casuali come nome prodotto.'};
 }
 async function askVisionAi(dataUrl){
   if(!settings.apiEndpoint) return null;
   const catalog=state.map(i=>({id:i.id,names:i.names,unit:i.unit,unitOptions:i.unitOptions,category:i.category,qty:i.qty}));
-  const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/ai/vision`,{
+  const endpoint=settings.apiEndpoint.replace(/\/$/,'');
+  const res=await fetch(`${endpoint}/ai/vision`,{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token||''}`},
     body:JSON.stringify({image:dataUrl,catalog,settings,memory:aiMemory,householdId:settings.householdId})
   });
-  if(!res.ok) return null;
+  if(!res.ok){
+    const err=await res.json().catch(()=>({}));
+    throw new Error(err.error||'vision_api_error');
+  }
   const data=await res.json();
   if(data.memory){ aiMemory=Object.assign(aiMemory,data.memory); saveAiMemory(); }
-  return data.result || data;
+  const r=data.result || data;
+  if(r && r.productName && /^(image|img|foto|photo|screenshot|whatsapp|camera|pxl|dsc|dcim|\d{5,})/i.test(String(r.productName).replace(/\s+/g,''))) r.productName='';
+  return r;
+}
+function scanEvidenceHtml(result){
+  const bits=[];
+  if(result.brand) bits.push('Marca: '+result.brand);
+  if(result.variant) bits.push('Variante: '+result.variant);
+  if(Number(result.confidence)>0) bits.push('Sicurezza: '+Math.round(Number(result.confidence)*100)+'%');
+  if(Array.isArray(result.visibleEvidence)) bits.push(...result.visibleEvidence.slice(0,3));
+  if(!bits.length) return '';
+  return `<div class="scan-evidence">${bits.map(x=>`<span>${esc(x)}</span>`).join('')}</div>`;
 }
 function addScannerResult(result){
   const id='scan_'+Math.random().toString(36).slice(2,9);
-  const html=`<article class="scan-result ${result.needsRetake?'bad':''}" id="${id}">
+  const title=result.needsRetake?'Foto da rifare':(result.needsManual?'Controlla risultato':'Prodotto riconosciuto da Vision AI');
+  const placeholder=result.productPlaceholder||'Es. Coca-Cola, latte, acqua...';
+  const confidence=Number(result.confidence||0);
+  const confidenceClass=confidence>=.78?'good':confidence>=.45?'mid':'low';
+  const html=`<article class="scan-result ${result.needsRetake?'bad':''} ${result.needsManual?'manual':'ai-ok'}" id="${id}">
     <img src="${esc(result.dataUrl||'assets/illustrations/generic-item.png')}" alt="Foto prodotto">
     <div class="scan-fields">
-      <strong>${result.needsRetake?'Foto da rifare':'Prodotto riconosciuto'}</strong>
-      <p>${esc(result.reason || (result.confidence?`Confidenza AI ${Math.round(result.confidence*100)}%`:'Controlla e conferma.'))}</p>
+      <div class="scan-title-row"><strong>${title}</strong>${confidence?`<small class="scan-confidence ${confidenceClass}">${Math.round(confidence*100)}%</small>`:''}</div>
+      <p>${esc(result.reason || (confidence?`Confidenza AI ${Math.round(confidence*100)}%`:'Controlla e conferma.'))}</p>
+      ${scanEvidenceHtml(result)}
       ${result.needsRetake?'<button class="outline-btn" data-retake>Rifai foto</button>':`
-      <label>Nome prodotto<input data-scan-name value="${esc(result.productName||'')}"></label>
+      <label>Nome prodotto<input data-scan-name value="${esc(result.productName||'')}" placeholder="${esc(placeholder)}"></label>
       <div class="scan-grid"><label>Quantità<input data-scan-qty type="number" min="0" step="0.1" value="${esc(result.quantity||1)}"></label><label>Unità<input data-scan-unit value="${esc(result.unit||'pz')}"></label></div>
       <label>Categoria<select data-scan-cat>${categoryOptions(result.category||'food')}</select></label>
       <button class="primary-btn" data-confirm-scan>Conferma e aggiungi in casa</button>`}
