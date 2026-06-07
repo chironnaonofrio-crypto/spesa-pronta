@@ -1074,7 +1074,7 @@ body::after{content:'V27.48 PREMIUM CORE 1M';position:fixed;right:14px;bottom:10
 
 /* V27.56 responsive text + layout fix */
 
-:root{--deploy-version:"V27.64 BRAND TITLE FIX"}
+:root{--deploy-version:"V27.65 HEADER FIX"}
 .topbar,.top-title,.top-actions,.panel-head,.premium-hero,.premium-hero-copy,.premium-hero-image,.onboarding-steps.pro-steps article,.scanner-head,.scanner-title-block,.scanner-quick-cards,.scanner-card-premium .scanner-quick-cards>span,.scanner-card-premium .scanner-quick-cards .quick-copy,.seed-proof-head,.seed-proof-stats span{min-width:0!important}
 .topbar{gap:12px!important;flex-wrap:wrap!important;align-items:flex-start!important}
 .top-actions{margin-left:auto!important;flex-wrap:wrap!important;justify-content:flex-end!important;gap:10px!important;max-width:100%!important}
@@ -1146,7 +1146,7 @@ body::after{content:'V27.48 PREMIUM CORE 1M';position:fixed;right:14px;bottom:10
 }
 
 
-/* V27.64 final: root + public aligned, strict no-overflow */
+/* V27.65 final: root + public aligned, strict no-overflow */
 html,body{max-width:100%!important;overflow-x:hidden!important}
 *{box-sizing:border-box}
 .app-frame,.main,.topbar,.top-title,.top-actions,.view,.panel,.scanner-card-premium{max-width:100%!important}
@@ -1237,10 +1237,10 @@ img{max-width:100%;height:auto}
 }
 
 
-/* V27.64 future UI cleanup */
+/* V27.65 future UI cleanup */
 .deploy-version-pill,.deploy-floating-version{display:none!important}
 body::after{
-  content:'V27.64 BRAND TITLE FIX'!important;
+  content:'V27.65 HEADER FIX'!important;
   position:fixed!important;
   left:10px!important;
   right:auto!important;
@@ -1311,7 +1311,7 @@ body::after{
 }
 
 
-/* V27.64 final hard override */
+/* V27.65 final hard override */
 .deploy-version-pill,.deploy-floating-version{
   display:none!important;
   visibility:hidden!important;
@@ -1322,7 +1322,7 @@ body::after{
   pointer-events:none!important;
 }
 body::after{
-  content:'V27.64 BRAND TITLE FIX'!important;
+  content:'V27.65 HEADER FIX'!important;
   position:fixed!important;
   left:9px!important;
   right:auto!important;
@@ -1358,11 +1358,11 @@ body::after{
 }
 
 
-/* V27.64 square grid buttons hard override */
+/* V27.65 square grid buttons hard override */
 
-/* V27.64 square compact grid fix */
+/* V27.65 square compact grid fix */
 .deploy-version-pill,.deploy-floating-version{display:none!important}
-body::after{content:'V27.64 BRAND TITLE FIX'!important;position:fixed!important;left:8px!important;bottom:7px!important;right:auto!important;z-index:9999!important;font:900 8.5px/1 Inter,Arial,sans-serif!important;letter-spacing:.045em!important;color:rgba(7,27,52,.30)!important;pointer-events:none!important;background:transparent!important;padding:0!important;border:0!important;box-shadow:none!important}
+body::after{content:'V27.65 HEADER FIX'!important;position:fixed!important;left:8px!important;bottom:7px!important;right:auto!important;z-index:9999!important;font:900 8.5px/1 Inter,Arial,sans-serif!important;letter-spacing:.045em!important;color:rgba(7,27,52,.30)!important;pointer-events:none!important;background:transparent!important;padding:0!important;border:0!important;box-shadow:none!important}
 
 /* Head text smaller inside modal */
 .scanner-title-block p{font-size:.9rem!important;line-height:1.22!important;letter-spacing:.015em!important;overflow-wrap:anywhere!important;word-break:normal!important}
@@ -1469,10 +1469,10 @@ body::after{content:'V27.64 BRAND TITLE FIX'!important;position:fixed!important;
 }
 
 
-/* V27.64 title + hero image fix */
+/* V27.65 title + hero image fix */
 
-/* V27.64 title + hero image fix */
-body::after{content:'V27.64 BRAND TITLE FIX'!important}
+/* V27.65 title + hero image fix */
+body::after{content:'V27.65 HEADER FIX'!important}
 
 /* Make title adapt nicely */
 .topbar{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;gap:12px!important;align-items:start!important}
@@ -1517,7 +1517,7 @@ body::after{content:'V27.64 BRAND TITLE FIX'!important}
 }
 
 
-/* V27.64 modern language menu */
+/* V27.65 modern language menu */
 .lang-select-native{position:absolute!important;opacity:0!important;pointer-events:none!important;width:1px!important;height:1px!important;overflow:hidden!important}
 .lang-picker{position:relative;min-width:150px;z-index:60}
 .lang-trigger{
@@ -1570,7 +1570,7 @@ body::after{content:'V27.64 BRAND TITLE FIX'!important}
 }
 
 
-/* V27.64 centered flag language menu */
+/* V27.65 centered flag language menu */
 .lang-select-native{position:absolute!important;opacity:0!important;pointer-events:none!important;width:1px!important;height:1px!important;overflow:hidden!important}
 .lang-picker{position:relative;z-index:90;min-width:auto!important}
 .lang-trigger{
@@ -1631,10 +1631,10 @@ body::after{content:'V27.64 BRAND TITLE FIX'!important}
 }
 
 
-/* V27.64 brand title fully responsive */
+/* V27.65 brand title fully responsive */
 
-/* V27.64 brand title fully responsive */
-body::after{content:'V27.64 BRAND TITLE FIX'!important}
+/* V27.65 brand title fully responsive */
+body::after{content:'V27.65 HEADER FIX'!important}
 .topbar{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;align-items:center!important;gap:14px!important}
 .top-title{display:grid!important;grid-template-columns:68px minmax(0,1fr)!important;align-items:center!important;gap:12px!important;min-width:0!important;width:100%!important}
 .top-title .brand-mark.top{width:68px!important;height:68px!important;min-width:68px!important;flex:none!important}
@@ -1670,4 +1670,185 @@ body::after{content:'V27.64 BRAND TITLE FIX'!important}
   .top-title h1{font-size:clamp(1.55rem,8.5vw,1.95rem)!important;letter-spacing:.025em!important;line-height:.88!important}
   .top-title small{font-size:.62rem!important}
   .top-subtitle{font-size:.72rem!important}
+}
+
+
+/* V27.65 header brand lock */
+
+/* V27.65 header brand lock: titolo mai tagliato */
+body::after{content:'V27.65 HEADER FIX'!important}
+
+.topbar{
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:stretch!important;
+  justify-content:flex-start!important;
+  gap:16px!important;
+  overflow:visible!important;
+}
+
+.top-title{
+  display:grid!important;
+  grid-template-columns:72px minmax(0,1fr)!important;
+  align-items:center!important;
+  gap:14px!important;
+  width:100%!important;
+  max-width:100%!important;
+  min-width:0!important;
+  overflow:visible!important;
+}
+
+.top-title .brand-mark.top{
+  width:72px!important;
+  height:72px!important;
+  min-width:72px!important;
+  max-width:72px!important;
+  flex:0 0 72px!important;
+}
+
+.top-title > div{
+  min-width:0!important;
+  max-width:100%!important;
+  overflow:visible!important;
+}
+
+.top-title small{
+  display:block!important;
+  max-width:100%!important;
+  font-size:.72rem!important;
+  line-height:1.04!important;
+  letter-spacing:.10em!important;
+  overflow:visible!important;
+  white-space:normal!important;
+  word-break:normal!important;
+  overflow-wrap:normal!important;
+}
+
+.top-title h1{
+  display:block!important;
+  margin:2px 0 0!important;
+  max-width:100%!important;
+  color:#071b39!important;
+  font-size:clamp(2.15rem,8.5vw,3.55rem)!important;
+  line-height:.86!important;
+  letter-spacing:.045em!important;
+  white-space:normal!important;
+  word-break:keep-all!important;
+  overflow-wrap:normal!important;
+  text-wrap:balance!important;
+  overflow:visible!important;
+}
+
+.top-subtitle{
+  margin-top:8px!important;
+  max-width:100%!important;
+  font-size:.82rem!important;
+  line-height:1.08!important;
+  letter-spacing:.02em!important;
+  white-space:normal!important;
+  word-break:normal!important;
+  overflow-wrap:anywhere!important;
+  overflow:visible!important;
+}
+
+.top-actions{
+  width:100%!important;
+  max-width:100%!important;
+  display:grid!important;
+  grid-template-columns:58px minmax(0,1fr) 58px!important;
+  align-items:center!important;
+  gap:12px!important;
+  justify-content:stretch!important;
+  margin:0!important;
+}
+
+.top-actions .mobile-menu-btn,
+.top-actions .icon-btn{
+  width:58px!important;
+  min-width:58px!important;
+  height:58px!important;
+  min-height:58px!important;
+  padding:0!important;
+  border-radius:18px!important;
+}
+
+.top-actions .lang-picker{
+  width:100%!important;
+  min-width:0!important;
+}
+
+.top-actions .lang-trigger{
+  width:100%!important;
+  min-width:0!important;
+  height:58px!important;
+  min-height:58px!important;
+}
+
+.top-actions .user-pill{
+  grid-column:1/-1!important;
+  width:100%!important;
+}
+
+@media(max-width:520px){
+  .topbar{padding:16px!important;gap:14px!important}
+  .top-title{
+    grid-template-columns:62px minmax(0,1fr)!important;
+    gap:12px!important;
+  }
+  .top-title .brand-mark.top{
+    width:62px!important;
+    height:62px!important;
+    min-width:62px!important;
+    max-width:62px!important;
+  }
+  .top-title small{
+    font-size:.64rem!important;
+    letter-spacing:.08em!important;
+  }
+  .top-title h1{
+    font-size:clamp(1.9rem,9vw,2.6rem)!important;
+    line-height:.84!important;
+    letter-spacing:.035em!important;
+  }
+  .top-subtitle{
+    font-size:.76rem!important;
+    line-height:1.05!important;
+  }
+  .top-actions{
+    grid-template-columns:52px minmax(0,1fr) 52px!important;
+    gap:10px!important;
+  }
+  .top-actions .mobile-menu-btn,
+  .top-actions .icon-btn{
+    width:52px!important;
+    min-width:52px!important;
+    height:52px!important;
+    min-height:52px!important;
+  }
+  .top-actions .lang-trigger{
+    height:52px!important;
+    min-height:52px!important;
+  }
+}
+
+@media(max-width:380px){
+  body::after{font-size:8px!important;left:7px!important;bottom:6px!important}
+  .topbar{padding:14px!important}
+  .top-title{
+    grid-template-columns:56px minmax(0,1fr)!important;
+    gap:10px!important;
+  }
+  .top-title .brand-mark.top{
+    width:56px!important;
+    height:56px!important;
+    min-width:56px!important;
+    max-width:56px!important;
+  }
+  .top-title h1{
+    font-size:clamp(1.65rem,8.8vw,2.18rem)!important;
+    line-height:.83!important;
+    letter-spacing:.025em!important;
+  }
+  .top-title small{font-size:.58rem!important}
+  .top-subtitle{font-size:.70rem!important}
 }
