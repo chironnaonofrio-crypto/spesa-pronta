@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v27.14-inline-images-account-actions';
+window.SPESA_PRONTA_VERSION='v27.15-register-fix';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -450,7 +450,13 @@ function bind(){
   $('#verifyPhoneForm')?.addEventListener('submit', verifyPhoneSubmit);
   $('#resendPhoneBtn')?.addEventListener('click', resendPhoneCode);
   $('#continueToInventoryBtn')?.addEventListener('click', continueToInventory);
-  $('#registerForm').addEventListener('submit', register);
+  $('#registerForm')?.setAttribute('novalidate','novalidate');
+  $('#loginForm')?.setAttribute('novalidate','novalidate');
+  $('#registerForm')?.addEventListener('submit', register);
+  $('#registerSubmitBtn')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    register(e);
+  });
   $('#refreshCaptchaBtn')?.addEventListener('click', () => { captcha=newCaptcha(); renderCaptcha(); });
   $('#continueOfflineBtn')?.addEventListener('click', () => toast('Per usare Spesa Pronta serve accesso o registrazione cloud.'));
   $('#initialScanBtn')?.addEventListener('click', () => openGroceryScanner(true));
@@ -995,34 +1001,53 @@ function continueLocalProfile(){
   saveAll(); render(); toast('Profilo locale creato. Ora fai l’inventario iniziale.'); showView('onboarding');
 }
 async function register(e){
-  e.preventDefault();
-  const answer=$('#regCaptcha').value;
-  if(answer!==captcha.target.id){ toast(t('wrongCaptcha')); captcha=newCaptcha(); renderCaptcha(); return; }
-  const firstName=$('#regFirstName').value.trim(), lastName=$('#regLastName').value.trim(), username=$('#regUsername').value.trim(), email=$('#regEmail').value.trim(), password=$('#regPassword').value;
+  e?.preventDefault?.();
   ensureRegistrationPhoneFields();
-  const phoneCountry=$('#regPhoneCountry')?.value || '+39', phoneNumber=$('#regPhoneNumber')?.value.trim() || '';
+  const btn=$('#registerSubmitBtn') || document.querySelector('.register-submit-btn');
+  const originalMain=btn?.querySelector('.btn-main')?.textContent || 'Registrati';
+  const answer=$('#regCaptcha')?.value || '';
+  if(!captcha || !captcha.target){ captcha=newCaptcha(); renderCaptcha(); }
+  if(answer!==captcha.target.id){
+    toast(t('wrongCaptcha'));
+    captcha=newCaptcha();
+    renderCaptcha();
+    return;
+  }
+  const firstName=$('#regFirstName')?.value.trim() || '';
+  const lastName=$('#regLastName')?.value.trim() || '';
+  const username=$('#regUsername')?.value.trim() || '';
+  const email=$('#regEmail')?.value.trim() || '';
+  const password=$('#regPassword')?.value || '';
+  const phoneCountry=$('#regPhoneCountry')?.value || '+39';
+  const phoneNumber=$('#regPhoneNumber')?.value.trim() || '';
   if(!firstName||!lastName||!username||!email||!password||!phoneNumber){ toast(t('required')); return; }
   if(firstName.length<2 || lastName.length<2){ toast('Nome e cognome devono avere almeno 2 lettere.'); return; }
   if(!/^[a-zA-Z0-9_.-]{3,32}$/.test(username)){ toast('Nome utente: minimo 3 caratteri, solo lettere, numeri, punto, trattino o underscore.'); return; }
   if(!emailLooksValid(email)){ toast('Email non valida. Controlla bene l’indirizzo prima di continuare.'); $('#regEmail')?.focus(); return; }
   if(!passwordLooksStrong(password)){ toast('Password: minimo 8 caratteri con almeno una lettera e un numero.'); return; }
-  if(!phoneLooksValid(phoneCountry, phoneNumber)){ toast(t('phoneRequired')); return; }
-  settings.people=Number($('#regPeople').value)||1; settings.animals=Number($('#regAnimals').value)||0; settings.autoSmart=$('#regAutoSmart').checked; settings.apiEndpoint=$('#regEndpoint').value.trim()||settings.apiEndpoint;
+  if(!phoneLooksValid(phoneCountry, phoneNumber)){ toast(t('phoneRequired')); $('#regPhoneNumber')?.focus(); return; }
+  settings.people=Number($('#regPeople')?.value)||1;
+  settings.animals=Number($('#regAnimals')?.value)||0;
+  settings.autoSmart=!!$('#regAutoSmart')?.checked;
+  settings.apiEndpoint=$('#regEndpoint')?.value.trim()||settings.apiEndpoint||'/api';
   if(settings.people<1 || settings.people>20 || settings.animals<0 || settings.animals>30){ toast('Controlla numero persone/animali.'); return; }
   settings.profile = { firstName, lastName, username, email, phoneCountry, phoneNumber };
-  settings.inventorySetupDone=false; settings.inventoryStatus='required'; settings.inventoryUpdatedAt=null;
+  settings.inventorySetupDone=false;
+  settings.inventoryStatus='required';
+  settings.inventoryUpdatedAt=null;
   state=[];
+  setBusyButton(btn, true, 'Invio in corso…');
   try{
     let res, data;
     const pendingEmail = String(session.pendingVerifyEmail||'').trim().toLowerCase();
     if(pendingEmail && pendingEmail !== String(email).trim().toLowerCase()){
-      res=await fetch(`${settings.apiEndpoint}/auth/change-pending-email`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({oldEmail:session.pendingVerifyEmail,newEmail:email})});
+      res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/auth/change-pending-email`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({oldEmail:session.pendingVerifyEmail,newEmail:email})});
       data=await res.json().catch(()=>({}));
       if(!res.ok) throw new Error(data.error||'change_pending_email_fail');
       session={mode:'pending-verification',user:null,pendingVerifyEmail:data.email||email,pendingVerifyPhone:!!data.requiresPhoneVerification,phoneMasked:data.phoneMasked||session.phoneMasked||''};
       saveAll(); render(); toast('Email aggiornata ✅ Ti abbiamo inviato una nuova verifica.'); showView('verify-email'); return;
     }
-    res=await fetch(`${settings.apiEndpoint}/auth/register`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({firstName,lastName,username,email,password,phoneCountry,phoneNumber,people:settings.people,animals:settings.animals,autoSmart:settings.autoSmart,items:[],aiMemory})});
+    res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/auth/register`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({firstName,lastName,username,email,password,phoneCountry,phoneNumber,people:settings.people,animals:settings.animals,autoSmart:settings.autoSmart,items:[],aiMemory})});
     data=await res.json().catch(()=>({}));
     if(!res.ok) throw new Error(data.error||'register_fail');
     if(data.requiresEmailVerification){
@@ -1033,14 +1058,16 @@ async function register(e){
     applyAuthPayload(data, true); toast(t('welcomeEmailSent')); showView('welcome');
   }catch(err){
     const code=String(err?.message||'');
-    if(code==='email_exists'){ toast('Questa email è già registrata. Prova ad accedere o recupera la password.'); $('#loginEmail') && ($('#loginEmail').value=email); showView('registration'); return; }
+    if(code==='email_exists'){ toast('Questa email è già registrata. Prova ad accedere o recupera la password.'); if($('#loginEmail')) $('#loginEmail').value=email; showView('registration'); return; }
     if(code==='phone_exists'){ toast('Questo numero è già registrato. Controllalo oppure usa un altro numero.'); showView('registration'); return; }
     if(code==='invalid_email'){ toast('Email non valida. Correggila e riprova.'); goBackToRegistrationForEmailFix(); return; }
     if(code==='invalid_phone'){ toast('Numero di telefono non valido.'); showView('registration'); return; }
     if(code==='weak_password'){ toast('Password troppo debole.'); showView('registration'); return; }
     if(code==='change_pending_email_fail'){ toast('Non sono riuscito a correggere l’email. Riprova.'); goBackToRegistrationForEmailFix(); return; }
-    toast('Registrazione non riuscita: controlla i dati e riprova.');
+    toast('Registrazione non riuscita: controlla connessione, email e telefono.');
     showView('registration');
+  }finally{
+    setBusyButton(btn, false, originalMain || 'Registrati');
   }
 }
 function openAdd(){ $('#productDialog').showModal(); }
@@ -1442,3 +1469,15 @@ function toggleWakeWord(on){
 }
 
 init();
+
+
+// register-fix-hard-fallback: se qualche altro bind si blocca, il pulsante Registrati resta comunque funzionante.
+document.addEventListener('DOMContentLoaded', () => {
+  const form=document.querySelector('#registerForm');
+  const btn=document.querySelector('#registerSubmitBtn') || document.querySelector('.register-submit-btn');
+  form?.setAttribute('novalidate','novalidate');
+  if(btn && !btn.dataset.registerFallbackBound){
+    btn.dataset.registerFallbackBound='1';
+    btn.addEventListener('click', (e)=>{ e.preventDefault(); register(e); });
+  }
+});

@@ -13,11 +13,11 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="assets/styles.v27-14-inline-images.css?v=2714">
+  <link rel="stylesheet" href="assets/styles.v27-15-register-fix.css?v=2715">
   <title>Spesa Pronta</title>
 </head>
 <body>
-  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.14-INLINE-IMAGES-ACCOUNT-ACTIONS -->
+  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.15-INLINE-IMAGES-ACCOUNT-ACTIONS -->
   <div class="app-frame">
     <aside class="sidebar">
       <div class="side-brand">
@@ -125,7 +125,7 @@
             <h2 data-i18n="registerTitle">Accedi o registrati</h2>
             <p data-i18n="registerText">Prima di vedere i prodotti devi accedere o creare un profilo. Poi Spesa Pronta ti guiderà nell’inventario iniziale con foto.</p>
           </div>
-          <form id="loginForm" class="form-grid login-form">
+          <form id="loginForm" class="form-grid login-form" novalidate>
             <div class="wide form-section-intro login-section-intro">
               <span class="section-chip">Accesso rapido</span>
               <h3>Accedi al tuo account</h3>
@@ -137,7 +137,7 @@
             <button class="primary-btn wide login-submit-btn" type="submit"><span class="btn-main">Accedi a Spesa Pronta</span><small class="btn-sub">Entra e continua</small></button>
             <p class="wide auth-note">Nuovo utente? Compila la registrazione qui sotto.</p>
           </form>
-          <form id="registerForm" class="form-grid">
+          <form id="registerForm" class="form-grid" novalidate>
             <div class="wide form-section-intro register-section-intro">
               <span class="section-chip">Nuovo account</span>
               <h3>Crea il tuo profilo smart</h3>
@@ -166,7 +166,7 @@
             <input id="regEndpoint" type="hidden" value="/api">
             <label class="switch-row wide"><span data-i18n="autoSmartOrdering">Spesa intelligente automatica</span><input id="regAutoSmart" type="checkbox" checked></label>
             <div class="form-actions wide single-action">
-              <button class="primary-btn register-submit-btn" type="submit"><span class="btn-main" data-i18n="registerCreate">Registrati</span><small class="btn-sub">Attiva la tua dispensa smart</small></button>
+              <button class="primary-btn register-submit-btn" id="registerSubmitBtn" type="submit"><span class="btn-main" data-i18n="registerCreate">Registrati</span><small class="btn-sub">Attiva la tua dispensa smart</small></button>
               <button class="outline-btn hidden" id="continueOfflineBtn" type="button" aria-hidden="true" tabindex="-1">Usa profilo locale</button>
             </div>
           </form>
@@ -509,6 +509,6 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/app.v27-14-inline-images.js?v=2714" defer></script>
+  <script src="assets/app.v27-15-register-fix.js?v=2715" defer></script>
 </body>
 </html>
