@@ -13,11 +13,11 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="assets/styles.css?v=2751">
+  <link rel="stylesheet" href="assets/styles.css?v=2753">
   <title>Spesa Pronta</title>
 </head>
 <body>
-  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.51-WHITE-LAYOUT-REFINED -->
+  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.53-PREMIUM-CLEAR-CSS -->
   <div class="app-frame">
     <aside class="sidebar">
       <div class="side-brand">
@@ -273,7 +273,7 @@
                 <span><b>OCR</b> ETICHETTA • FORMATO • SCADENZA</span>
               </div>
             </div>
-            <div class="premium-hero-image"><img src="assets/illustrations/ui-ref-hero.png" alt="Cestino con prodotti e assistente Vision AI"></div>
+            <div class="premium-hero-image"><span class="vision-art vision-art-hero" role="img" aria-label="Cestino con prodotti e assistente Vision AI"></span></div>
           </div>
           <div class="seed-brain-proof" id="seedBrainProof">
             <div class="seed-proof-head">
@@ -291,10 +291,10 @@
             <div class="seed-proof-note">UNA SCHERMATA CHIARA, UN PRODOTTO ALLA VOLTA, UNA RISPOSTA PRECISA.</div>
           </div>
           <div class="onboarding-steps pro-steps">
-            <article><strong><img class="step-visual" src="assets/illustrations/ui-ref-inquadra.png" alt="Inquadra la spesa"></strong><span><b>INQUADRA</b><em>FOTOGRAFA UN PRODOTTO ALLA VOLTA PER FARLO RICONOSCERE SUBITO.</em></span></article>
-            <article><strong><img class="step-visual" src="assets/illustrations/ui-ref-legge.png" alt="Legge etichetta"></strong><span><b>LEGGE</b><em>LEGGE NOME, FORMATO ED EVENTUALE SCADENZA PRIMA DI SALVARE.</em></span></article>
-            <article><strong><img class="step-visual" src="assets/illustrations/ui-ref-dialoga.png" alt="Dialoga con te"></strong><span><b>PARLA CON TE</b><em>SE MANCA UN DATO, TI CHIEDE SOLO QUELLO CHE SERVE.</em></span></article>
-            <article><strong><img class="step-visual" src="assets/illustrations/ui-ref-exp.png" alt="Modalità exp"></strong><span><b>MODALITÀ EXP</b><em>CONTROLLA AL VOLO LE SCADENZE DEL FRIGO E DEI PRODOTTI PIÙ DELICATI.</em></span></article>
+            <article><strong><span class="vision-art step-visual vision-art-inquadra" role="img" aria-label="Inquadra la spesa"></span></strong><span><b>INQUADRA</b><em>FOTOGRAFA UN PRODOTTO ALLA VOLTA PER FARLO RICONOSCERE SUBITO.</em></span></article>
+            <article><strong><span class="vision-art step-visual vision-art-legge" role="img" aria-label="Legge etichetta"></span></strong><span><b>LEGGE</b><em>LEGGE NOME, FORMATO ED EVENTUALE SCADENZA PRIMA DI SALVARE.</em></span></article>
+            <article><strong><span class="vision-art step-visual vision-art-dialoga" role="img" aria-label="Dialoga con te"></span></strong><span><b>PARLA CON TE</b><em>SE MANCA UN DATO, TI CHIEDE SOLO QUELLO CHE SERVE.</em></span></article>
+            <article><strong><span class="vision-art step-visual vision-art-exp" role="img" aria-label="Modalità EXP"></span></strong><span><b>MODALITÀ EXP</b><em>CONTROLLA AL VOLO LE SCADENZE DEL FRIGO E DEI PRODOTTI PIÙ DELICATI.</em></span></article>
           </div>
           <div class="onboarding-actions">
             <button class="primary-btn" id="initialScanBtn" type="button">INIZIA INVENTARIO CON FOTO</button>
@@ -483,10 +483,10 @@
           <h3>SCANSIONE PRO</h3>
           <p>SCEGLI COME SCANSIONARE: FAI UNA FOTO, CARICA UN'IMMAGINE O USA LA DIRETTA. VISION RICONOSCE IL PRODOTTO E TI GUIDA PASSO DOPO PASSO.</p>
           <div class="scanner-quick-cards" aria-label="Funzioni Vision AI">
-            <span><img class="quick-card-art" src="assets/illustrations/ui-ref-inquadra.png" alt="Inquadra la spesa"><span class="quick-copy"><b>INQUADRA</b><em>RICONOSCE IL PRODOTTO</em></span></span>
-            <span><img class="quick-card-art" src="assets/illustrations/ui-ref-legge.png" alt="Legge etichetta"><span class="quick-copy"><b>LEGGE</b><em>ETICHETTA E SCADENZA</em></span></span>
-            <span><img class="quick-card-art" src="assets/illustrations/ui-ref-dialoga.png" alt="Parla con te"><span class="quick-copy"><b>PARLA CON TE</b><em>CHIEDE SOLO CIÒ CHE MANCA</em></span></span>
-            <span><img class="quick-card-art" src="assets/illustrations/ui-ref-exp.png" alt="Modalità EXP"><span class="quick-copy"><b>MODALITÀ EXP</b><em>SCADENZE RAPIDE</em></span></span>
+            <span><span class="vision-art quick-card-art vision-art-inquadra" role="img" aria-label="Inquadra la spesa"></span><span class="quick-copy"><b>INQUADRA</b><em>RICONOSCE IL PRODOTTO</em></span></span>
+            <span><span class="vision-art quick-card-art vision-art-legge" role="img" aria-label="Legge etichetta"></span><span class="quick-copy"><b>LEGGE</b><em>ETICHETTA E SCADENZA</em></span></span>
+            <span><span class="vision-art quick-card-art vision-art-dialoga" role="img" aria-label="Parla con te"></span><span class="quick-copy"><b>PARLA CON TE</b><em>CHIEDE SOLO CIÒ CHE MANCA</em></span></span>
+            <span><span class="vision-art quick-card-art vision-art-exp" role="img" aria-label="Modalità EXP"></span><span class="quick-copy"><b>MODALITÀ EXP</b><em>SCADENZE RAPIDE</em></span></span>
           </div>
         </div>
         <button class="ai-close" id="scannerCloseBtn" type="button" aria-label="Chiudi">×</button>
@@ -560,6 +560,6 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="assets/vision-seed-memory.js?v=2748" defer></script>
   <script src="assets/vision-mega-index.js?v=2748" defer></script>
-  <script src="assets/app.v27-48-premium-mega-vision.js?v=2748" defer></script>
+  <script src="assets/app.v27-48-premium-mega-vision.js?v=2753" defer></script>
 </body>
 </html>
