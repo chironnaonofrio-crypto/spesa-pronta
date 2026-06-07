@@ -13,10 +13,10 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="assets/styles.css?v=2759">
+  <link rel="stylesheet" href="assets/styles.css?v=2762">
   <title>Spesa Pronta</title>
 
-<style id="v2759-responsive-fix">
+<style id="v2762-responsive-fix">
   .deploy-version-pill{display:inline-flex!important;align-items:center!important;justify-content:center!important;min-height:34px!important;padding:0 12px!important;border-radius:999px!important;background:linear-gradient(135deg,#1266f1,#18bf72)!important;color:#fff!important;font-size:.74rem!important;font-weight:1000!important;letter-spacing:.08em!important;white-space:nowrap!important;box-shadow:0 12px 28px rgba(18,102,241,.22)!important;z-index:20!important}
   .deploy-floating-version{position:fixed!important;right:12px!important;bottom:calc(74px + env(safe-area-inset-bottom,0px))!important;z-index:99999!important;background:linear-gradient(135deg,#1266f1,#18bf72)!important;color:#fff!important;border-radius:999px!important;padding:9px 12px!important;font:1000 11px/1 Inter,Arial,sans-serif!important;letter-spacing:.08em!important;box-shadow:0 14px 34px rgba(18,102,241,.28)!important;pointer-events:none!important}
   .premium-hero-image img,.hero-ref-img,.step-visual,.quick-card-art,.seed-proof-visual{opacity:1!important;visibility:visible!important;display:block!important;filter:none!important;mix-blend-mode:normal!important}
@@ -53,8 +53,8 @@
 </style>
 
 
-<style id="v2759-final-visible-cleanup">
-  /* V27.59: niente badge grandi, solo micro versione basso/sinistra */
+<style id="v2762-final-visible-cleanup">
+  /* V27.62: niente badge grandi, solo micro versione basso/sinistra */
   .deploy-version-pill,
   .deploy-floating-version{
     display:none!important;
@@ -67,7 +67,7 @@
   }
 
   body::after{
-    content:'V27.59 MICRO BADGE'!important;
+    content:'V27.62 MODERN LANGUAGE MENU'!important;
     position:fixed!important;
     left:9px!important;
     right:auto!important;
@@ -166,9 +166,166 @@
   }
 </style>
 
+
+<style id="v2762-square-grid-fix">
+/* V27.62 square compact grid fix */
+.deploy-version-pill,.deploy-floating-version{display:none!important}
+body::after{content:'V27.62 MODERN LANGUAGE MENU'!important;position:fixed!important;left:8px!important;bottom:7px!important;right:auto!important;z-index:9999!important;font:900 8.5px/1 Inter,Arial,sans-serif!important;letter-spacing:.045em!important;color:rgba(7,27,52,.30)!important;pointer-events:none!important;background:transparent!important;padding:0!important;border:0!important;box-shadow:none!important}
+
+/* Head text smaller inside modal */
+.scanner-title-block p{font-size:.9rem!important;line-height:1.22!important;letter-spacing:.015em!important;overflow-wrap:anywhere!important;word-break:normal!important}
+.scanner-title-block h3{font-size:clamp(1.8rem,7vw,2.8rem)!important;line-height:.95!important}
+
+/* Top 4 info cards always 2x2 square-like grid */
+.scanner-card-premium .scanner-quick-cards,
+.scanner-quick-cards{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:10px!important;
+  width:100%!important;
+  max-width:100%!important;
+}
+.scanner-card-premium .scanner-quick-cards>span,
+.scanner-quick-cards>span{
+  display:grid!important;
+  grid-template-columns:56px minmax(0,1fr)!important;
+  align-items:center!important;
+  gap:8px!important;
+  width:100%!important;
+  min-width:0!important;
+  max-width:100%!important;
+  min-height:108px!important;
+  padding:10px!important;
+  border-radius:22px!important;
+  overflow:hidden!important;
+}
+.scanner-card-premium .scanner-quick-cards>span>img.quick-card-art,
+.scanner-quick-cards>span>img.quick-card-art,
+.scanner-quick-cards img.quick-card-art{
+  width:56px!important;height:56px!important;flex:0 0 56px!important;object-fit:cover!important;border-radius:14px!important;
+}
+.scanner-card-premium .scanner-quick-cards .quick-copy,
+.scanner-quick-cards .quick-copy{display:flex!important;flex-direction:column!important;justify-content:center!important;gap:4px!important;min-width:0!important;max-width:100%!important;overflow:hidden!important}
+.scanner-card-premium .scanner-quick-cards .quick-copy b,
+.scanner-quick-cards .quick-copy b{font-size:.74rem!important;line-height:1.05!important;letter-spacing:.01em!important;white-space:normal!important;overflow-wrap:anywhere!important;word-break:normal!important}
+.scanner-card-premium .scanner-quick-cards .quick-copy em,
+.scanner-quick-cards .quick-copy em{font-size:.60rem!important;line-height:1.12!important;letter-spacing:.01em!important;white-space:normal!important;overflow-wrap:anywhere!important;word-break:normal!important}
+
+/* Buttons always 2x2 style grid, compact */
+.scanner-actions{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:10px!important;
+  width:100%!important;
+}
+.scanner-actions > *{min-width:0!important;max-width:100%!important;width:100%!important}
+.scanner-actions .primary-btn,
+.scanner-actions .outline-btn,
+.scanner-actions .scanner-capture,
+.scanner-actions button,
+.scanner-actions label{
+  min-height:74px!important;
+  padding:10px 8px!important;
+  border-radius:20px!important;
+  font-size:.74rem!important;
+  line-height:1.1!important;
+  text-align:center!important;
+  white-space:normal!important;
+  overflow-wrap:anywhere!important;
+  word-break:normal!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:8px!important;
+}
+.scanner-actions .action-symbol{width:20px!important;height:20px!important;flex:0 0 20px!important;border-radius:9px!important}
+.scanner-actions .action-symbol::after{width:11px!important;height:11px!important}
+
+/* lower panel card text smaller */
+.scanner-seed-proof{padding:14px!important}
+.scanner-seed-proof h4,.scanner-seed-proof strong{font-size:1rem!important;line-height:1.05!important}
+.scanner-seed-proof p{font-size:.78rem!important;line-height:1.2!important;overflow-wrap:anywhere!important}
+
+/* Keep footer buttons normal full width */
+.scanner-footer{display:grid!important;grid-template-columns:1fr!important;gap:10px!important}
+
+@media (max-width:420px){
+  body::after{font-size:8px!important;left:7px!important;bottom:6px!important}
+  .scanner-card-premium{padding:12px!important;width:calc(100vw - 12px)!important;max-width:calc(100vw - 12px)!important}
+  .scanner-title-block p{font-size:.84rem!important;line-height:1.18!important}
+  .scanner-card-premium .scanner-quick-cards,
+  .scanner-quick-cards,
+  .scanner-actions{gap:8px!important}
+  .scanner-card-premium .scanner-quick-cards>span,
+  .scanner-quick-cards>span{grid-template-columns:50px minmax(0,1fr)!important;min-height:98px!important;padding:9px!important;border-radius:18px!important}
+  .scanner-card-premium .scanner-quick-cards>span>img.quick-card-art,
+  .scanner-quick-cards>span>img.quick-card-art,
+  .scanner-quick-cards img.quick-card-art{width:50px!important;height:50px!important;border-radius:12px!important}
+  .scanner-card-premium .scanner-quick-cards .quick-copy b,
+  .scanner-quick-cards .quick-copy b{font-size:.69rem!important;line-height:1.02!important}
+  .scanner-card-premium .scanner-quick-cards .quick-copy em,
+  .scanner-quick-cards .quick-copy em{font-size:.56rem!important;line-height:1.08!important}
+  .scanner-actions .primary-btn,
+  .scanner-actions .outline-btn,
+  .scanner-actions .scanner-capture,
+  .scanner-actions button,
+  .scanner-actions label{min-height:68px!important;font-size:.69rem!important;padding:9px 6px!important;border-radius:18px!important;gap:6px!important}
+  .scanner-actions .action-symbol{width:18px!important;height:18px!important;flex-basis:18px!important}
+  .scanner-actions .action-symbol::after{width:10px!important;height:10px!important}
+  .scanner-seed-proof h4,.scanner-seed-proof strong{font-size:.95rem!important}
+  .scanner-seed-proof p{font-size:.73rem!important;line-height:1.15!important}
+}
+</style>
+
+<style id="v2762-title-hero-fix">
+/* V27.62 title + hero image fix */
+body::after{content:'V27.62 MODERN LANGUAGE MENU'!important}
+
+/* Make title adapt nicely */
+.topbar{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;gap:12px!important;align-items:start!important}
+.top-title{min-width:0!important;flex:none!important;align-items:flex-start!important}
+.top-title > div{min-width:0!important;max-width:100%!important}
+.top-title h1{font-size:clamp(2rem,8vw,3.25rem)!important;letter-spacing:.055em!important;line-height:.88!important;word-break:normal!important;overflow-wrap:normal!important;text-wrap:balance!important;max-width:100%!important}
+.top-subtitle{max-width:100%!important;overflow-wrap:anywhere!important}
+.top-actions{display:flex!important;align-items:center!important;justify-content:flex-end!important;gap:10px!important;flex-wrap:nowrap!important}
+.top-actions .mobile-menu-btn,.top-actions select,.top-actions .icon-btn{min-width:0!important}
+.top-actions select,.top-actions .icon-btn{min-height:44px!important}
+
+/* Show the full hero image, not zoomed */
+.premium-hero-image{display:flex!important;justify-content:center!important;align-items:center!important;min-width:0!important}
+.premium-hero-image .hero-ref-img,
+.premium-hero-image img,
+.premium-hero img{
+  width:100%!important;
+  max-width:100%!important;
+  height:auto!important;
+  object-fit:contain!important;
+  object-position:center center!important;
+  border-radius:28px!important;
+  background:#eef6ff!important;
+}
+
+@media (max-width:560px){
+  .topbar{grid-template-columns:1fr!important;gap:10px!important}
+  .top-actions{justify-content:flex-start!important;gap:8px!important}
+  .top-title h1{font-size:clamp(2.05rem,10vw,2.85rem)!important;letter-spacing:.045em!important;line-height:.86!important}
+  .top-title small{letter-spacing:.08em!important}
+  .top-actions .mobile-menu-btn,.top-actions select,.top-actions .icon-btn{min-height:42px!important}
+}
+
+@media (max-width:420px){
+  body::after{font-size:8px!important;left:7px!important;bottom:6px!important}
+  .top-title{gap:10px!important}
+  .top-title .brand-mark.top{width:60px!important;height:60px!important;flex:0 0 60px!important}
+  .top-title h1{font-size:clamp(1.95rem,11vw,2.55rem)!important;letter-spacing:.04em!important;line-height:.84!important}
+  .top-subtitle{font-size:.82rem!important;line-height:1.15!important}
+  .top-actions .mobile-menu-btn,.top-actions select{padding:0 12px!important}
+  .premium-hero-image .hero-ref-img,.premium-hero-image img,.premium-hero img{border-radius:24px!important}
+}
+</style>
 </head>
 <body>
-  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.59-MICRO-BADGE -->
+  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.62-MODERN-LANGUAGE-MENU -->
   <div class="app-frame">
     <aside class="sidebar">
       <div class="side-brand">
@@ -198,12 +355,28 @@
         </div>
         <div class="top-actions">
           <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Apri menu">☰</button>
-          <select id="languageSelect" aria-label="Lingua">
-            <option value="it">IT</option>
-            <option value="en">EN</option>
-            <option value="es">ES</option>
-            <option value="de">DE</option>
-          </select>
+          <div class="lang-picker" id="langPicker">
+            <select id="languageSelect" class="lang-select-native" aria-label="Lingua">
+              <option value="it">IT</option>
+              <option value="en">EN</option>
+              <option value="es">ES</option>
+              <option value="de">DE</option>
+            </select>
+            <button class="lang-trigger" id="langTrigger" type="button" aria-label="Scegli lingua" aria-haspopup="true" aria-expanded="false">
+              <span class="lang-trigger-orb" aria-hidden="true">✦</span>
+              <span class="lang-trigger-copy">
+                <small>Lingua</small>
+                <strong id="langTriggerValue">IT • Italiano</strong>
+              </span>
+              <span class="lang-trigger-caret" aria-hidden="true">⌄</span>
+            </button>
+            <div class="lang-menu" id="langMenu" hidden>
+              <button class="lang-option active" type="button" data-lang-option="it"><span class="lang-code">IT</span><span class="lang-name">Italiano</span><span class="lang-check">✓</span></button>
+              <button class="lang-option" type="button" data-lang-option="en"><span class="lang-code">EN</span><span class="lang-name">English</span><span class="lang-check">✓</span></button>
+              <button class="lang-option" type="button" data-lang-option="es"><span class="lang-code">ES</span><span class="lang-name">Español</span><span class="lang-check">✓</span></button>
+              <button class="lang-option" type="button" data-lang-option="de"><span class="lang-code">DE</span><span class="lang-name">Deutsch</span><span class="lang-check">✓</span></button>
+            </div>
+          </div>
           <button class="icon-btn" id="syncNowBtn" type="button" title="Sync">☁</button>
           <button class="user-pill guest" id="userShortcutBtn" type="button"><span id="userPillIcon">👤</span><div class="user-pill-text"><small id="userPillSub">Account</small><b id="userLabel">Registrati / Login</b></div></button>
         </div>
@@ -709,8 +882,8 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/vision-seed-memory.js?v=2759" defer></script>
-  <script src="assets/vision-mega-index.js?v=2759" defer></script>
-  <script src="assets/app.v27-48-premium-mega-vision.js?v=2759" defer></script>
+  <script src="assets/vision-seed-memory.js?v=2762" defer></script>
+  <script src="assets/vision-mega-index.js?v=2762" defer></script>
+  <script src="assets/app.v27-48-premium-mega-vision.js?v=2762" defer></script>
 </body>
 </html>

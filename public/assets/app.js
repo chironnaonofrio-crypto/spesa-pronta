@@ -633,13 +633,72 @@ function init(){
   // V27.10: service worker disabled to prevent auto-refresh loop.
   // if('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
 }
+
+const LANGUAGE_META = {
+  it: 'IT • Italiano',
+  en: 'EN • English',
+  es: 'ES • Español',
+  de: 'DE • Deutsch'
+};
+function closeLangMenu(){
+  const picker = $('#langPicker');
+  const menu = $('#langMenu');
+  const trigger = $('#langTrigger');
+  if(!picker || !menu || !trigger) return;
+  picker.classList.remove('open');
+  menu.hidden = true;
+  trigger.setAttribute('aria-expanded','false');
+}
+function openLangMenu(){
+  const picker = $('#langPicker');
+  const menu = $('#langMenu');
+  const trigger = $('#langTrigger');
+  if(!picker || !menu || !trigger) return;
+  picker.classList.add('open');
+  menu.hidden = false;
+  trigger.setAttribute('aria-expanded','true');
+}
+function syncLanguagePicker(){
+  const value = settings.lang || 'it';
+  const triggerValue = $('#langTriggerValue');
+  if(triggerValue) triggerValue.textContent = LANGUAGE_META[value] || 'IT • Italiano';
+  $all('[data-lang-option]').forEach(btn => btn.classList.toggle('active', btn.dataset.langOption === value));
+  const native = $('#languageSelect');
+  if(native) native.value = value;
+}
+function bindLanguagePicker(){
+  const trigger = $('#langTrigger');
+  const picker = $('#langPicker');
+  if(!trigger || !picker || picker.dataset.bound === '1') return;
+  picker.dataset.bound = '1';
+  trigger.addEventListener('click', (e) => {
+    e.preventDefault();
+    if(picker.classList.contains('open')) closeLangMenu(); else openLangMenu();
+  });
+  $all('[data-lang-option]').forEach(btn => btn.addEventListener('click', () => {
+    settings.lang = btn.dataset.langOption || 'it';
+    saveAll();
+    applyLang();
+    render();
+    closeLangMenu();
+  }));
+  document.addEventListener('click', (e) => {
+    if(!picker.contains(e.target)) closeLangMenu();
+  });
+  document.addEventListener('keydown', (e) => {
+    if(e.key === 'Escape') closeLangMenu();
+  });
+  syncLanguagePicker();
+}
+
 function bind(){
   $all('.nav-item').forEach(b => b.addEventListener('click', () => showView(b.dataset.view)));
   $('#mobileMenuBtn')?.addEventListener('click', () => toggleMobileMenu(true));
   $('#mobileNavBackdrop')?.addEventListener('click', () => toggleMobileMenu(false));
   $all('[data-view-shortcut]').forEach(b => b.addEventListener('click', () => showView(b.dataset.viewShortcut)));
   $('#userShortcutBtn').addEventListener('click', handleUserShortcut);
-  $('#languageSelect').addEventListener('change', e => { settings.lang=e.target.value; saveAll(); applyLang(); render(); });
+  $('#languageSelect')?.addEventListener('change', e => { settings.lang=e.target.value; saveAll(); applyLang(); render(); });
+  bindLanguagePicker();
   $('#settingsLanguage').addEventListener('change', e => { settings.lang=e.target.value; saveAll(); applyLang(); render(); });
   $('#searchInput').addEventListener('input', e => { searchTerm=e.target.value.toLowerCase(); renderProducts(); });
   $('#categorySelect').addEventListener('change', e => { categoryFilter=e.target.value; renderProducts(); });
@@ -718,7 +777,7 @@ function applyLang(){
     const value = t(key);
     if(value && value !== key) el.placeholder = value;
   });
-  $('#languageSelect').value = settings.lang;
+  syncLanguagePicker();
   $('#settingsLanguage').value = settings.lang;
   $('#categorySelect').innerHTML = `<option value="all">${esc(t('allCategories'))}</option>` + categories.map(c=>`<option value="${c}">${esc(catName(c))}</option>`).join('');
   $('#customCategory').innerHTML = categories.map(c=>`<option value="${c}">${esc(catName(c))}</option>`).join('');
