@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v27.37-icons-delete';
+window.SPESA_PRONTA_VERSION='v27.44-seed-mega';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -177,12 +177,176 @@ let accountPendingAction = null;
 function loadState(){ try { const x=JSON.parse(localStorage.getItem(STORAGE_KEY)); return Array.isArray(x) ? migrateItems(x) : []; } catch { return []; } }
 function loadSettings(){ try { return Object.assign(defaultSettings(), JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}')); } catch { return defaultSettings(); } }
 function loadSession(){ try { return Object.assign({mode:'guest', user:null}, JSON.parse(localStorage.getItem(SESSION_KEY)||'{}')); } catch { return {mode:'guest', user:null}; } }
-function defaultAiMemory(){ return {messages:[], facts:[], events:[], scanHistory:[], learnedProducts:[], pendingVerification:false, lastGreetingDate:'', summary:'', lastInsights:{}, consumptionProfile:{version:27, learnedItems:{}, lastAnalysisAt:0}, personality:{warmth:1}}; }
-function loadAiMemory(){ try { return Object.assign(defaultAiMemory(), JSON.parse(localStorage.getItem(AI_MEMORY_KEY)||'{}')); } catch { return defaultAiMemory(); } }
+function defaultAiMemory(){ return {messages:[], facts:[], events:[], scanHistory:[], learnedProducts:[], visionBrain:{version:44,coreVersion:44,samples:[],candidateSamples:[],productStats:{},productModels:{},corrections:0,totalScans:0,autonomousHits:0,localFirstDecisions:0,cloudTeacherCalls:0,autonomyLevel:0,lastTrainedAt:0,serverSyncs:0,serverLastSyncAt:0}, voiceProfile:{version:44,heard:[],corrections:[],intentPhrases:{},fieldPhrases:{},productAliases:{},speakerStyle:{shortCommands:0,corrections:0,italianSlang:0},updatedAt:0,serverSyncs:0}, pendingVerification:false, lastGreetingDate:'', summary:'', lastInsights:{}, consumptionProfile:{version:27, learnedItems:{}, lastAnalysisAt:0}, seedMemory:{version:'',loaded:false,products:0,categories:0,lastLoadedAt:0}, personality:{warmth:1}}; }
+function loadAiMemory(){ try { const mem=Object.assign(defaultAiMemory(), JSON.parse(localStorage.getItem(AI_MEMORY_KEY)||'{}')); mem.visionBrain=Object.assign(defaultAiMemory().visionBrain, mem.visionBrain||{}); mem.visionBrain.samples=Array.isArray(mem.visionBrain.samples)?mem.visionBrain.samples:[]; mem.visionBrain.productStats=mem.visionBrain.productStats||{}; mem.visionBrain.productModels=mem.visionBrain.productModels||{}; mem.visionBrain.candidateSamples=Array.isArray(mem.visionBrain.candidateSamples)?mem.visionBrain.candidateSamples:[]; mem.voiceProfile=Object.assign(defaultAiMemory().voiceProfile, mem.voiceProfile||{}); mem.voiceProfile.heard=Array.isArray(mem.voiceProfile.heard)?mem.voiceProfile.heard:[]; mem.voiceProfile.corrections=Array.isArray(mem.voiceProfile.corrections)?mem.voiceProfile.corrections:[]; mem.voiceProfile.intentPhrases=mem.voiceProfile.intentPhrases||{}; mem.voiceProfile.fieldPhrases=mem.voiceProfile.fieldPhrases||{}; mem.voiceProfile.productAliases=mem.voiceProfile.productAliases||{}; mem.voiceProfile.speakerStyle=Object.assign(defaultAiMemory().voiceProfile.speakerStyle, mem.voiceProfile.speakerStyle||{}); return mem; } catch { return defaultAiMemory(); } }
 function saveAiMemory(){ localStorage.setItem(AI_MEMORY_KEY, JSON.stringify(aiMemory)); }
 function defaultSettings(){ return {lang:'it', cloudEnabled:false, apiEndpoint:'/api', token:'', householdId:'', people:2, animals:0, autoSmart:true, alexaConnected:false, googleAssistantConnected:false, inventorySetupDone:false, inventoryStatus:'required', inventoryUpdatedAt:null, profile:{firstName:'',lastName:'',username:'',email:''}}; }
 function migrateItems(items){ return items.map(x => ({...createItem(x.id||cryptoId(), x.image||'assets/illustrations/generic-item.png', x.category||'food', x.names||{it:x.name||x.id,en:x.name||x.id,es:x.name||x.id,de:x.name||x.id}, x.qty??1, x.maxQty??6, x.baseThreshold??2, x.unitOptions||['pz','pc','lt','kg'], {custom:x.custom, usage:x.usage||0, kind:x.kind, perPersonMin:x.perPersonMin, perAnimalMin:x.perAnimalMin, recommendedBuy:x.recommendedBuy}), ...x})); }
 function saveAll(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); localStorage.setItem(SESSION_KEY, JSON.stringify(session)); scheduleSync(); }
+
+function seedCategoryToApp(cat=''){
+  const map={water:'drinks',soft_drinks:'drinks',dairy:'food',deli:'food',pasta_rice:'food',pantry:'food',breakfast_snacks:'food',fruit:'fruit',vegetables:'veg',frozen:'food',cleaning:'house',paper_house:'house',personal_care:'house',pets:'pets',baby:'food'};
+  return map[cat] || cat || 'food';
+}
+function activeVisionSeedMemory(){
+  return (window.SPESA_VISION_SEED_MEMORY && Array.isArray(window.SPESA_VISION_SEED_MEMORY.products)) ? window.SPESA_VISION_SEED_MEMORY : null;
+}
+
+let visionSeedSearchCache = null;
+function buildVisionSeedSearchIndex(){
+  const seed=activeVisionSeedMemory();
+  if(!seed) return [];
+  if(visionSeedSearchCache && visionSeedSearchCache.version===seed.version) return visionSeedSearchCache.rows;
+  const rows=(seed.products||[]).map((p,idx)=>{
+    const brand=String(p.brand||'');
+    const format=Array.isArray(p.formats)?String(p.formats[0]||''):'';
+    const text=[p.name,brand,p.category,p.subcategory,p.packageType,format,...(p.aliases||[]),...(p.ocrKeywords||[]),...(p.visualHints||[])].join(' ');
+    const norm=normalizeLearnText(text);
+    const tokens=[...new Set(norm.split(/\s+/).filter(t=>t.length>=2))];
+    return {p,idx,norm,tokens,nameNorm:normalizeLearnText(p.name||''),brandNorm:normalizeLearnText(brand),category:seedCategoryToApp(p.category||''),format};
+  });
+  visionSeedSearchCache={version:seed.version, rows};
+  return rows;
+}
+function bestVisionSeedMatchForResult(result={}){
+  const text=normalizeLearnText([result.productName,result.brand,result.variant,result.productType,result.packageType,result.estimatedSize,...(result.detectedText||[]),...(result.visibleEvidence||[])].join(' '));
+  if(!text || text.length<3) return null;
+  const words=new Set(text.split(/\s+/).filter(t=>t.length>=2));
+  let best=null;
+  for(const row of buildVisionSeedSearchIndex()){
+    let score=0;
+    if(row.nameNorm && (text.includes(row.nameNorm) || row.nameNorm.includes(text))) score+=9;
+    if(row.brandNorm && text.includes(row.brandNorm)) score+=5;
+    if(result.category && row.category===result.category) score+=1.2;
+    for(const tok of row.tokens){
+      if(words.has(tok)) score += tok.length>=6 ? 1.45 : 0.8;
+    }
+    // Penalizza match troppo generici: devono esserci nome/marca/formato o più token forti.
+    if(row.brandNorm && !text.includes(row.brandNorm)) score-=0.8;
+    if(row.format && text.includes(normalizeLearnText(row.format))) score+=2.2;
+    if(!best || score>best.score) best={row,score};
+  }
+  if(!best || best.score<5.2) return null;
+  return best;
+}
+function applyDirectSeedKnowledge(result={}){
+  const match=bestVisionSeedMatchForResult(result); if(!match) return result;
+  const p=match.row.p; const confirmedMemory=result.memoryVision && !result.seedVision;
+  const seedFormat=(Array.isArray(p.formats)?p.formats[0]:'')||'';
+  if((!result.productName || isBadScanName(result.productName)) && p.name) result.productName=p.name;
+  if(!result.brand && p.brand && p.brand!=='Generico') result.brand=p.brand;
+  if(!confirmedMemory && (!result.estimatedSize || /da confermare|circa|possibile/i.test(String(result.estimatedSize))) && seedFormat) result.estimatedSize=seedFormat;
+  if((!result.unit || result.unit==='pz') && p.defaultUnit) result.unit=p.defaultUnit;
+  if(result.category==='food' && p.category) result.category=match.row.category || seedCategoryToApp(p.category);
+  if(!result.packageType && p.packageType) result.packageType=p.packageType;
+  result.seedVision=true; result.bestMatchName=result.bestMatchName||p.name; result.bestMatchSource=result.bestMatchSource||'seed MEGA prodotti comuni'; result.bestMatchScore=Math.max(Number(result.bestMatchScore||0), Math.min(99, Math.round(match.score*7)));
+  result.confidence=Math.max(Number(result.confidence||0), Math.min(.88, .58 + match.score/55));
+  if(result.confidence<.90) result.shouldAskConfirmation=true;
+  return result;
+}
+function seedLearnedRow(p){
+  const appCat=seedCategoryToApp(p.category||'food');
+  const format=(Array.isArray(p.formats)?p.formats[0]:'') || '';
+  const brand=(p.brand && p.brand!=='Generico') ? p.brand : '';
+  const name=String(p.name||'').trim();
+  const key='seed | '+normalizeLearnText([name,brand,format].filter(Boolean).join(' '));
+  return {
+    key, seed:true, seedVersion:activeVisionSeedMemory()?.version||'seed', seedConfidence:.55,
+    productName:name, brand, variant:String(p.subcategory||''), category:appCat, originalSeedCategory:p.category||'', unit:p.defaultUnit||'pz',
+    productType:String(p.subcategory||''), packageType:String(p.packageType||''), estimatedSize:format,
+    formats:Array.isArray(p.formats)?p.formats.slice(0,8):[], ocrKeywords:Array.isArray(p.ocrKeywords)?p.ocrKeywords.slice(0,12):[],
+    isLiquid:['water','soft_drinks','dairy'].includes(p.category), seenCount:0, seedSeenCount:1, lastConfirmedAt:0,
+    aliases:Array.isArray(p.aliases)?p.aliases.slice(0,10):[name], visualHints:Array.isArray(p.visualHints)?p.visualHints.slice(0,10):[], knownColors:Array.isArray(p.knownColors)?p.knownColors.slice(0,8):[], storage:p.storage||''
+  };
+}
+function ensureSeedVisionMemory(force=false){
+  const seed=activeVisionSeedMemory();
+  if(!seed) return false;
+  aiMemory.seedMemory=Object.assign({version:'',loaded:false,products:0,categories:0,lastLoadedAt:0}, aiMemory.seedMemory||{});
+  if(!force && aiMemory.seedMemory.loaded && aiMemory.seedMemory.version===seed.version) return true;
+  aiMemory.learnedProducts=Array.isArray(aiMemory.learnedProducts)?aiMemory.learnedProducts:[];
+  const byKey=new Map(aiMemory.learnedProducts.map((r,i)=>[String(r.key||''), i]));
+  let added=0, updated=0;
+  const seedProducts = Array.isArray(seed.products) ? seed.products : [];
+  const seedRowsForLocalMemory = seedProducts.slice(0,900);
+  for(const p of seedRowsForLocalMemory){
+    if(!p?.name) continue;
+    const row=seedLearnedRow(p);
+    const idx=byKey.get(row.key);
+    if(idx===undefined){ aiMemory.learnedProducts.push(row); added++; }
+    else { aiMemory.learnedProducts[idx]=Object.assign({}, row, aiMemory.learnedProducts[idx], {seed:true, seedVersion:row.seedVersion, formats:row.formats, ocrKeywords:row.ocrKeywords}); updated++; }
+  }
+  const b=ensureVisionBrain();
+  b.seedVersion=seed.version; b.seedProducts=seedProducts.length; b.seedCategories=(seed.categories||[]).length; b.seedRules=seed.rules||{}; b.seedLoadedAt=Date.now();
+  aiMemory.seedMemory={version:seed.version,loaded:true,products:seedProducts.length,categories:(seed.categories||[]).length,lastLoadedAt:Date.now(),added,updated,indexed:true};
+  // Keep real user-confirmed rows first, then seed rows. Seeds are knowledge, not proof: they help but don't overrule confirmed corrections.
+  aiMemory.learnedProducts.sort((a,b)=>{
+    if(!!a.seed!==!!b.seed) return a.seed?1:-1;
+    return Number(b.lastConfirmedAt||0)-Number(a.lastConfirmedAt||0);
+  });
+  aiMemory.learnedProducts=aiMemory.learnedProducts.slice(0,900);
+  saveAiMemory();
+  return true;
+}
+
+
+function ensureVoiceProfile(){
+  aiMemory.voiceProfile=Object.assign(defaultAiMemory().voiceProfile, aiMemory.voiceProfile||{});
+  aiMemory.voiceProfile.heard=Array.isArray(aiMemory.voiceProfile.heard)?aiMemory.voiceProfile.heard:[];
+  aiMemory.voiceProfile.corrections=Array.isArray(aiMemory.voiceProfile.corrections)?aiMemory.voiceProfile.corrections:[];
+  aiMemory.voiceProfile.intentPhrases=aiMemory.voiceProfile.intentPhrases||{};
+  aiMemory.voiceProfile.fieldPhrases=aiMemory.voiceProfile.fieldPhrases||{};
+  aiMemory.voiceProfile.productAliases=aiMemory.voiceProfile.productAliases||{};
+  aiMemory.voiceProfile.speakerStyle=Object.assign(defaultAiMemory().voiceProfile.speakerStyle, aiMemory.voiceProfile.speakerStyle||{});
+  return aiMemory.voiceProfile;
+}
+function addCounter(obj,key,inc=1){ if(!key) return; obj[key]=Number(obj[key]||0)+inc; }
+function learnVoiceLocally(raw='', intent='heard', field='', value=''){
+  const text=String(raw||'').trim(); if(!text) return;
+  const vp=ensureVoiceProfile(); const norm=normalizeText(text).slice(0,120);
+  vp.heard.unshift({text:text.slice(0,160), norm, intent, field, value:String(value||'').slice(0,120), at:Date.now()});
+  vp.heard=vp.heard.slice(0,160);
+  addCounter(vp.intentPhrases, `${intent}:${norm}`);
+  if(field){ vp.fieldPhrases[field]=vp.fieldPhrases[field]||{}; addCounter(vp.fieldPhrases[field], norm); }
+  if(/bro|fra|cioe|cioè|capito|ok|okay|va bene/.test(norm)) vp.speakerStyle.italianSlang=Number(vp.speakerStyle.italianSlang||0)+1;
+  if(norm.split(/\s+/).length<=3) vp.speakerStyle.shortCommands=Number(vp.speakerStyle.shortCommands||0)+1;
+  if(/non e|non è|correggi|cambia|metti/.test(norm)) vp.speakerStyle.corrections=Number(vp.speakerStyle.corrections||0)+1;
+  vp.updatedAt=Date.now();
+  saveAiMemory();
+}
+function rememberVoiceCorrection(raw='', field='', value='', before=''){
+  const vp=ensureVoiceProfile();
+  vp.corrections.unshift({raw:String(raw||'').slice(0,180), field, value:String(value||'').slice(0,120), before:String(before||'').slice(0,120), at:Date.now()});
+  vp.corrections=vp.corrections.slice(0,180);
+  learnVoiceLocally(raw,'correction',field,value);
+}
+function mergeServerLearning(payload={}){
+  if(payload?.memory){
+    const localVision=aiMemory.visionBrain; const localVoice=aiMemory.voiceProfile;
+    aiMemory=Object.assign(aiMemory,payload.memory);
+    aiMemory.visionBrain=Object.assign(defaultAiMemory().visionBrain, aiMemory.visionBrain||{}, localVision||{});
+    aiMemory.voiceProfile=Object.assign(defaultAiMemory().voiceProfile, aiMemory.voiceProfile||{}, localVoice||{});
+    saveAiMemory();
+  }
+}
+async function syncAutonomyLearningToServer(payload={}, quiet=true){
+  try{
+    if(!settings.apiEndpoint || !settings.householdId || !settings.token) return false;
+    const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/ai/learn/autonomy`,{
+      method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token||''}`},
+      body:JSON.stringify({householdId:settings.householdId, memory:aiMemory, payload})
+    });
+    if(!res.ok) return false;
+    const data=await res.json();
+    if(data.ok){
+      ensureVisionBrain().serverSyncs=Number(ensureVisionBrain().serverSyncs||0)+1; ensureVisionBrain().serverLastSyncAt=Date.now();
+      ensureVoiceProfile().serverSyncs=Number(ensureVoiceProfile().serverSyncs||0)+1;
+      mergeServerLearning(data); saveAiMemory(); refreshVisionBrainPanel();
+      return true;
+    }
+  }catch(e){ if(!quiet) console.warn('server learning sync failed',e); }
+  return false;
+}
 function t(k){ return translations[settings.lang]?.[k] || translations.it[k] || k; }
 function nameOf(item){ return item.names?.[settings.lang] || item.names?.it || item.id; }
 function catName(cat){ return t('category_'+cat); }
@@ -423,6 +587,7 @@ function init(){
   ensureRegistrationPhoneFields();
   bind();
   applyLang();
+  ensureSeedVisionMemory();
   render();
   showView(initialView());
   renderCaptcha();
@@ -708,6 +873,7 @@ function resetLocalAccountState(){
   $('#registerForm')?.reset();
   renderCaptcha();
   applyLang();
+  ensureSeedVisionMemory();
   render();
   showView('registration');
 }
@@ -1592,6 +1758,7 @@ function setScanFieldFromVoice(el, selector, value){
 }
 function handleScannerMicText(text=''){
   const raw=String(text||'').trim(); if(!raw) return;
+  learnVoiceLocally(raw,'scanner-heard');
   const norm=normalizeText(raw);
   if(/(ferma|disattiva).*(microfono|mic|voce)/.test(norm)){ scannerMicEnabled=false; stopScannerMic(); return; }
   if(/(attiva|riattiva).*(microfono|mic|voce)/.test(norm)){ scannerMicEnabled=true; setMicToggleUi(); startScannerMic(true); return; }
@@ -1623,6 +1790,7 @@ function applyScannerMicAnswer(el, result={}, raw=''){
     const cleaned=parseNameFromSpeech(raw);
     if(cleaned && !isBadScanName(cleaned)){
       setScanFieldFromVoice(el,'[data-scan-name]', cleaned);
+      rememberVoiceCorrection(raw,'name',cleaned,result.productName||'');
       el.dataset.voiceNameDone='1';
       result.productName=cleaned;
       setScanVoiceHelper(el, `Nome aggiornato: ${cleaned}.`, 'live');
@@ -1636,6 +1804,7 @@ function applyScannerMicAnswer(el, result={}, raw=''){
     const brand=parseBrandFromSpeech(raw) || parseNameFromSpeech(raw);
     if(brand && brand.length>1){
       setScanFieldFromVoice(el,'[data-scan-brand]', brand);
+      rememberVoiceCorrection(raw,'brand',brand,result.brand||'');
       el.dataset.voiceBrandDone='1';
       result.brand=brand;
       setScanVoiceHelper(el, `Marca aggiornata: ${brand}.`, 'live');
@@ -1647,6 +1816,7 @@ function applyScannerMicAnswer(el, result={}, raw=''){
   const spokenSize=parseSizeFromSpeech(raw);
   if(explicitSize && spokenSize){
     setScanFieldFromVoice(el,'[data-scan-size]', spokenSize);
+    rememberVoiceCorrection(raw,'size',spokenSize,result.estimatedSize||'');
     el.dataset.voiceSizeDone='1';
     result.estimatedSize=spokenSize;
     result.sizeConfirmed=true;
@@ -1658,6 +1828,7 @@ function applyScannerMicAnswer(el, result={}, raw=''){
   const qtyInfo=parseQuantityUnitFromSpeech(raw);
   if(explicitQty && qtyInfo.quantity!=null){
     setScanFieldFromVoice(el,'[data-scan-qty]', String(qtyInfo.quantity).replace('.',','));
+    rememberVoiceCorrection(raw,'quantity',String(qtyInfo.quantity),el.querySelector('[data-scan-qty]')?.value||'');
     if(qtyInfo.unit) setScanFieldFromVoice(el,'[data-scan-unit]', qtyInfo.unit);
     setScanVoiceHelper(el, `Quantità aggiornata: ${qtyInfo.quantity}${qtyInfo.unit ? ' ' + qtyInfo.unit : ''}.`, 'live');
     refreshScanResultCard(el,result);
@@ -1667,12 +1838,13 @@ function applyScannerMicAnswer(el, result={}, raw=''){
   const expiry=parseExpiryFromSpeech(raw) || parseExpiryLoose(raw);
   if(explicitExpiry){
     if(/salta|non so|non la so|nessuna/.test(norm)){ el.dataset.voiceExpiryDone='1'; setScanVoiceHelper(el, 'Scadenza saltata per ora.', 'live'); refreshScanResultCard(el,result); return true; }
-    if(expiry){ setScanFieldFromVoice(el,'[data-scan-expiry]', expiry); el.dataset.voiceExpiryDone='1'; result.expiryDate=expiry; setScanVoiceHelper(el, `Scadenza aggiornata: ${expiry}.`, 'live'); refreshScanResultCard(el,result); return true; }
+    if(expiry){ setScanFieldFromVoice(el,'[data-scan-expiry]', expiry); rememberVoiceCorrection(raw,'expiry',expiry,result.expiryDate||''); el.dataset.voiceExpiryDone='1'; result.expiryDate=expiry; setScanVoiceHelper(el, `Scadenza aggiornata: ${expiry}.`, 'live'); refreshScanResultCard(el,result); return true; }
   }
 
   const damage=detectDamageState(raw);
   if(explicitDamage && damage){
     setScanFieldFromVoice(el,'[data-scan-damage]', damage);
+    rememberVoiceCorrection(raw,'damage',damage,result.damageType||'');
     el.dataset.voiceDamageDone='1';
     result.isDamaged = damage!=='Integro';
     result.damageType = damage==='Integro' ? '' : damage;
@@ -1684,6 +1856,7 @@ function applyScannerMicAnswer(el, result={}, raw=''){
   const cat=detectCategoryFromSpeech(raw);
   if(explicitCategory && cat){
     setScanFieldFromVoice(el,'[data-scan-cat]', cat);
+    rememberVoiceCorrection(raw,'category',cat,result.category||'');
     setScanVoiceHelper(el, `Categoria aggiornata: ${catName(cat)}.`, 'live');
     refreshScanResultCard(el,result);
     return true;
@@ -1791,8 +1964,15 @@ async function askBackendAi(message){
   });
   if(!res.ok) return null;
   const data=await res.json();
-  if(data.memory){ aiMemory=Object.assign(aiMemory,data.memory); aiMemory.learnedProducts=Array.isArray(aiMemory.learnedProducts)?aiMemory.learnedProducts:[]; saveAiMemory(); }
+  if(data.memory){ const localBrain=aiMemory.visionBrain; aiMemory=Object.assign(aiMemory,data.memory); aiMemory.learnedProducts=Array.isArray(aiMemory.learnedProducts)?aiMemory.learnedProducts:[]; aiMemory.visionBrain=Object.assign(defaultAiMemory().visionBrain, aiMemory.visionBrain||{}, localBrain||{}); saveAiMemory(); }
   return data.reply || null;
+}
+
+
+function refreshVisionBrainPanel(){
+  const el=$('#visionBrainPanel'); if(!el) return;
+  const s=visionBrainStatus(); const vp=ensureVoiceProfile(); const heard=(vp.heard||[]).length, corr=(vp.corrections||[]).length, syncs=Number(ensureVisionBrain().serverSyncs||0);
+  el.innerHTML=`<strong>AI autonoma master</strong><small><span class="autonomy-badge">Vision ${s.autonomy}%</span><span class="autonomy-badge">${s.samples} esempi</span><span class="autonomy-badge">${s.models} modelli</span><span class="autonomy-badge">Voce ${heard}/${corr}</span><span class="autonomy-badge">Server sync ${syncs}</span><br>OpenAI fa da docente quando serve; quando il modello locale è sicuro lavora da solo.</small>`;
 }
 
 function ensureScannerLiveButtons(){
@@ -1810,7 +1990,8 @@ function openGroceryScanner(afterShopping=false){
   const dlg=$('#groceryScannerDialog'); if(!dlg) return;
   ensureScannerLiveButtons();
   dlg.dataset.afterShopping = afterShopping ? '1' : '0';
-  setScannerStatus(!settings.inventorySetupDone ? 'Scansiona un prodotto per volta: nome, marca, formato, scadenza e stato. Confermi o correggi prima di salvare.' : (afterShopping ? 'Controllo spesa: inquadra ogni prodotto, conferma la scheda, poi dai OK per il prossimo.' : 'Scatta o avvia la diretta. La Vision legge dettagli e ti chiede conferma solo quando serve.'));
+  refreshVisionBrainPanel();
+  setScannerStatus(!settings.inventorySetupDone ? 'Scansiona un prodotto per volta: controlla foto, nome, formato, scadenza e stato prima di salvare.' : (afterShopping ? 'Controllo spesa: conferma la scheda, poi dai OK per passare al prossimo prodotto.' : 'Scatta o avvia la diretta. La Vision legge dettagli e ti fa correggere prima del salvataggio.'));
   try{ dlg.showModal(); }catch{ dlg.setAttribute('open',''); }
   openAiPanel();
 }
@@ -2207,18 +2388,27 @@ async function analyzeGroceryDataUrl(dataUrl,fileName='photo.jpg', visualSignatu
     return;
   }
   let visionError=null;
-  let result=await askVisionAi(dataUrl).catch((err)=>{ visionError=err; return null; });
-  const cloudActuallyFailed = !result || result.cloudError || result.cloudOffline;
-  if(cloudActuallyFailed){
-    result=await guessScanFallback(fileName,dataUrl,result);
-    result.cloudFallback=true;
-    result.cloudError = result.cloudError || visionError?.visionError?.error || visionError?.message || result.cloudError || '';
-    if(result.cloudError && !result.reason) result.reason='Cloud OpenAI chiamata ma risposta non utilizzabile: '+String(result.cloudError).slice(0,120);
-  } else {
-    result.cloudVision=true; result.cloudOffline=false; result.cloudFallback=false;
+  let localPre=await autonomousVisionGuess(dataUrl).catch(()=>null);
+  let result=null;
+  if(localPre && localAutonomyReady(localPre)){
+    const b=ensureVisionBrain(); b.localFirstDecisions=Number(b.localFirstDecisions||0)+1;
+    result=Object.assign({}, localPre, {cloudVision:false, cloudOffline:false, cloudFallback:false, localFirst:true, autonomousVision:true, reason:(localPre.reason||'')+' Autonomia locale: OpenAI non necessario per questo prodotto già imparato.'});
+  }else{
+    result=await askVisionAi(dataUrl).catch((err)=>{ visionError=err; return null; });
+    if(result && result.cloudVision) distillCloudTeacherSample(dataUrl,result);
+    const cloudActuallyFailed = !result || result.cloudError || result.cloudOffline;
+    if(cloudActuallyFailed){
+      result=localPre || await guessScanFallback(fileName,dataUrl,result);
+      result.cloudFallback=true;
+      result.cloudError = result.cloudError || visionError?.visionError?.error || visionError?.message || result.cloudError || '';
+      if(result.cloudError && !result.reason) result.reason='Cloud OpenAI chiamata ma risposta non utilizzabile: '+String(result.cloudError).slice(0,120);
+    } else {
+      result.cloudVision=true; result.cloudOffline=false; result.cloudFallback=false;
+    }
   }
+  result=await improveVisionWithLocalLearning(dataUrl,result);
   if(result.needsRetake){ setScannerStatus(result.reason || 'Non vedo bene, rifai la foto.', voiceLine('retake',['La foto non è abbastanza chiara. Riproviamo con il prodotto più fermo e ben visibile.','Non riesco a riconoscerlo bene. Prova a centrarlo meglio e rifare la scansione.']), true); addScannerResult({...result,dataUrl}); document.querySelector('.scanning-preview')?.remove(); return; }
-  result.dataUrl=dataUrl; result.quality=quality; result.visualSignature=visualSignature || liveScanLastMetrics?.signature || '';
+  result.dataUrl=dataUrl; result.quality=quality; result.visualSignature=visualSignature || liveScanLastMetrics?.signature || ''; ensureVisionBrain().totalScans=Number(ensureVisionBrain().totalScans||0)+1; if(result.autonomousVision) ensureVisionBrain().autonomousHits=Number(ensureVisionBrain().autonomousHits||0)+1;
   const summary=presentVisionResults(result,dataUrl);
   if(summary.count>1){
     setScannerStatus(`Ho rilevato ${summary.count} prodotti nella scena. ${summary.autoCount?summary.autoCount+' aggiunti automaticamente, ':''}${summary.manualCount?summary.manualCount+' da confermare manualmente.':'nessuno da confermare.'}`, buildResultVoiceSummary(result, summary), true);
@@ -2295,7 +2485,315 @@ async function guessProductFromImage(dataUrl=''){
   }catch(_){ }
   return null;
 }
+
+function ensureVisionBrain(){
+  aiMemory.visionBrain = Object.assign({version:40,coreVersion:40,samples:[],candidateSamples:[],productStats:{},productModels:{},corrections:0,totalScans:0,autonomousHits:0,localFirstDecisions:0,cloudTeacherCalls:0,autonomyLevel:0,lastTrainedAt:0}, aiMemory.visionBrain||{});
+  aiMemory.visionBrain.version=40; aiMemory.visionBrain.coreVersion=40;
+  aiMemory.visionBrain.samples = Array.isArray(aiMemory.visionBrain.samples) ? aiMemory.visionBrain.samples : [];
+  aiMemory.visionBrain.candidateSamples = Array.isArray(aiMemory.visionBrain.candidateSamples) ? aiMemory.visionBrain.candidateSamples : [];
+  aiMemory.visionBrain.productStats = aiMemory.visionBrain.productStats || {};
+  aiMemory.visionBrain.productModels = aiMemory.visionBrain.productModels || {};
+  return aiMemory.visionBrain;
+}
+function visionBrainStatus(){
+  const b=ensureVisionBrain();
+  const products=new Set((b.samples||[]).map(s=>normalizeLearnText(s.productName||'')).filter(Boolean));
+  const models=Object.keys(b.productModels||{}).length;
+  const autonomy=computeVisionAutonomyLevel();
+  return {samples:b.samples.length, products:products.size, models, corrections:Number(b.corrections||0), autonomousHits:Number(b.autonomousHits||0), autonomy, seedProducts:Number(b.seedProducts||0), seedVersion:b.seedVersion||''};
+}
+const VISION_COMPETENCE_CORE={
+  version:40,
+  sizePatterns:[
+    {rx:/(?:^|\b)(2|2[,.]0)\s*(?:l|lt|litri|litro)\b/i, value:'2 L'},
+    {rx:/(?:^|\b)(1[,.]5|1\s*e\s*mezzo)\s*(?:l|lt|litri|litro)\b/i, value:'1,5 L'},
+    {rx:/(?:^|\b)(1|1[,.]0)\s*(?:l|lt|litri|litro)\b/i, value:'1 L'},
+    {rx:/(?:^|\b)(500|0[,.]5)\s*(?:ml|milli|l|lt)\b/i, value:'500 ml'}
+  ],
+  junkNames:['sto','ok','si','sì','no','conferma','prodotto','manual live','auto live','live','foto','scatta','scanner'],
+  categories:{
+    water:['acqua','water','naturale','frizzante','oligominerale','vera','levissima','sant anna','san benedetto','lete','ferrarelle','rocchetta'],
+    milk:['latte','milk','uht','parzialmente scremato','intero'],
+    pasta:['pasta','spaghetti','penne','rigatoni','fusilli','divella','barilla','garofalo','rummo'],
+    home:['detersivo','candeggina','ammorbidente','sgrassatore','detergente','sapone'],
+    pet:['cane','gatto','crocchette','monge','purina','trainer']
+  }
+};
+function computeVisionAutonomyLevel(){
+  const b=ensureVisionBrain();
+  const products=new Set((b.samples||[]).map(s=>normalizeLearnText(s.productName||'')).filter(Boolean));
+  const sampleScore=Math.min(45, Math.round((b.samples||[]).length*1.5));
+  const productScore=Math.min(35, products.size*7);
+  const hitScore=Math.min(20, Math.round(Number(b.autonomousHits||0)*2));
+  const level=Math.min(100, sampleScore+productScore+hitScore);
+  b.autonomyLevel=level;
+  return level;
+}
+function canonicalVisionSizeLocal(raw=''){
+  const s=String(raw||'').toLowerCase().replace(',', '.');
+  for(const p of VISION_COMPETENCE_CORE.sizePatterns){ if(p.rx.test(s)) return p.value; }
+  return '';
+}
+function normalizeProductClassText(result={}){ return normalizeLearnText([result.productName,result.brand,result.variant,result.productType,result.packageType,result.estimatedSize,...(result.detectedText||[]),...(result.visibleEvidence||[])].join(' ')); }
+function competenceClassFromText(result={}){
+  const t=normalizeProductClassText(result);
+  const cats=VISION_COMPETENCE_CORE.categories;
+  if(cats.water.some(k=>t.includes(normalizeLearnText(k)))) return 'water';
+  if(cats.milk.some(k=>t.includes(normalizeLearnText(k)))) return 'milk';
+  if(cats.pasta.some(k=>t.includes(normalizeLearnText(k)))) return 'pasta';
+  if(cats.home.some(k=>t.includes(normalizeLearnText(k)))) return 'home';
+  if(cats.pet.some(k=>t.includes(normalizeLearnText(k)))) return 'pet';
+  return '';
+}
+function productCountForLocal(name='',brand='',variant=''){
+  const key=productKeyForVision(name,brand,variant); const b=ensureVisionBrain();
+  const stats=b.productStats?.[key];
+  if(stats?.count) return Number(stats.count||0);
+  return (b.samples||[]).filter(s=>productKeyForVision(s.productName,s.brand,s.variant)===key).length;
+}
+function localAutonomyReady(pred={}){
+  if(!pred || !pred.productName) return false;
+  const count=productCountForLocal(pred.productName,pred.brand,pred.variant);
+  const conf=Number(pred.confidence||0);
+  if(pred.modelVision && count>=2 && conf>=.84) return true;
+  if(pred.autonomousVision && count>=3 && conf>=.88) return true;
+  if(pred.memoryVision && count>=4 && conf>=.90) return true;
+  return false;
+}
+function compactFeatureVector(f={}){
+  const nums=[f.objectWidth,f.objectHeight,f.objectCoverage,Math.min(80,Number(f.edge||0))/80,Math.min(3,Number(f.verticality||1))/3,
+    f.center?.red||0,f.center?.blue||0,f.center?.green||0,f.center?.white||0,f.center?.dark||0,f.center?.clear||0,
+    f.label?.red||0,f.label?.blue||0,f.label?.green||0,f.label?.white||0,f.label?.dark||0,f.label?.clear||0,
+    f.all?.red||0,f.all?.blue||0,f.all?.green||0,f.all?.white||0,f.all?.dark||0,f.all?.clear||0,
+    f.bottleLike?1:0,f.largeBottleLike?1:0];
+  return nums.map(v=>Number.isFinite(Number(v))?Number(Number(v).toFixed(4)):0);
+}
+function vectorDistance(a=[],b=[]){ const n=Math.min(a.length,b.length); if(!n) return 1; let s=0; for(let i=0;i<n;i++){ const d=Number(a[i]||0)-Number(b[i]||0); s+=d*d; } return Math.min(1, Math.sqrt(s/n)); }
+function rebuildVisionProductModels(){
+  const b=ensureVisionBrain(); const groups={};
+  (b.samples||[]).filter(s=>s?.features).forEach(s=>{ const k=productKeyForVision(s.productName,s.brand,s.variant); if(!k) return; (groups[k]=groups[k]||[]).push(s); });
+  const models={};
+  Object.entries(groups).forEach(([key,list])=>{
+    const vectors=list.map(s=>compactFeatureVector(s.features)); const len=vectors[0]?.length||0; const centroid=new Array(len).fill(0);
+    vectors.forEach(v=>v.forEach((x,i)=>centroid[i]+=x)); if(list.length) centroid.forEach((_,i)=>centroid[i]=Number((centroid[i]/list.length).toFixed(4)));
+    const names={}, brands={}, sizes={}, cats={}, units={}, variants={};
+    list.forEach(s=>{ learnVisionStat({names},'names',s.productName); learnVisionStat({brands},'brands',s.brand); learnVisionStat({sizes},'sizes',s.size); learnVisionStat({cats},'cats',s.category); learnVisionStat({units},'units',s.unit); learnVisionStat({variants},'variants',s.variant); });
+    models[key]={key,count:list.length,centroid,names,brands,sizes,categories:cats,units,variants,lastSeenAt:Math.max(...list.map(s=>Number(s.confirmedAt||0)))};
+  });
+  b.productModels=models; b.lastTrainedAt=Date.now(); computeVisionAutonomyLevel(); return models;
+}
+function predictFromVisionModels(features){
+  const b=ensureVisionBrain(); const models=b.productModels||{}; const vector=compactFeatureVector(features||{}); const entries=Object.values(models).filter(m=>m.count>=2 && Array.isArray(m.centroid));
+  if(!entries.length || !vector.length) return null;
+  const ranked=entries.map(m=>({m,dist:vectorDistance(vector,m.centroid)})).sort((a,b)=>a.dist-b.dist).slice(0,5);
+  const best=ranked[0]; if(!best) return null;
+  const gap=(ranked[1]?.dist ?? 1)-best.dist;
+  const base=1-best.dist;
+  const countBoost=Math.min(.16, Number(best.m.count||0)*.025);
+  const confidence=Math.max(.45, Math.min(.97, base*.82 + countBoost + Math.max(0,gap)*.18));
+  if(confidence<.66) return null;
+  const m=best.m;
+  return {productName:topKey(m.names), brand:topKey(m.brands), variant:topKey(m.variants), estimatedSize:topKey(m.sizes), quantity:1, unit:topKey(m.units)||'pz', category:topKey(m.categories)||'food', confidence:Number(confidence.toFixed(2)), modelVision:true, autonomousVision:true, localVision:true, bestMatchName:topKey(m.names), bestMatchSource:'modello locale addestrato', bestMatchScore:Number((confidence*100).toFixed(1)), reason:`AI locale autonoma: modello addestrato su ${m.count} esempi confermati.`};
+}
+function distillCloudTeacherSample(dataUrl='', result={}){
+  if(!result || !result.cloudVision || !result.productName || isBadScanName(result.productName)) return;
+  const b=ensureVisionBrain(); b.cloudTeacherCalls=Number(b.cloudTeacherCalls||0)+1;
+  const compact={productName:result.productName,brand:result.brand||'',variant:result.variant||'',category:result.category||'',unit:result.unit||'',estimatedSize:result.estimatedSize||'',confidence:result.confidence||0,visibleEvidence:(result.visibleEvidence||[]).slice(0,5),detectedText:(result.detectedText||[]).slice(0,6),at:Date.now()};
+  b.candidateSamples=Array.isArray(b.candidateSamples)?b.candidateSamples:[];
+  b.candidateSamples.unshift(compact); b.candidateSamples=b.candidateSamples.slice(0,120);
+  saveAiMemory();
+}
+function applyCompetenceCore(result={}, features=null){
+  if(!result) result={};
+  const cls=competenceClassFromText(result);
+  const rawSize=canonicalVisionSizeLocal([result.estimatedSize,result.sizeDetectedRaw,...(result.detectedText||[]),...(result.visibleEvidence||[])].join(' '));
+  if(rawSize){ result.estimatedSize=rawSize; result.sizeConfidence=Math.max(Number(result.sizeConfidence||0),.92); }
+  if(cls==='water' || (features?.bottleLike && result.isLiquid)){
+    result.category='drinks'; result.unit=result.unit && result.unit!=='pz'?result.unit:'bt'; result.isLiquid=true; result.productType=result.productType||'acqua'; result.packageType=result.packageType||'bottiglia di plastica';
+    if(!result.productName || normalizeLearnText(result.productName)==='acqua') result.productName=result.brand ? `Acqua ${result.brand}` : 'Acqua in bottiglia';
+    if(!result.estimatedSize && features?.largeBottleLike){ result.estimatedSize='Capienza da confermare: probabile 1,5 L / 2 L'; result.needsManual=true; result.detailQuestion='La bottiglia sembra grande: conferma 1,5 L o 2 L.'; }
+  }
+  if(cls==='milk'){ result.category='drinks'; result.unit=result.unit||'pz'; result.isLiquid=true; }
+  if(cls==='pasta'){ result.category='food'; result.unit=result.unit||'pz'; }
+  if(cls==='home'){ result.category='house'; }
+  if(cls==='pet'){ result.category='pets'; }
+  if(VISION_COMPETENCE_CORE.junkNames.includes(normalizeLearnText(result.productName||''))){ result.productName=''; result.needsManual=true; result.shouldAskConfirmation=true; }
+  return result;
+}
+function extractImageFeaturesFromData(data,w,h){
+  const center={r:0,g:0,b:0,lum:0,count:0,red:0,blue:0,green:0,white:0,dark:0,clear:0};
+  const label={r:0,g:0,b:0,lum:0,count:0,red:0,blue:0,green:0,white:0,dark:0,clear:0};
+  const all={r:0,g:0,b:0,lum:0,count:0,red:0,blue:0,green:0,white:0,dark:0,clear:0};
+  let minX=w, minY=h, maxX=0, maxY=0, edgePixels=0, edgeSum=0, verticalEdges=0, horizontalEdges=0;
+  const lums=new Array(w*h);
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    const i=(y*w+x)*4, r=data[i], g=data[i+1], b=data[i+2];
+    lums[y*w+x]=.2126*r+.7152*g+.0722*b;
+  }
+  function add(bucket,r,g,b,lum){
+    const max=Math.max(r,g,b), min=Math.min(r,g,b); bucket.count++; bucket.r+=r; bucket.g+=g; bucket.b+=b; bucket.lum+=lum;
+    if(r>120 && r>g*1.35 && r>b*1.22) bucket.red++;
+    if(b>106 && b>r*.92 && b>g*.86) bucket.blue++;
+    if(g>115 && g>r*1.10 && g>b*.82) bucket.green++;
+    if(r>185 && g>185 && b>178 && max-min<72) bucket.white++;
+    if(lum<78) bucket.dark++;
+    if(lum>132 && max-min<48) bucket.clear++;
+  }
+  for(let y=1;y<h-1;y++){
+    for(let x=1;x<w-1;x++){
+      const i=(y*w+x)*4, r=data[i], g=data[i+1], b=data[i+2], lum=lums[y*w+x];
+      const dx=Math.abs(lum-lums[y*w+x-1]), dy=Math.abs(lum-lums[(y-1)*w+x]);
+      const edge=dx+dy; edgeSum+=edge; verticalEdges+=dx; horizontalEdges+=dy;
+      const inCenter=x>w*.28 && x<w*.72 && y>h*.08 && y<h*.94;
+      const inLabel=x>w*.26 && x<w*.74 && y>h*.33 && y<h*.70;
+      add(all,r,g,b,lum); if(inCenter) add(center,r,g,b,lum); if(inLabel) add(label,r,g,b,lum);
+      if(inCenter && edge>18){ edgePixels++; if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y; }
+    }
+  }
+  function ratios(bucket){ const c=Math.max(1,bucket.count); return {red:bucket.red/c,blue:bucket.blue/c,green:bucket.green/c,white:bucket.white/c,dark:bucket.dark/c,clear:bucket.clear/c,lum:bucket.lum/c,r:bucket.r/c,g:bucket.g/c,b:bucket.b/c}; }
+  const cr=ratios(center), lr=ratios(label), ar=ratios(all);
+  const bw=Math.max(0,maxX-minX)/w, bh=Math.max(0,maxY-minY)/h;
+  return {
+    center:cr,label:lr,all:ar,
+    objectWidth:Number(bw.toFixed(3)), objectHeight:Number(bh.toFixed(3)), objectCoverage:Number((edgePixels/Math.max(1,center.count)).toFixed(3)),
+    edge:Number((edgeSum/Math.max(1,all.count)).toFixed(2)), verticality:Number((verticalEdges/Math.max(1,horizontalEdges)).toFixed(3)),
+    bottleLike: bh>.48 && bw>.13 && bw<.55 && verticalEdges>horizontalEdges*.92,
+    largeBottleLike: bh>.62 && bw>.20,
+    colorKey:[Math.round(cr.r/24),Math.round(cr.g/24),Math.round(cr.b/24),Math.round(lr.r/24),Math.round(lr.g/24),Math.round(lr.b/24)].join('-')
+  };
+}
+async function extractLocalVisionFeatures(dataUrl=''){
+  try{
+    const img=await loadImageElement(dataUrl);
+    const c=document.createElement('canvas'); c.width=112; c.height=112;
+    const ctx=c.getContext('2d',{willReadFrequently:true}); ctx.drawImage(img,0,0,112,112);
+    const data=ctx.getImageData(0,0,112,112).data;
+    const features=extractImageFeaturesFromData(data,112,112);
+    features.signature=objectSignatureFromCanvas(c);
+    features.width=img.width; features.height=img.height;
+    return features;
+  }catch(_){ return null; }
+}
+function featureDistance(a={},b={}){
+  if(!a||!b) return 1;
+  const sig=Math.min(1, signatureDistance(a.signature,b.signature)/16);
+  const vals=['objectWidth','objectHeight','objectCoverage','edge','verticality'];
+  let d=sig*.42, w=.42;
+  vals.forEach(k=>{ if(Number.isFinite(Number(a[k]))&&Number.isFinite(Number(b[k]))){ d+=Math.min(1,Math.abs(Number(a[k])-Number(b[k]))/(k==='edge'?35:1))*0.10; w+=0.10; }});
+  if(a.colorKey && b.colorKey){ d += (a.colorKey===b.colorKey?0:.12); w+=.12; }
+  if(!!a.bottleLike !== !!b.bottleLike){ d+=.08; w+=.08; }
+  return Math.min(1,d/Math.max(.1,w));
+}
+function productKeyForVision(name='',brand='',variant=''){
+  return [normalizeLearnText(name),normalizeLearnText(brand),normalizeLearnText(variant)].filter(Boolean).join('|') || normalizeLearnText(name);
+}
+function getStatsForProduct(name='',brand='',variant=''){
+  const b=ensureVisionBrain(); const k=productKeyForVision(name,brand,variant);
+  b.productStats[k]=b.productStats[k]||{count:0,sizes:{},categories:{},units:{},names:{},brands:{},lastSeenAt:0};
+  return b.productStats[k];
+}
+function topKey(obj={}){ return Object.entries(obj||{}).sort((a,b)=>Number(b[1])-Number(a[1]))[0]?.[0]||''; }
+function learnVisionStat(stats, field, value){ if(!value) return; stats[field]=stats[field]||{}; const v=String(value).trim(); stats[field][v]=Number(stats[field][v]||0)+1; }
+async function rememberVisionSampleFromScan(dataUrl='', result={}, confirmed={}){
+  const b=ensureVisionBrain();
+  const productName=String(confirmed.productName||result.productName||'').trim();
+  if(!productName || isBadScanName(productName)) return;
+  const features=await extractLocalVisionFeatures(dataUrl||result.dataUrl||'');
+  if(!features) return;
+  const brand=String(confirmed.brand||result.brand||'').trim();
+  const variant=String(result.variant||'').trim();
+  const size=String(confirmed.size||result.estimatedSize||'').trim();
+  const sample={id:'vs_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,6), productName, brand, variant, category:confirmed.category||result.category||'food', unit:confirmed.unit||result.unit||'pz', size, isLiquid:!!result.isLiquid, productType:result.productType||'', packageType:result.packageType||'', features, signature:features.signature, confirmedAt:Date.now()};
+  b.samples.unshift(sample);
+  b.samples=b.samples.slice(0,620);
+  if(String(confirmed.size||'').trim() && String(result.estimatedSize||'').trim() && normalizeLearnText(confirmed.size)!==normalizeLearnText(result.estimatedSize)) b.corrections=Number(b.corrections||0)+1;
+  const stats=getStatsForProduct(productName,brand,variant); stats.count=Number(stats.count||0)+1; stats.lastSeenAt=Date.now();
+  learnVisionStat(stats,'sizes',size); learnVisionStat(stats,'categories',sample.category); learnVisionStat(stats,'units',sample.unit); learnVisionStat(stats,'names',productName); learnVisionStat(stats,'brands',brand);
+  rebuildVisionProductModels();
+  b.lastTrainedAt=Date.now();
+  saveAiMemory();
+}
+function predictFromVisionBrain(features){
+  const modelPred=predictFromVisionModels(features); if(modelPred) return modelPred;
+  const b=ensureVisionBrain(); const samples=(b.samples||[]).filter(s=>s?.features);
+  if(!features || samples.length<2) return null;
+  const ranked=samples.map(s=>({s, dist:featureDistance(features,s.features)})).sort((a,b)=>a.dist-b.dist).slice(0,8);
+  const votes={};
+  ranked.forEach(({s,dist},idx)=>{ const key=productKeyForVision(s.productName,s.brand,s.variant); const weight=Math.max(.05,1-dist)*(idx<3?1.15:1); votes[key]=(votes[key]||0)+weight; });
+  const bestKey=Object.entries(votes).sort((a,b)=>b[1]-a[1])[0]; if(!bestKey) return null;
+  const bestSamples=ranked.filter(x=>productKeyForVision(x.s.productName,x.s.brand,x.s.variant)===bestKey[0]); const best=bestSamples[0]?.s || ranked[0].s;
+  const score=Math.min(.98, Math.max(0, bestKey[1]/Math.max(1, ranked.slice(0,5).reduce((s,x)=>s+Math.max(.05,1-x.dist),0))));
+  const nearest=1-(ranked[0]?.dist??1);
+  const confidence=Math.min(.96, Math.max(.35, .45*score + .55*nearest));
+  if(confidence<.62) return null;
+  const stats=getStatsForProduct(best.productName,best.brand,best.variant);
+  const learnedSize=topKey(stats.sizes)||best.size||'';
+  const learnedCategory=topKey(stats.categories)||best.category||'food';
+  const learnedUnit=topKey(stats.units)||best.unit||'pz';
+  return {productName:topKey(stats.names)||best.productName, brand:topKey(stats.brands)||best.brand||'', variant:best.variant||'', estimatedSize:learnedSize, quantity:1, unit:learnedUnit, category:learnedCategory, confidence:Number(confidence.toFixed(2)), productType:best.productType||'', packageType:best.packageType||'', isLiquid:!!best.isLiquid, autonomousVision:true, localVision:true, bestMatchName:best.productName, bestMatchSource:'AI locale imparata', bestMatchScore:Number((confidence*100).toFixed(1)), reason:`AI locale: riconosciuto da ${bestSamples.length} esempi simili confermati.`};
+}
+async function autonomousVisionGuess(dataUrl=''){
+  const features=await extractLocalVisionFeatures(dataUrl);
+  const pred=predictFromVisionBrain(features);
+  if(pred){ pred.visualFeatures=features; pred=applyCompetenceCore(pred,features); pred.needsManual = pred.confidence<.90; pred.shouldAskConfirmation = pred.confidence<.93; return pred; }
+  return null;
+}
+function applyLearnedProductMemory(result={}){
+  if(!result) return result;
+  const list=Array.isArray(aiMemory.learnedProducts)?aiMemory.learnedProducts:[];
+  const name=normalizeLearnText(result.productName||''); const brand=normalizeLearnText(result.brand||'');
+  const matches=list.map(row=>{
+    const aliases=[row.productName,row.brand,row.variant,...(row.aliases||[])].map(normalizeLearnText).filter(Boolean);
+    let score=0; aliases.forEach(a=>{ if(!a) return; if(name && (a.includes(name)||name.includes(a))) score+=3; if(brand && a.includes(brand)) score+=2; });
+    if(row.category && row.category===result.category) score+=1;
+    return {row,score};
+  }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score);
+  const best=matches[0]?.row;
+  if(best){
+    result.memoryVision=true;
+    result.bestMatchName=result.bestMatchName||best.productName; result.bestMatchSource=result.bestMatchSource||'memoria confermata';
+    if(!result.brand && best.brand) result.brand=best.brand;
+    if((!result.estimatedSize || /da confermare|circa|500 ml/i.test(result.estimatedSize||'')) && best.estimatedSize) result.estimatedSize=best.estimatedSize;
+    if(result.category==='food' && best.category) result.category=best.category;
+    if((!result.unit || result.unit==='pz') && best.unit) result.unit=best.unit;
+    result.confidence=Math.max(Number(result.confidence||0), best.seed ? Math.min(.82, .60+(Number(best.seedSeenCount||1)*.03)) : Math.min(.93, .68+(Number(best.seenCount||1)*.04)));
+    if(best.seed) { result.seedVision=true; result.bestMatchSource=result.bestMatchSource||'seed prodotti comuni'; }
+  }
+  result=applyDirectSeedKnowledge(result);
+  return result;
+}
+function normalizeBottleSizeResult(result={}, features=null){
+  const text=[result.productName,result.brand,result.variant,result.productType,result.packageType,result.estimatedSize,...(result.detectedText||[]),...(result.visibleEvidence||[])].join(' ').toLowerCase();
+  const bottle=/acqua|water|bottigl|bevanda|vera|levissima|sant.?anna|san benedetto|ferrarelle|naturale|frizzante/.test(text) || result.isLiquid;
+  if(!bottle) return result;
+  const size=String(result.estimatedSize||'').toLowerCase();
+  const says500=/500\s*m|0[\.,]5\s*l|mezzo\s*l/.test(size);
+  const learnedStrong=result.memoryVision && result.estimatedSize && !/da confermare|circa/.test(String(result.estimatedSize).toLowerCase());
+  if(!learnedStrong && says500 && features && (features.largeBottleLike || features.objectHeight>.58 || features.objectWidth>.22)){
+    result.estimatedSize='Capienza da confermare: possibile 1,5 L / 2 L';
+    result.sizeConfidence=Math.min(Number(result.sizeConfidence||.35),.42);
+    result.needsManual=true; result.shouldAskConfirmation=true;
+    result.detailQuestion='La bottiglia sembra grande: conferma se è 1,5 L o 2 L.';
+  }
+  if(!result.estimatedSize && features?.largeBottleLike){ result.estimatedSize='Capienza da confermare: probabile bottiglia grande'; result.needsManual=true; result.detailQuestion='Dimmi il formato: 1,5 L o 2 L?'; }
+  return result;
+}
+async function improveVisionWithLocalLearning(dataUrl='', result={}){
+  const features=await extractLocalVisionFeatures(dataUrl).catch(()=>null);
+  result=applyLearnedProductMemory(result||{});
+  result=applyCompetenceCore(result, features);
+  result=normalizeBottleSizeResult(result, features);
+  const local=features ? predictFromVisionBrain(features) : null;
+  if(local && (!result.productName || Number(local.confidence||0)>Number(result.confidence||0)+.08 || result.needsManual)){
+    result=Object.assign({}, result, local, {cloudVision:!!result.cloudVision, cloudFallback:!!result.cloudFallback, localEnhanced:true, needsManual: Number(local.confidence||0)<.91 || result.needsManual, shouldAskConfirmation: Number(local.confidence||0)<.93});
+  }
+  if(features) result.visualFeatures=features;
+  return result;
+}
+
 async function guessScanFallback(fileName='',dataUrl='',previous=null){
+  const auto=await autonomousVisionGuess(dataUrl);
+  if(auto) return {...previous,...auto, needsManual:Number(auto.confidence||0)<.91, shouldAskConfirmation:Number(auto.confidence||0)<.94, cloudOffline:false, cloudFallback:true, autonomousVision:true};
   const visual=await guessProductFromImage(dataUrl);
   if(visual) return {...previous,...visual, needsManual:true, shouldAskConfirmation:true, cloudOffline:false, cloudFallback:true, confidence:Math.min(Number(visual.confidence||0),.58)};
   const fromName=cleanFileProductName(fileName);
@@ -2328,7 +2826,7 @@ async function askVisionAi(dataUrl){
     throw e;
   }
   const data=await res.json();
-  if(data.memory){ aiMemory=Object.assign(aiMemory,data.memory); aiMemory.learnedProducts=Array.isArray(aiMemory.learnedProducts)?aiMemory.learnedProducts:[]; saveAiMemory(); }
+  if(data.memory){ const localBrain=aiMemory.visionBrain; aiMemory=Object.assign(aiMemory,data.memory); aiMemory.learnedProducts=Array.isArray(aiMemory.learnedProducts)?aiMemory.learnedProducts:[]; aiMemory.visionBrain=Object.assign(defaultAiMemory().visionBrain, aiMemory.visionBrain||{}, localBrain||{}); saveAiMemory(); }
   const r=data.result || data;
   if(r) { r.cloudVision=true; r.cloudOffline=false; }
   if(r && r.productName && /^(image|img|foto|photo|screenshot|whatsapp|camera|pxl|dsc|dcim|manual-live|auto-live|manual|auto|live|\d{5,})/i.test(String(r.productName).replace(/\s+/g,''))) r.productName='';
@@ -2344,12 +2842,16 @@ function scanEvidenceHtml(result){
   if(result.expiryDate) bits.push('Scadenza: '+result.expiryDate);
   if(result.isLiquid) bits.push('Liquido / bevanda');
   if(result.isDamaged) bits.push('Danneggiato: '+(result.damageType||'sì'));
+  if(result.modelVision) bits.push('Modello locale addestrato');
+  if(result.localFirst) bits.push('Autonomia locale');
+  if(result.autonomousVision) bits.push('AI locale imparata');
+  if(result.memoryVision) bits.push('Memoria prodotto');
   if(Number(result.confidence)>0) bits.push('Sicurezza: '+Math.round(Number(result.confidence)*100)+'%');
   if(Array.isArray(result.visibleEvidence)) bits.push(...result.visibleEvidence.slice(0,3));
   const ocr=Array.isArray(result.detectedText) ? result.detectedText.filter(Boolean).slice(0,6) : [];
   const match=(result.bestMatchName||'').trim();
   const matchSource=(result.bestMatchSource||'').trim();
-  const chips=bits.map(x=>`<span>${esc(x)}</span>`).join('');
+  const chips=bits.map(x=>{ const cls=/Autonomia|Modello locale/.test(x)?'local-core':(/AI locale/.test(x)?'autonomous':(/Memoria/.test(x)?'memory':(/confermare|possibile/i.test(x)?'warn-soft':''))); return `<span class="${cls}">${esc(x)}</span>`; }).join('');
   const soft=(result.estimatedSize?`<span class="soft">Formato: ${esc(result.estimatedSize)}</span>`:'');
   const base=(!chips && !soft && !ocr.length && !match) ? '' : `<div class="scan-evidence">${chips}${soft}</div>`;
   const ocrHtml=ocr.length ? `<div class="scan-ocr"><strong>Testo letto:</strong> ${esc(ocr.join(' · '))}</div>` : '';
@@ -2375,7 +2877,7 @@ function addScannerResult(result){
         ${result.expiryDate?`<span class="good">Scadenza: ${esc(result.expiryDate)}</span>`:''}
         ${result.isDamaged?`<span class="danger">Danneggiato${result.damageType?`: ${esc(result.damageType)}`:''}</span>`:'<span class="good">Confezione ok</span>'}
         ${result.estimatedSize?`<span class="info">Formato: ${esc(result.estimatedSize)}</span>`:''}
-        ${result.cloudVision?'<span class="cloud-ok">Cloud OpenAI attiva</span>':''}${result.cloudError?`<span class="cloud-error">Cloud errore: ${esc(String(result.cloudError).slice(0,48))}</span>`:''}${result.cloudFallback?'<span class="cloud-fallback">Fallback locale prudente</span>':''}${result.localVision?'<span class="info">Stima locale prudente</span>':''}
+        ${result.localFirst?'<span class="autonomous-badge">Autonomia locale</span>':''}${result.modelVision?'<span class="autonomous-badge">Modello locale</span>':''}${result.cloudVision?'<span class="cloud-ok">Cloud OpenAI docente</span>':''}${result.cloudError?`<span class="cloud-error">Cloud errore: ${esc(String(result.cloudError).slice(0,48))}</span>`:''}${result.cloudFallback?'<span class="cloud-fallback">Fallback locale prudente</span>':''}${result.localVision?'<span class="info">Stima locale prudente</span>':''}${result.seedVision?'<span class="autonomous-badge">Seed prodotti comuni</span>':''}${result.autonomousVision?'<span class="autonomous-badge">AI locale imparata</span>':''}${result.memoryVision?'<span class="autonomous-badge">Memoria autonoma</span>':''}
       </div>
       ${result.cloudError?`<div class="scan-cloud-debug">Cloud OpenAI chiamata ma risposta non valida. Errore: <code>${esc(String(result.cloudError).slice(0,160))}</code></div>`:''}
       <div class="scan-voice-helper ${helperMode}" data-scan-voice-note><span class="dot"></span><div><strong>Assistente live</strong><br>${esc(helperText)}</div></div>
@@ -2444,7 +2946,7 @@ function rememberLearnedProduct(payload={}){
   aliasList.forEach(a=>currentAliases.add(a));
   row.aliases=[...currentAliases].slice(0,12);
   aiMemory.learnedProducts.sort((a,b)=>Number(b.lastConfirmedAt||0)-Number(a.lastConfirmedAt||0));
-  aiMemory.learnedProducts=aiMemory.learnedProducts.slice(0,180);
+  aiMemory.learnedProducts=aiMemory.learnedProducts.slice(0,900);
 }
 
 function confirmScanResult(el,result,silent=false){
@@ -2481,6 +2983,8 @@ function confirmScanResult(el,result,silent=false){
   aiMemory.scanHistory.push({name:productName,brand,size,qty,unit,category,expiryDate,damageNote,at:Date.now(),confidence:result.confidence||null});
   aiMemory.scanHistory=aiMemory.scanHistory.slice(-300);
   rememberLearnedProduct({productName,brand,variant:result.variant||'',category,unit,productType:result.productType||'',packageType:result.packageType||'',estimatedSize:size,isLiquid:!!result.isLiquid,visibleEvidence:result.visibleEvidence||[],baseName:result.productName||''});
+  const confirmedLearning={productName,brand,size,qty,unit,category,expiryDate,damageNote,confirmedAt:Date.now(),visualFeatures:result.visualFeatures||null,visualSignature:result.visualSignature||'',visibleEvidence:result.visibleEvidence||[],detectedText:result.detectedText||[],confidence:result.confidence||null,cloudVision:!!result.cloudVision,autonomousVision:!!result.autonomousVision};
+  rememberVisionSampleFromScan(result.dataUrl||'', result, {productName,brand,size,qty,unit,category,expiryDate,damageNote}).then(()=>syncAutonomyLearningToServer({type:'vision-confirmation', confirmed:confirmedLearning, voiceProfile:ensureVoiceProfile(), visionStatus:visionBrainStatus()}, true)).catch(()=>syncAutonomyLearningToServer({type:'vision-confirmation', confirmed:confirmedLearning, voiceProfile:ensureVoiceProfile(), visionStatus:visionBrainStatus()}, true));
   aiMemory.pendingVerification=false;
   liveScanLastAcceptedSig = result.visualSignature || liveScanLastMetrics?.signature || liveScanLastAcceptedSig; liveScanLastAcceptedName=productName; liveScanSameObjectWarnings=0;
   saveAiMemory(); saveAll(); render(); if(!silent){ toast('Articolo aggiornato in casa ✅'); const finalVoice=`Perfetto. Ho aggiornato ${productName}${brand ? ' marca '+brand : ''}${size ? ' formato '+size : ''} in casa.${expiryDate? ' Scadenza registrata '+expiryDate+'.' : ''}${damageNote && damageNote!=='Integro' ? ' Ho segnato anche lo stato del prodotto.' : ''}`; speakNatural(finalVoice, {flush:true, rate:1.0, pitch:1.02}); } el.classList.remove('voice-active'); const next=document.querySelector('#scannerResults .scan-result:not(.confirmed):not(.bad)'); if(next){ setTimeout(()=>promptScannerConversation(next, next._scanResult||{}, true), 500); } else { enterNextObjectGate(); }
@@ -2527,4 +3031,4 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-console.log('[Spesa Pronta] V27.32 cloud-force-html-fix loaded: frontend now points to this build');
+console.log('[Spesa Pronta] V27.44 seed-mega loaded: 11200 smart seed products integrated in ZIP');

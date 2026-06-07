@@ -13,15 +13,15 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="assets/styles.v27-37-icons-delete.css?v=2737">
+  <link rel="stylesheet" href="assets/styles.v27-42-seed-brain.css?v=2742">
   <title>Spesa Pronta</title>
 </head>
 <body>
-  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.16-INLINE-IMAGES-ACCOUNT-ACTIONS -->
+  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.42-AUTONOMY-MASTER -->
   <div class="app-frame">
     <aside class="sidebar">
       <div class="side-brand">
-        <img src="assets/illustrations/brand-logo.png" alt="Spesa Pronta logo">
+        <span class="brand-mark" aria-hidden="true"></span>
         <strong>SPESA<br><span>PRONTA</span></strong>
       </div>
       <nav class="nav-menu" aria-label="Navigazione">
@@ -38,7 +38,7 @@
     <main class="main">
       <header class="topbar">
         <div class="top-title">
-          <img src="assets/illustrations/brand-logo.png" alt="">
+          <span class="brand-mark top" aria-hidden="true"></span>
           <div>
             <small data-i18n="heroEyebrow">Organizzatore domestico</small>
             <h1 data-i18n="appTitle">SPESA PRONTA</h1>
@@ -247,14 +247,14 @@
 
       <section class="view" id="view-welcome">
         <section class="panel welcome-panel">
-          <div class="welcome-orb dual-orb"><img src="assets/illustrations/alexa.png" alt="Alexa"><img src="assets/illustrations/google-assistant.png" alt="Google Assistant"></div>
+          <div class="welcome-orb dual-orb ai-icons"><span class="mini-orb voice" aria-hidden="true"></span><span class="mini-orb assistant" aria-hidden="true"></span></div>
           <p class="welcome-kicker">Account creato • Cloud sicuro attivo</p>
           <h2>Benvenuto in Spesa Pronta, <span id="welcomeName">amico</span> ✨</h2>
           <p class="welcome-lead">Ti abbiamo inviato una email di benvenuto con il tuo nome utente. Ora partiamo con l’inventario iniziale: foto reali, quantità reali, zero prodotti inventati.</p>
           <div class="welcome-grid">
-            <article><strong>🔐</strong><span>Dati salvati in cloud con cifratura lato server.</span></article>
-            <article><strong>📷</strong><span>Inventario iniziale obbligatorio con foto.</span></article>
-            <article><strong><img src="assets/illustrations/alexa.png" alt="Alexa"></strong><span>Alexa e Google Assistant leggeranno la stessa lista del database.</span></article>
+            <article><strong><span class="mini-orb lock" aria-hidden="true"></span></strong><span>Dati cloud protetti e sincronizzati.</span></article>
+            <article><strong><span class="mini-orb camera" aria-hidden="true"></span></strong><span>Inventario iniziale con foto reali.</span></article>
+            <article><strong><span class="mini-orb voice" aria-hidden="true"></span></strong><span>Assistenti vocali collegati alla stessa lista.</span></article>
           </div>
           <button class="primary-btn welcome-start" id="continueToInventoryBtn" type="button">Inizia inventario iniziale</button>
         </section>
@@ -262,20 +262,20 @@
 
       <section class="view" id="view-onboarding">
         <section class="panel onboarding-panel">
-          <div class="onboarding-badge">🧊📷</div>
-          <h2>Inventario iniziale obbligatorio</h2>
-          <p class="onboarding-lead">Prima di mostrarti la lista prodotti, Spesa Pronta deve sapere cosa hai davvero in casa.</p>
-          <div class="onboarding-steps">
-            <article><strong>1</strong><span>Tira fuori i prodotti dal frigo/dispensa.</span></article>
-            <article><strong>2</strong><span>Fotografa un articolo alla volta davanti al frigo.</span></article>
-            <article><strong>3</strong><span>L’AI propone nome, quantità, unità e categoria.</span></article>
-            <article><strong>4</strong><span>Confermi o correggi, poi rimetti il prodotto al suo posto.</span></article>
+          <div class="onboarding-badge pro-badge"><span class="mini-orb fridge" aria-hidden="true"></span><span class="mini-orb camera" aria-hidden="true"></span></div>
+          <h2>Inventario iniziale</h2>
+          <p class="onboarding-lead">Scansiona solo ciò che hai davvero in casa: niente prodotti inventati.</p>
+          <div class="onboarding-steps pro-steps">
+            <article><strong><span class="step-icon box" aria-hidden="true"></span></strong><span>Prepara frigo e dispensa.</span></article>
+            <article><strong><span class="step-icon camera" aria-hidden="true"></span></strong><span>Scansiona un prodotto alla volta.</span></article>
+            <article><strong><span class="step-icon ai" aria-hidden="true"></span></strong><span>Vision legge nome, formato e scadenza.</span></article>
+            <article><strong><span class="step-icon check" aria-hidden="true"></span></strong><span>Confermi o correggi prima di salvare.</span></article>
           </div>
           <div class="onboarding-actions">
-            <button class="primary-btn" id="initialScanBtn" type="button">📷 Inizia inventario con foto</button>
+            <button class="primary-btn" id="initialScanBtn" type="button">Inizia inventario con foto</button>
             <button class="outline-btn warning hidden" id="initialVerifyLaterBtn" type="button" aria-hidden="true" tabindex="-1">Inventario obbligatorio</button>
           </div>
-          <p class="onboarding-warning">Finché non completi questo passaggio, non vengono caricati prodotti finti o quantità inventate.</p>
+          <p class="onboarding-warning">Spesa Pronta parte solo da prodotti reali confermati da te.</p>
         </section>
       </section>
 
@@ -480,6 +480,7 @@
         <button class="outline-btn fridge-btn" id="fridgeModeBtn" type="button"><span class="action-symbol fridge"></span><span>Scansione frigo</span></button>
         <button class="outline-btn warning" id="markVerifyBtn" type="button">Fatta da verificare</button>
       </div>
+      <div class="vision-brain-panel" id="visionBrainPanel"><strong>AI autonoma master</strong><small>Visione locale + voce + server learning: OpenAI resta docente temporaneo.</small></div>
       <div class="scanner-status" id="scannerStatus">Quando rientri a casa, fotografa ogni prodotto prima di metterlo a posto.</div>
       <div class="scanner-preview" id="scannerPreview"></div>
       <div class="scanner-results" id="scannerResults"></div>
@@ -517,6 +518,6 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/app.v27-37-icons-delete.js?v=2737" defer></script>
+  <script src="assets/app.v27-42-seed-brain.js?v=2742" defer></script>
 </body>
 </html>

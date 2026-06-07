@@ -43,12 +43,31 @@ const TWILIO_VERIFY_SERVICE_SID = process.env.TWILIO_VERIFY_SERVICE_SID || '';
 const SMS_ENABLED = !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_FROM_NUMBER);
 const TWILIO_VERIFY_ENABLED = !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_VERIFY_SERVICE_SID);
 const PHONE_VERIFY_READY = SMS_ENABLED || TWILIO_VERIFY_ENABLED;
+const VISION_SEED_MEMORY = loadVisionSeedMemory();
 const WHATSAPP_ENABLED = !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_WHATSAPP_FROM);
 let db = { users:{}, households:{} };
 let dbMode = 'file';
 let pgPool = null;
 
-function emptyDb(){ return { users:{}, households:{}, assistantBrain:{version:1, globalFacts:[], productLearnings:{}, phrasePatterns:{}, dailyStats:{}, updatedAt:0} }; }
+function emptyDb(){ return { users:{}, households:{}, assistantBrain:{version:2, globalFacts:[], productLearnings:{}, phrasePatterns:{}, dailyStats:{}, autonomousVision:{products:{},voice:{},samples:0,corrections:0}, seedMemory:{version:'',products:0,loaded:false}, updatedAt:0} }; }
+
+function loadVisionSeedMemory(){
+  const candidates=[path.resolve(STATIC_DIR,'assets/vision-seed-memory.json'), path.resolve(process.cwd(),'assets/vision-seed-memory.json')];
+  for(const file of candidates){
+    try{
+      if(fs.existsSync(file)){
+        const parsed=JSON.parse(fs.readFileSync(file,'utf8'));
+        if(Array.isArray(parsed.products)) return parsed;
+      }
+    }catch(e){ console.warn('Vision seed memory load failed', e.message); }
+  }
+  return {version:'missing', products:[], categories:[], rules:{}};
+}
+function seedCategoryToAppServer(cat=''){
+  const map={water:'drinks',soft_drinks:'drinks',dairy:'food',deli:'food',pasta_rice:'food',pantry:'food',breakfast_snacks:'food',fruit:'fruit',vegetables:'veg',frozen:'food',cleaning:'house',paper_house:'house',personal_care:'house',pets:'pets',baby:'food'};
+  return map[cat] || cat || 'food';
+}
+
 function cryptoKey(){ return crypto.createHash('sha256').update(String(APP_SECRET)).digest(); }
 function encryptObject(obj){
   const iv=crypto.randomBytes(12);
@@ -130,11 +149,15 @@ function ensureDbShape(){
   db = db || emptyDb();
   db.users = db.users || {};
   db.households = db.households || {};
-  db.assistantBrain = db.assistantBrain || {version:1, globalFacts:[], productLearnings:{}, phrasePatterns:{}, dailyStats:{}, updatedAt:0};
+  db.assistantBrain = db.assistantBrain || {version:2, globalFacts:[], productLearnings:{}, phrasePatterns:{}, dailyStats:{}, autonomousVision:{products:{},voice:{},samples:0,corrections:0}, updatedAt:0};
   db.assistantBrain.globalFacts = db.assistantBrain.globalFacts || [];
   db.assistantBrain.productLearnings = db.assistantBrain.productLearnings || {};
   db.assistantBrain.phrasePatterns = db.assistantBrain.phrasePatterns || {};
   db.assistantBrain.dailyStats = db.assistantBrain.dailyStats || {};
+  db.assistantBrain.autonomousVision = db.assistantBrain.autonomousVision || {products:{},voice:{},samples:0,corrections:0};
+  db.assistantBrain.autonomousVision.products = db.assistantBrain.autonomousVision.products || {};
+  db.assistantBrain.autonomousVision.voice = db.assistantBrain.autonomousVision.voice || {};
+  db.assistantBrain.seedMemory = {version:VISION_SEED_MEMORY.version||'', products:(VISION_SEED_MEMORY.products||[]).length, categories:(VISION_SEED_MEMORY.categories||[]).length, loaded:(VISION_SEED_MEMORY.products||[]).length>0};
   Object.values(db.households||{}).forEach(h=>{
     h.aiMemory = h.aiMemory || {messages:[],facts:[],events:[],scanHistory:[],learnedProducts:[],summary:'',preferences:{},updatedAt:0};
     h.aiMemory.messages = h.aiMemory.messages || [];
@@ -142,6 +165,8 @@ function ensureDbShape(){
     h.aiMemory.events = h.aiMemory.events || [];
     h.aiMemory.scanHistory = h.aiMemory.scanHistory || [];
   h.aiMemory.learnedProducts = h.aiMemory.learnedProducts || [];
+    h.aiMemory.visionBrain = h.aiMemory.visionBrain || {version:41,serverSamples:[],productModels:{},productStats:{},serverSyncs:0};
+    h.aiMemory.voiceProfile = h.aiMemory.voiceProfile || {version:41,heard:[],corrections:[],intentPhrases:{},fieldPhrases:{},productAliases:{},speakerStyle:{},serverSyncs:0};
     h.aiMemory.preferences = h.aiMemory.preferences || {};
   });
 }
@@ -152,6 +177,8 @@ function ensureHouseholdMemory(h){
   h.aiMemory.events = h.aiMemory.events || [];
   h.aiMemory.scanHistory = h.aiMemory.scanHistory || [];
   h.aiMemory.learnedProducts = h.aiMemory.learnedProducts || [];
+  h.aiMemory.visionBrain = h.aiMemory.visionBrain || {version:41,serverSamples:[],productModels:{},productStats:{},serverSyncs:0};
+  h.aiMemory.voiceProfile = h.aiMemory.voiceProfile || {version:41,heard:[],corrections:[],intentPhrases:{},fieldPhrases:{},productAliases:{},speakerStyle:{},serverSyncs:0};
   h.aiMemory.preferences = h.aiMemory.preferences || {};
   return h.aiMemory;
 }
@@ -211,6 +238,50 @@ function publicGlobalBrain(){
   const topPhrases=Object.entries(brain.phrasePatterns||{}).sort((a,b)=>b[1]-a[1]).slice(0,20).map(([phrase,count])=>({phrase,count}));
   return {version:brain.version||1, updatedAt:brain.updatedAt||0, topProducts, topPhrases, dailyStats:brain.dailyStats||{}};
 }
+
+function learnAutonomyOnServer(h, payload={}){
+  ensureDbShape();
+  const mem=ensureHouseholdMemory(h);
+  mem.visionBrain = mem.visionBrain || {version:41,serverSamples:[],productModels:{},productStats:{},serverSyncs:0};
+  mem.voiceProfile = mem.voiceProfile || {version:41,heard:[],corrections:[],intentPhrases:{},fieldPhrases:{},productAliases:{},speakerStyle:{},serverSyncs:0};
+  const confirmed=payload.confirmed||{};
+  if(confirmed.productName){
+    const key=normalizeText([confirmed.productName,confirmed.brand,confirmed.size].filter(Boolean).join(' ')).slice(0,120);
+    mem.visionBrain.serverSamples = Array.isArray(mem.visionBrain.serverSamples) ? mem.visionBrain.serverSamples : [];
+    mem.visionBrain.serverSamples.unshift({
+      key, productName:confirmed.productName, brand:confirmed.brand||'', size:confirmed.size||'', category:confirmed.category||'', unit:confirmed.unit||'', expiryDate:confirmed.expiryDate||'', damageNote:confirmed.damageNote||'', confidence:confirmed.confidence||null, visualFeatures:confirmed.visualFeatures||null, visibleEvidence:(confirmed.visibleEvidence||[]).slice(0,10), detectedText:(confirmed.detectedText||[]).slice(0,10), cloudVision:!!confirmed.cloudVision, autonomousVision:!!confirmed.autonomousVision, at:Date.now()
+    });
+    mem.visionBrain.serverSamples=mem.visionBrain.serverSamples.slice(0,900);
+    const prod=db.assistantBrain.autonomousVision.products[key]||{key,productName:confirmed.productName,brand:confirmed.brand||'',sizes:{},categories:{},units:{},count:0,lastSeenAt:0};
+    prod.count++; prod.lastSeenAt=Date.now();
+    if(confirmed.size) prod.sizes[confirmed.size]=Number(prod.sizes[confirmed.size]||0)+1;
+    if(confirmed.category) prod.categories[confirmed.category]=Number(prod.categories[confirmed.category]||0)+1;
+    if(confirmed.unit) prod.units[confirmed.unit]=Number(prod.units[confirmed.unit]||0)+1;
+    db.assistantBrain.autonomousVision.products[key]=prod;
+    db.assistantBrain.autonomousVision.samples=Number(db.assistantBrain.autonomousVision.samples||0)+1;
+  }
+  const vp=payload.voiceProfile||{};
+  if(Array.isArray(vp.heard)){
+    const old=Array.isArray(mem.voiceProfile.heard)?mem.voiceProfile.heard:[];
+    mem.voiceProfile.heard=[...vp.heard.slice(0,80),...old].slice(0,300);
+  }
+  if(Array.isArray(vp.corrections)){
+    const old=Array.isArray(mem.voiceProfile.corrections)?mem.voiceProfile.corrections:[];
+    mem.voiceProfile.corrections=[...vp.corrections.slice(0,80),...old].slice(0,300);
+    db.assistantBrain.autonomousVision.corrections=Number(db.assistantBrain.autonomousVision.corrections||0)+vp.corrections.length;
+  }
+  for(const [k,v] of Object.entries(vp.intentPhrases||{})){ db.assistantBrain.autonomousVision.voice[k]=Number(db.assistantBrain.autonomousVision.voice[k]||0)+Number(v||1); }
+  mem.visionBrain.serverSyncs=Number(mem.visionBrain.serverSyncs||0)+1; mem.visionBrain.serverLastSyncAt=Date.now();
+  mem.voiceProfile.serverSyncs=Number(mem.voiceProfile.serverSyncs||0)+1; mem.updatedAt=Date.now(); h.updatedAt=Date.now(); db.assistantBrain.updatedAt=Date.now();
+  return mem;
+}
+function autonomyStatusFor(h){
+  const mem=ensureHouseholdMemory(h);
+  const vb=mem.visionBrain||{}; const vp=mem.voiceProfile||{};
+  const localProducts=new Set((vb.serverSamples||[]).map(x=>normalizeText(x.productName||'')).filter(Boolean));
+  return {visionSamples:(vb.serverSamples||[]).length, products:localProducts.size, serverSyncs:Number(vb.serverSyncs||0), voiceHeard:(vp.heard||[]).length, voiceCorrections:(vp.corrections||[]).length, globalSamples:Number(db.assistantBrain?.autonomousVision?.samples||0)};
+}
+
 function normalizeEmail(email){ return String(email||'').trim().toLowerCase(); }
 function isValidEmail(email){ return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(String(email||'')); }
 
@@ -887,6 +958,20 @@ function summarizeLearnedProducts(memory){
 
 function normalizeVisionText(v=''){ return String(v||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,' ').trim(); }
 function uniqueStrings(list=[], limit=10){ return [...new Set((list||[]).map(x=>cleanVisionString(x)).filter(Boolean))].slice(0,limit); }
+
+function pickDiverseVisionSeedProducts(products=[], limit=520){
+  const out=[]; const seen=new Set();
+  for(const p of products||[]){
+    const key=[p.category||'',p.subcategory||'',p.brand||'',(p.formats||[])[0]||''].join('|');
+    if(seen.has(key)) continue;
+    seen.add(key); out.push(p);
+    if(out.length>=limit) break;
+  }
+  if(out.length<limit){
+    for(const p of products||[]){ if(out.includes(p)) continue; out.push(p); if(out.length>=limit) break; }
+  }
+  return out;
+}
 function buildVisionCandidatePool(catalog=[], settings={}, memory={}){
   const out=[];
   for(const item of (catalog||[]).slice(0,300)){
@@ -904,7 +989,7 @@ function buildVisionCandidatePool(catalog=[], settings={}, memory={}){
       estimatedSize: cleanVisionString(item.aiMeta?.estimatedSize || item.estimatedSize || '')
     });
   }
-  for(const row of (Array.isArray(memory?.learnedProducts)?memory.learnedProducts:[]).slice(0,220)){
+  for(const row of (Array.isArray(memory?.learnedProducts)?memory.learnedProducts:[]).slice(0,420)){
     out.push({
       source:'memory',
       id:row.key||'',
@@ -915,6 +1000,11 @@ function buildVisionCandidatePool(catalog=[], settings={}, memory={}){
       unit: cleanVisionString(row.unit||''),
       estimatedSize: cleanVisionString(row.estimatedSize||''),
       visualHints: uniqueStrings(row.visualHints||[],8)
+    });
+  }
+  for(const p of pickDiverseVisionSeedProducts(VISION_SEED_MEMORY.products||[],520)){
+    out.push({
+      source:'seed', id:p.key||String(p.id||''), name:cleanVisionString(p.name||''), category:seedCategoryToAppServer(p.category||''), brand:p.brand==='Generico'?'':cleanVisionString(p.brand||''), aliases:uniqueStrings([p.name,p.brand,...(p.aliases||[])],10), unit:cleanVisionString(p.defaultUnit||''), estimatedSize:cleanVisionString((p.formats||[])[0]||''), visualHints:uniqueStrings([...(p.visualHints||[]),...(p.ocrKeywords||[])],10)
     });
   }
   return out.filter(x=>x.name);
@@ -1126,7 +1216,7 @@ async function visionAnalyze({image,catalog,settings,memory}){
   }
   const compact=(catalog||[]).map(i=>({id:i.id,name:itemName(i,settings?.lang||'it'),names:i.names,unit:i.unit,category:i.category,qty:i.qty})).slice(0,80);
   const learned=summarizeLearnedProducts(memory).slice(0,35);
-  const candidates=buildVisionCandidatePool(catalog, settings, memory).slice(0,45);
+  const candidates=buildVisionCandidatePool(catalog, settings, memory).slice(0,70);
   const oneShotPrompt=`Sei la Vision AI cloud di Spesa Pronta. Analizza la foto reale e rispondi SOLO con JSON valido.
 OBIETTIVO: riconoscere prodotto, marca, formato/capienza, scadenza e stato con massima prudenza.
 Regole severe anti-errore:
@@ -1205,6 +1295,7 @@ const server = http.createServer(async (req,res)=>{
         memoryReady: dbMode !== 'file',
         globalLearning: 'anonymous_aggregate',
         smsReady: PHONE_VERIFY_READY,
+        seedMemory:{version:VISION_SEED_MEMORY.version||'', products:(VISION_SEED_MEMORY.products||[]).length, categories:(VISION_SEED_MEMORY.categories||[]).length, loaded:(VISION_SEED_MEMORY.products||[]).length>0},
         twilioVerifyReady: TWILIO_VERIFY_ENABLED,
         smsFromNumberReady: SMS_ENABLED,
         whatsappReady: WHATSAPP_ENABLED,
@@ -1497,6 +1588,25 @@ const server = http.createServer(async (req,res)=>{
         await saveDb();
       }
       return send(res, 200, { ok:true, result, memory:h?activeMemory:memory, persistent:!!h });
+    }
+
+
+    if(req.method === 'POST' && pathName === '/api/ai/learn/autonomy'){
+      const householdId=String(body.householdId||'').trim();
+      const bearer=(req.headers.authorization||'').replace(/^Bearer\s+/,'').trim();
+      const h=(householdId && db.households[householdId] && db.households[householdId].token===bearer) ? db.households[householdId] : null;
+      if(!h) return send(res, 401, {ok:false,error:'unauthorized_household'});
+      const mem=learnAutonomyOnServer(h, body.payload||{});
+      await saveDb();
+      return send(res, 200, {ok:true, memory:mem, status:autonomyStatusFor(h), persistent:true});
+    }
+
+    if(req.method === 'GET' && pathName === '/api/ai/learning-status'){
+      const householdId=String(url.searchParams.get('householdId')||'').trim();
+      const bearer=(req.headers.authorization||'').replace(/^Bearer\s+/,'').trim();
+      const h=(householdId && db.households[householdId] && db.households[householdId].token===bearer) ? db.households[householdId] : null;
+      if(!h) return send(res, 401, {ok:false,error:'unauthorized_household'});
+      return send(res, 200, {ok:true,status:autonomyStatusFor(h),memory:ensureHouseholdMemory(h)});
     }
 
     if(req.method === 'GET' && pathName === '/api/ai/global-memory'){
