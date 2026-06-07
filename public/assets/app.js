@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v27.36-polish-vision';
+window.SPESA_PRONTA_VERSION='v27.37-icons-delete';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -792,6 +792,7 @@ function productRow(item){
       <div class="bar-meta"><span>${item.qty} ${esc(item.unit)}</span><span>${st==='buy'?t('lowStock'):t('goodStock')}</span></div>
       <span class="availability ${st}">${st==='buy'?t('lowStock'):t('goodStock')}</span>
       <small class="ai-mini-reason">AI: ${esc(days)} · min ${intel.th} · consiglio ${intel.rec}</small>
+      <button class="delete-item-btn" type="button" data-delete-item aria-label="Elimina articolo">Elimina</button>
     </div>
   </article>`;
 }
@@ -805,6 +806,16 @@ function bindProductControls(root){
     if(item.qty < oldQty) rememberEvent('consume', item, oldQty-item.qty, 'manual decrease');
     if(item.qty > oldQty) rememberEvent('restock', item, item.qty-oldQty, 'manual increase');
     item.updatedAt=Date.now(); saveAll(); render();
+  }));
+  root.querySelectorAll('[data-delete-item]').forEach(btn => btn.addEventListener('click', () => {
+    const row=btn.closest('.product-row');
+    const id=row?.dataset.id;
+    const item=state.find(x=>x.id===id); if(!item) return;
+    const label=nameOf(item);
+    if(!confirm(`Eliminare ${label} dalla casa?`)) return;
+    state=state.filter(x=>x.id!==id);
+    aiMemory.scanHistory=(aiMemory.scanHistory||[]).filter(x=>normalizeText(x.productName||'')!==normalizeText(label));
+    saveAiMemory(); saveAll(); render(); toast('Articolo eliminato');
   }));
   root.querySelectorAll('[data-unit]').forEach(sel => sel.addEventListener('change', () => {
     const id=sel.closest('.product-row').dataset.id, item=state.find(x=>x.id===id); if(!item) return;
@@ -2372,12 +2383,12 @@ function addScannerResult(result){
       <div class="scan-warning-box ${result.isDamaged?'':'good'}" data-scan-warning><strong>${result.isDamaged?'Controllo qualità':'Controllo qualità OK'}</strong>${result.isDamaged?`Possibile irregolarità: ${esc(result.damageType||'da verificare')}. Conferma a voce se è integro o danneggiato.`:'Nessun danno evidente rilevato. Puoi correggere se noti qualcosa.'}</div>
       <div class="scan-detail-box ${(result.sizeConfidence&&result.sizeConfidence<.75)||(!result.estimatedSize&&result.isLiquid)?'warn':'good'}" data-detail-box><strong>Lettura dettagli</strong>${esc(result.detailQuestion || (result.estimatedSize ? 'Formato rilevato: '+result.estimatedSize : 'Se formato o scadenza non sono certi, dimmeli a voce: esempio 2 litri o scadenza 05/2027.'))}</div>
       ${scanEvidenceHtml(result)}
-      ${result.needsRetake?'<button class="outline-btn" data-retake>Rifai foto</button>':`
+      ${result.needsRetake?'<div class="scan-actions-row"><button class="outline-btn" data-retake>Rifai foto</button><button class="danger-btn" type="button" data-delete-scan>Elimina</button></div>':`
       <label><small>Nome prodotto</small><input data-scan-name value="${esc(result.productName||'')}" placeholder="${esc(placeholder)}"></label>
       <div class="scan-grid-3 pro detail"><label><small>Marca</small><input data-scan-brand value="${esc(result.brand||'')}" placeholder="Es. Vera, Levissima, Divella"></label><label><small>Formato / capienza</small><input data-scan-size value="${esc(result.estimatedSize||'')}" placeholder="Es. 2 L, 1,5 L, 500 ml"></label><label><small>Quantità pezzi</small><input data-scan-qty type="number" min="0" step="0.1" value="${esc(result.quantity||1)}"></label></div>
       <div class="scan-grid-3 pro detail"><label><small>Unità</small><input data-scan-unit value="${esc(result.unit||'pz')}"></label><label><small>Scadenza</small><input data-scan-expiry value="${esc(result.expiryDate||'')}" placeholder="Es. 12/08/2026"></label><label><small>Categoria</small><select data-scan-cat>${categoryOptions(result.category||'food')}</select></label></div>
       <label><small>Stato prodotto</small><input data-scan-damage value="${esc(result.isDamaged?(result.damageType||'Danneggiato'):'Integro')}" placeholder="Integro / rotto / ammaccato"></label>
-      <div class="scan-actions-row"><button class="secondary-btn" type="button" data-scan-recap>Riepilogo AI</button><button class="danger-btn" type="button" data-force-rescan>Rifai questo</button><button class="primary-btn" data-confirm-scan>Conferma e aggiungi in casa</button></div>`}
+      <div class="scan-actions-row"><button class="secondary-btn" type="button" data-scan-recap>Riepilogo AI</button><button class="danger-btn" type="button" data-force-rescan>Rifai questo</button><button class="danger-btn" type="button" data-delete-scan>Elimina</button><button class="primary-btn" data-confirm-scan>Conferma e aggiungi in casa</button></div>`}
     </div>
   </article>`;
   $('#scannerResults').insertAdjacentHTML('afterbegin',html);
@@ -2387,6 +2398,14 @@ function addScannerResult(result){
   el.querySelector('[data-confirm-scan]')?.addEventListener('click',()=>confirmScanResult(el,result));
   el.querySelector('[data-scan-recap]')?.addEventListener('click',()=>speakCurrentScanSummary(el,result));
   el.querySelector('[data-force-rescan]')?.addEventListener('click',()=>{ liveScanPendingResult=false; liveScanAwaitNextOk=false; liveScanCooldownUntil=Date.now()+900; el.remove(); if(liveScanSpeechEnabled) speakNatural('Ok, rifacciamo questo prodotto. Tienilo nel riquadro e lo analizzo di nuovo.', {flush:true}); if(liveScanActive) queueLiveScanLoop(); });
+  el.querySelector('[data-delete-scan]')?.addEventListener('click',()=>{
+    const wasActive = scannerMicCurrentResultId===id;
+    el.remove();
+    if(wasActive){ scannerMicCurrentResultId=''; scannerMicStep=''; scannerMicLastPrompt=''; }
+    const pending=document.querySelector('#scannerResults .scan-result:not(.confirmed):not(.bad)');
+    if(!pending){ liveScanPendingResult=false; liveScanAwaitNextOk=false; setActiveScannerResult(null); if(liveScanActive){ resumeLiveAutoScan(900); } }
+    toast('Risultato eliminato');
+  });
   el.querySelectorAll('[data-scan-name],[data-scan-brand],[data-scan-size],[data-scan-qty],[data-scan-unit],[data-scan-expiry],[data-scan-cat],[data-scan-damage]').forEach(field=>{
     field.addEventListener('input',()=>refreshScanResultCard(el,result));
     field.addEventListener('change',()=>refreshScanResultCard(el,result));
