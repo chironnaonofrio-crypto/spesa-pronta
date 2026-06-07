@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v27.15-register-fix';
+window.SPESA_PRONTA_VERSION='v27.16-register-busy-fix';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -189,6 +189,29 @@ function cryptoId(){ return 'i_'+Math.random().toString(36).slice(2,10); }
 function $(s){ return document.querySelector(s); }
 function $all(s){ return [...document.querySelectorAll(s)]; }
 function esc(s=''){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+let toastTimer=null;
+function toast(msg){
+  const el=$('#toast');
+  if(!el){ console.log('Toast:', msg); return; }
+  el.textContent=String(msg||'');
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>el.classList.remove('show'),2800);
+}
+function setBusyButton(btn, busy, text){
+  if(!btn) return;
+  btn.disabled=!!busy;
+  btn.classList.toggle('is-busy', !!busy);
+  const main=btn.querySelector('.btn-main') || btn;
+  if(busy){
+    if(!btn.dataset.originalText) btn.dataset.originalText=main.textContent || 'Registrati';
+    main.textContent=text || 'Invio in corso…';
+  }else{
+    main.textContent=text || btn.dataset.originalText || 'Registrati';
+    delete btn.dataset.originalText;
+  }
+}
 function emailLooksValid(value){ return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(String(value||'')); }
 function phoneLooksValid(prefix, number){ return /^\+[1-9]\d{7,14}$/.test(String(prefix||'+39') + String(number||'').replace(/\D+/g,'')); }
 function passwordLooksStrong(pwd){ return String(pwd||'').length>=8 && /[A-Za-z]/.test(pwd) && /\d/.test(pwd); }

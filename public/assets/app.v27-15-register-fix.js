@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v27.15-register-fix';
+window.SPESA_PRONTA_VERSION='v27.16-register-busy-fix';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
