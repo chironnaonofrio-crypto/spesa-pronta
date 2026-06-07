@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v27.45-seed-visible';
+window.SPESA_PRONTA_VERSION='v27.46-seed-real-ui';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -1987,7 +1987,7 @@ function refreshVisionBrainPanel(){
   const heard=(vp.heard||[]).length, corr=(vp.corrections||[]).length, syncs=Number(ensureVisionBrain().serverSyncs||0);
   const seedProducts = Number(s.seedProducts||aiMemory.seedMemory?.products||activeVisionSeedMemory()?.products?.length||0);
   const seedBadge = seedProducts ? `<span class="autonomy-badge seed-ok">Seed ${seedProducts.toLocaleString('it-IT')}</span>` : `<span class="autonomy-badge seed-warn">Seed in caricamento</span>`;
-  el.innerHTML=`<strong>AI autonoma master</strong><small>${seedBadge}<span class="autonomy-badge">Vision ${s.autonomy}%</span><span class="autonomy-badge">${s.samples} esempi reali</span><span class="autonomy-badge">${s.models} modelli utente</span><span class="autonomy-badge">Voce ${heard}/${corr}</span><span class="autonomy-badge">Server sync ${syncs}</span><br>Catalogo seed già caricato: prodotti, marche, formati e parole OCR. OpenAI resta docente solo quando serve; le conferme reali costruiscono i modelli autonomi.</small>`;
+  el.innerHTML=`<strong>AI autonoma master</strong><small>${seedBadge}<span class="autonomy-badge">Vision ${s.autonomy}%</span><span class="autonomy-badge">${s.samples} esempi reali</span><span class="autonomy-badge">${s.models} modelli utente</span><span class="autonomy-badge">Voce ${heard}/${corr}</span><span class="autonomy-badge">Server sync ${syncs}</span><br>Catalogo seed 11.200 già caricato: prodotti, marche, formati e parole OCR. OpenAI resta docente solo quando serve; le conferme reali costruiscono i modelli autonomi.</small>`;
 }
 
 
@@ -3047,4 +3047,4 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-console.log('[Spesa Pronta] V27.45 seed-visible loaded: 11200 smart seed products visible and integrated');
+console.log('[Spesa Pronta] V27.46 seed-real-ui loaded: 11200 smart seed products integrated + visible UI');

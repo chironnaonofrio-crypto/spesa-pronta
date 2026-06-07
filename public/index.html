@@ -13,12 +13,11 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="assets/styles.v27-45-seed-visible.css?v=2745">
+  <link rel="stylesheet" href="assets/styles.v27-46-seed-real-ui.css?v=2746">
   <title>Spesa Pronta</title>
 </head>
 <body>
-  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.45-SEED-VISIBLE-11200 -->
-  <div class="app-frame">
+  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.46-SEED-REAL-UI<div class="app-frame">
     <aside class="sidebar">
       <div class="side-brand">
         <span class="brand-mark" aria-hidden="true"></span>
@@ -265,6 +264,21 @@
           <div class="onboarding-badge pro-badge"><span class="mini-orb fridge" aria-hidden="true"></span><span class="mini-orb camera" aria-hidden="true"></span></div>
           <h2>Inventario iniziale</h2>
           <p class="onboarding-lead">Scansiona solo ciò che hai davvero in casa: niente prodotti inventati.</p>
+          <div class="seed-brain-proof" id="seedBrainProof">
+            <div class="seed-proof-head">
+              <span class="seed-proof-icon" aria-hidden="true"></span>
+              <div>
+                <h3>Cervello AI già precaricato</h3>
+                <p>Non parte vuota: ha già 11.200 schede intelligenti per prodotti, marche, formati e parole OCR.</p>
+              </div>
+            </div>
+            <div class="seed-proof-stats" aria-label="Memoria seed integrata">
+              <span><b>11.200</b>prodotti seed</span>
+              <span><b>GDO</b>marche comuni</span>
+              <span><b>OCR</b>parole etichetta</span>
+            </div>
+            <div class="seed-proof-note">Il seed aiuta il primo riconoscimento; le tue foto reali creano i modelli autonomi.</div>
+          </div>
           <div class="onboarding-steps pro-steps">
             <article><strong><span class="step-icon box" aria-hidden="true"></span></strong><span>Prepara frigo e dispensa.</span></article>
             <article><strong><span class="step-icon camera" aria-hidden="true"></span></strong><span>Scansiona un prodotto alla volta.</span></article>
@@ -480,7 +494,23 @@
         <button class="outline-btn fridge-btn" id="fridgeModeBtn" type="button"><span class="action-symbol fridge"></span><span>Scansione frigo</span></button>
         <button class="outline-btn warning" id="markVerifyBtn" type="button">Fatta da verificare</button>
       </div>
-      <div class="vision-brain-panel" id="visionBrainPanel"><strong>AI autonoma master</strong><small>Visione locale + voce + server learning: OpenAI resta docente temporaneo.</small></div>
+
+      <div class="seed-brain-proof scanner-seed-proof" id="scannerSeedBrainProof">
+        <div class="seed-proof-head">
+          <span class="seed-proof-icon" aria-hidden="true"></span>
+          <div>
+            <h3>Seed AI caricato: 11.200 schede</h3>
+            <p>La scansione confronta etichetta, marca, formato e parole OCR prima di chiedere aiuto a OpenAI.</p>
+          </div>
+        </div>
+        <div class="seed-proof-stats">
+          <span><b>11.200</b>prodotti</span>
+          <span><b>Marche</b>comuni</span>
+          <span><b>Formati</b>noti</span>
+          <span><b>Voce</b>correzioni</span>
+        </div>
+      </div>
+      <div class="vision-brain-panel" id="visionBrainPanel"><strong>AI autonoma master</strong><small><span class="autonomy-badge seed-ok">Seed 11.200</span> Visione locale + voce + server learning: OpenAI resta docente temporaneo.</small></div>
       <div class="scanner-status" id="scannerStatus">Quando rientri a casa, fotografa ogni prodotto prima di metterlo a posto.</div>
       <div class="scanner-preview" id="scannerPreview"></div>
       <div class="scanner-results" id="scannerResults"></div>
@@ -518,6 +548,6 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/app.v27-45-seed-visible.js?v=2745" defer></script>
+  <script src="assets/app.v27-46-seed-real-ui.js?v=2746" defer></script>
 </body>
 </html>
