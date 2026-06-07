@@ -1,20 +1,10 @@
 services:
   - type: web
     name: spesa-pronta
-    runtime: node
-    plan: starter
+    env: node
+    plan: free
     buildCommand: npm install
     startCommand: npm start
     envVars:
-      - key: NODE_VERSION
-        value: 20
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: OPENAI_MODEL
-        value: gpt-5.5
-      - key: OPENAI_VISION_MODEL
-        value: gpt-5.5
-      - key: OPENAI_TIMEOUT_MS
-        value: 60000
-      - key: DB_PATH
-        value: ./cloud-db.json
+      - key: NODE_ENV
+        value: production

@@ -117,3 +117,25 @@ OPENAI_VISION_MODEL=gpt-4.1-mini
 ```
 
 La chiave API deve stare solo nel backend, mai nel frontend pubblico.
+
+
+## V27.69 - Sync cloud sistemata
+
+Questa build include anche un backend Node/Express reale.
+
+### Avvio locale
+```bash
+npm install
+npm start
+```
+Poi apri:
+```text
+http://localhost:3000
+```
+
+### Deploy Render
+Usa `render.yaml` oppure imposta:
+- Build command: `npm install`
+- Start command: `npm start`
+
+L'app usa `/api` come endpoint cloud, quindi se frontend e backend sono sullo stesso dominio la sincronizzazione funziona senza configurare URL esterni.

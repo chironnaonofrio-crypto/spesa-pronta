@@ -180,7 +180,7 @@ function loadSession(){ try { return Object.assign({mode:'guest', user:null}, JS
 function defaultAiMemory(){ return {messages:[], facts:[], events:[], scanHistory:[], learnedProducts:[], visionBrain:{version:48,coreVersion:48,samples:[],candidateSamples:[],productStats:{},productModels:{},corrections:0,totalScans:0,autonomousHits:0,localFirstDecisions:0,cloudTeacherCalls:0,autonomyLevel:0,lastTrainedAt:0,serverSyncs:0,serverLastSyncAt:0}, voiceProfile:{version:48,heard:[],corrections:[],intentPhrases:{},fieldPhrases:{},productAliases:{},speakerStyle:{shortCommands:0,corrections:0,italianSlang:0},updatedAt:0,serverSyncs:0}, pendingVerification:false, lastGreetingDate:'', summary:'', lastInsights:{}, consumptionProfile:{version:27, learnedItems:{}, lastAnalysisAt:0}, seedMemory:{version:'',loaded:false,products:0,categories:0,lastLoadedAt:0}, personality:{warmth:1}}; }
 function loadAiMemory(){ try { const mem=Object.assign(defaultAiMemory(), JSON.parse(localStorage.getItem(AI_MEMORY_KEY)||'{}')); mem.visionBrain=Object.assign(defaultAiMemory().visionBrain, mem.visionBrain||{}); mem.visionBrain.samples=Array.isArray(mem.visionBrain.samples)?mem.visionBrain.samples:[]; mem.visionBrain.productStats=mem.visionBrain.productStats||{}; mem.visionBrain.productModels=mem.visionBrain.productModels||{}; mem.visionBrain.candidateSamples=Array.isArray(mem.visionBrain.candidateSamples)?mem.visionBrain.candidateSamples:[]; mem.voiceProfile=Object.assign(defaultAiMemory().voiceProfile, mem.voiceProfile||{}); mem.voiceProfile.heard=Array.isArray(mem.voiceProfile.heard)?mem.voiceProfile.heard:[]; mem.voiceProfile.corrections=Array.isArray(mem.voiceProfile.corrections)?mem.voiceProfile.corrections:[]; mem.voiceProfile.intentPhrases=mem.voiceProfile.intentPhrases||{}; mem.voiceProfile.fieldPhrases=mem.voiceProfile.fieldPhrases||{}; mem.voiceProfile.productAliases=mem.voiceProfile.productAliases||{}; mem.voiceProfile.speakerStyle=Object.assign(defaultAiMemory().voiceProfile.speakerStyle, mem.voiceProfile.speakerStyle||{}); return mem; } catch { return defaultAiMemory(); } }
 function saveAiMemory(){ localStorage.setItem(AI_MEMORY_KEY, JSON.stringify(aiMemory)); }
-function defaultSettings(){ return {lang:'it', cloudEnabled:false, apiEndpoint:'/api', token:'', householdId:'', people:2, animals:0, autoSmart:true, alexaConnected:false, googleAssistantConnected:false, inventorySetupDone:false, inventoryStatus:'required', inventoryUpdatedAt:null, profile:{firstName:'',lastName:'',username:'',email:''}}; }
+function defaultSettings(){ return {lang:'it', cloudEnabled:false, apiEndpoint:'/api', token:'', householdId:'', people:2, animals:0, autoSmart:true, alexaConnected:false, googleAssistantConnected:false, inventorySetupDone:false, inventoryStatus:'required', inventoryUpdatedAt:null, lastCloudSyncAt:null, cloudLastStatus:'unknown', cloudMode:'server', cloudLastError:'', profile:{firstName:'',lastName:'',username:'',email:''}}; }
 function migrateItems(items){ return items.map(x => ({...createItem(x.id||cryptoId(), x.image||'assets/illustrations/generic-item.png', x.category||'food', x.names||{it:x.name||x.id,en:x.name||x.id,es:x.name||x.id,de:x.name||x.id}, x.qty??1, x.maxQty??6, x.baseThreshold??2, x.unitOptions||['pz','pc','lt','kg'], {custom:x.custom, usage:x.usage||0, kind:x.kind, perPersonMin:x.perPersonMin, perAnimalMin:x.perAnimalMin, recommendedBuy:x.recommendedBuy}), ...x})); }
 function saveAll(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); localStorage.setItem(SESSION_KEY, JSON.stringify(session)); scheduleSync(); }
 
@@ -702,6 +702,29 @@ function bindLanguagePicker(){
   syncLanguagePicker();
 }
 
+
+function cleanApiEndpoint(){
+  return String(settings.apiEndpoint || '/api').replace(/\/$/,'') || '/api';
+}
+function localCloudKey(){
+  return `spesa-pronta-local-cloud:${settings.householdId || 'default'}`;
+}
+function buildCloudPayload(){
+  return {items:state, settings:{people:settings.people,animals:settings.animals,autoSmart:settings.autoSmart,lang:settings.lang,alexaConnected:settings.alexaConnected,googleAssistantConnected:settings.googleAssistantConnected,profile:settings.profile}, aiMemory};
+}
+function saveLocalCloudSnapshot(payload){
+  localStorage.setItem(localCloudKey(), JSON.stringify({ok:true, householdId:settings.householdId || 'local', payload, savedAt:Date.now()}));
+}
+async function checkCloudHealth(){
+  try{
+    const res = await fetch(`${cleanApiEndpoint()}/health`, {cache:'no-store'});
+    if(!res.ok) throw new Error('health fail');
+    return await res.json().catch(()=>({ok:true}));
+  }catch(e){
+    return null;
+  }
+}
+
 function cloudConfigured(){
   return !!(settings.cloudEnabled && settings.apiEndpoint && settings.token && settings.householdId);
 }
@@ -713,26 +736,62 @@ function updateCloudPanel(status=''){
   const configured = cloudConfigured();
   const card = $('#cloudStatusCard');
   if(card){
-    card.classList.remove('online','offline','config');
-    card.classList.add(configured ? (settings.cloudLastStatus==='offline' ? 'offline' : 'online') : 'config');
+    card.classList.remove('online','offline','config','local','error');
+    if(!configured) card.classList.add('config');
+    else if(settings.cloudMode === 'local') card.classList.add('local');
+    else if(settings.cloudLastStatus === 'online') card.classList.add('online');
+    else if(settings.cloudLastStatus === 'offline') card.classList.add('error');
+    else card.classList.add('config');
   }
   const statusText = $('#cloudStatusText');
   const statusSub = $('#cloudStatusSub');
-  if(statusText) statusText.textContent = status || (configured ? 'Cloud configurato' : 'Cloud non configurato');
-  if(statusSub) statusSub.textContent = configured
-    ? `Pronto a sincronizzare ${state.length} prodotti.`
-    : 'Inserisci endpoint, token e household nelle impostazioni.';
+  let title = status;
+  let sub = '';
+  if(!configured){
+    title = status || 'Cloud non configurato';
+    sub = 'Accedi o configura endpoint, token e household nelle impostazioni.';
+  }else if(settings.cloudMode === 'local'){
+    title = status || 'Backup locale sincronizzato';
+    sub = 'Server API non raggiunto: i dati sono salvati su questo dispositivo. Per sync tra dispositivi avvia il backend incluso.';
+  }else if(settings.cloudLastStatus === 'online'){
+    title = status || 'Cloud online';
+    sub = `Sincronizzazione server pronta per ${state.length} prodotti.`;
+  }else if(settings.cloudLastStatus === 'offline'){
+    title = status || 'Server API non raggiunto';
+    sub = 'Il backend /api non risponde. Ho mantenuto i dati in locale e puoi riprovare.';
+  }else{
+    title = status || 'Cloud pronto';
+    sub = `Pronto a sincronizzare ${state.length} prodotti.`;
+  }
+  if(statusText) statusText.textContent = title;
+  if(statusSub) statusSub.textContent = sub;
   const last = $('#cloudLastSync'); if(last) last.textContent = formatCloudDate(settings.lastCloudSyncAt);
   const count = $('#cloudItemsCount'); if(count) count.textContent = String(state.length || 0);
-  const backup = $('#cloudBackupState'); if(backup) backup.textContent = 'Locale OK';
+  const backup = $('#cloudBackupState'); if(backup) backup.textContent = settings.cloudMode === 'local' ? 'Locale' : 'Pronto';
   const household = $('#cloudHousehold'); if(household) household.textContent = settings.householdId || 'Non configurato';
-  const endpoint = $('#cloudEndpoint'); if(endpoint) endpoint.textContent = settings.apiEndpoint || 'Non configurato';
+  const endpoint = $('#cloudEndpoint'); if(endpoint) endpoint.textContent = cleanApiEndpoint();
 }
-function openCloudPanel(){
-  updateCloudPanel();
+async function openCloudPanel(){
+  updateCloudPanel('Controllo cloud…');
   const d = $('#cloudDialog');
   if(d?.showModal) d.showModal();
   else d?.setAttribute('open','open');
+  if(cloudConfigured()){
+    const health = await checkCloudHealth();
+    if(health?.ok && settings.cloudMode !== 'local'){
+      settings.cloudLastStatus='online';
+      settings.cloudMode='server';
+      settings.cloudLastError='';
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      updateCloudPanel('Cloud online');
+    }else if(!health){
+      settings.cloudLastStatus = settings.cloudMode === 'local' ? 'offline' : settings.cloudLastStatus;
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      updateCloudPanel(settings.cloudMode === 'local' ? 'Backup locale attivo' : 'Server API non raggiunto');
+    }
+  }else{
+    updateCloudPanel('Cloud non configurato');
+  }
 }
 function closeCloudPanel(){
   const d = $('#cloudDialog');
@@ -742,7 +801,7 @@ function closeCloudPanel(){
 async function cloudSyncNow(){
   updateCloudPanel('Sincronizzazione in corso…');
   const ok = await syncCloud(true);
-  updateCloudPanel(ok ? 'Sincronizzato adesso' : 'Sync non riuscita');
+  updateCloudPanel(ok ? 'Sincronizzato sul server' : 'Backup locale salvato');
 }
 function downloadCloudBackup(){
   const backup = {
