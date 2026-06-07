@@ -1043,7 +1043,7 @@ async function visionAnalyze({image,catalog,settings,memory}){
   const primaryPrompt=`Sei la Vision AI di Spesa Pronta. Devi leggere una foto reale di un prodotto domestico/spesa.
 Obiettivo: riconoscere SOLO ciò che si vede davvero nella foto, senza inventare.
 Regole severe:
-- Dai priorità a nome prodotto, marca, formato, quantità visibile, scadenza, tipologia, categoria e stato del prodotto.
+- Dai priorità a nome prodotto, marca, formato, quantità visibile, scadenza, tipologia, categoria e stato del prodotto. Rileva anche irregolarità: ammaccato, aperto, rotto, bucato, perdita, etichetta rovinata, scaduto, congelato/ghiacciato quando non dovrebbe.
 - Se il prodotto o la marca sono visibili, scrivi un nome umano breve ma specifico: es. Coca-Cola Original Taste, Divella Pennette Rigate, Acqua naturale, Latte intero, Crocchette cane.
 - Non usare mai nomi file, numeri casuali o testo illeggibile come nome prodotto.
 - Riconosci anche prodotti freschi o senza etichetta: frutta, verdura, ortaggi, pane, pasta, riso, latte, biscotti, detersivi, acquario, farmacia, animali.
@@ -1052,7 +1052,7 @@ Regole severe:
 - Scegli categoria fra: food, drinks, pets, house, pharmacy, aquarium, fruit, veg.
 - Se nella scena sono visibili più prodotti distinti, multipleItems true e compila items con fino a 8 articoli.
 - La risposta deve essere SOLO JSON valido, nessun markdown.
-Schema obbligatorio: {"needsRetake":boolean,"needsManual":boolean,"multipleItems":boolean,"shouldAskConfirmation":boolean,"reason":"motivo breve in italiano","productName":"nome prodotto","brand":"marca","variant":"variante/gusto/formato","productType":"tipo prodotto","packageType":"tipo confezione","estimatedSize":"formato visibile","expiryDate":"data visibile o vuota","isLiquid":boolean,"isDamaged":boolean,"damageType":"tipo danno o vuota","quantity":number,"unit":"pz|bt|lattina|conf|kg|g|lt|ml|busta|scatola","category":"food|drinks|pets|house|pharmacy|aquarium|fruit|veg","confidence":number,"detectedText":["testi letti"],"visibleEvidence":["forme/colori/testi visibili"],"items":[{"productName":"..."}]}`;
+Schema obbligatorio: {"needsRetake":boolean,"needsManual":boolean,"multipleItems":boolean,"shouldAskConfirmation":boolean,"reason":"motivo breve in italiano","productName":"nome prodotto","brand":"marca","variant":"variante/gusto/formato","productType":"tipo prodotto","packageType":"tipo confezione","estimatedSize":"formato visibile","expiryDate":"data visibile o vuota","isLiquid":boolean,"isDamaged":boolean,"damageType":"tipo danno o vuota, es. ammaccato, perdita, rotto, congelato","quantity":number,"unit":"pz|bt|lattina|conf|kg|g|lt|ml|busta|scatola","category":"food|drinks|pets|house|pharmacy|aquarium|fruit|veg","confidence":number,"detectedText":["testi letti"],"visibleEvidence":["forme/colori/testi visibili"],"items":[{"productName":"..."}]}`;
   const ocrPrompt=`Sei un motore OCR + product disambiguation per Spesa Pronta. Guarda la stessa immagine e leggi in modo aggressivo i testi visibili di etichetta, confezione o stampa: marca, nome, formato, grammatura, capacità, gusto, scadenza/TMC.
 Regole:
 - Rileva parole utili e mettile in detectedText.
