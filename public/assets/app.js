@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v27.44-seed-mega';
+window.SPESA_PRONTA_VERSION='v27.45-seed-visible';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -177,7 +177,7 @@ let accountPendingAction = null;
 function loadState(){ try { const x=JSON.parse(localStorage.getItem(STORAGE_KEY)); return Array.isArray(x) ? migrateItems(x) : []; } catch { return []; } }
 function loadSettings(){ try { return Object.assign(defaultSettings(), JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}')); } catch { return defaultSettings(); } }
 function loadSession(){ try { return Object.assign({mode:'guest', user:null}, JSON.parse(localStorage.getItem(SESSION_KEY)||'{}')); } catch { return {mode:'guest', user:null}; } }
-function defaultAiMemory(){ return {messages:[], facts:[], events:[], scanHistory:[], learnedProducts:[], visionBrain:{version:44,coreVersion:44,samples:[],candidateSamples:[],productStats:{},productModels:{},corrections:0,totalScans:0,autonomousHits:0,localFirstDecisions:0,cloudTeacherCalls:0,autonomyLevel:0,lastTrainedAt:0,serverSyncs:0,serverLastSyncAt:0}, voiceProfile:{version:44,heard:[],corrections:[],intentPhrases:{},fieldPhrases:{},productAliases:{},speakerStyle:{shortCommands:0,corrections:0,italianSlang:0},updatedAt:0,serverSyncs:0}, pendingVerification:false, lastGreetingDate:'', summary:'', lastInsights:{}, consumptionProfile:{version:27, learnedItems:{}, lastAnalysisAt:0}, seedMemory:{version:'',loaded:false,products:0,categories:0,lastLoadedAt:0}, personality:{warmth:1}}; }
+function defaultAiMemory(){ return {messages:[], facts:[], events:[], scanHistory:[], learnedProducts:[], visionBrain:{version:45,coreVersion:45,samples:[],candidateSamples:[],productStats:{},productModels:{},corrections:0,totalScans:0,autonomousHits:0,localFirstDecisions:0,cloudTeacherCalls:0,autonomyLevel:0,lastTrainedAt:0,serverSyncs:0,serverLastSyncAt:0}, voiceProfile:{version:45,heard:[],corrections:[],intentPhrases:{},fieldPhrases:{},productAliases:{},speakerStyle:{shortCommands:0,corrections:0,italianSlang:0},updatedAt:0,serverSyncs:0}, pendingVerification:false, lastGreetingDate:'', summary:'', lastInsights:{}, consumptionProfile:{version:27, learnedItems:{}, lastAnalysisAt:0}, seedMemory:{version:'',loaded:false,products:0,categories:0,lastLoadedAt:0}, personality:{warmth:1}}; }
 function loadAiMemory(){ try { const mem=Object.assign(defaultAiMemory(), JSON.parse(localStorage.getItem(AI_MEMORY_KEY)||'{}')); mem.visionBrain=Object.assign(defaultAiMemory().visionBrain, mem.visionBrain||{}); mem.visionBrain.samples=Array.isArray(mem.visionBrain.samples)?mem.visionBrain.samples:[]; mem.visionBrain.productStats=mem.visionBrain.productStats||{}; mem.visionBrain.productModels=mem.visionBrain.productModels||{}; mem.visionBrain.candidateSamples=Array.isArray(mem.visionBrain.candidateSamples)?mem.visionBrain.candidateSamples:[]; mem.voiceProfile=Object.assign(defaultAiMemory().voiceProfile, mem.voiceProfile||{}); mem.voiceProfile.heard=Array.isArray(mem.voiceProfile.heard)?mem.voiceProfile.heard:[]; mem.voiceProfile.corrections=Array.isArray(mem.voiceProfile.corrections)?mem.voiceProfile.corrections:[]; mem.voiceProfile.intentPhrases=mem.voiceProfile.intentPhrases||{}; mem.voiceProfile.fieldPhrases=mem.voiceProfile.fieldPhrases||{}; mem.voiceProfile.productAliases=mem.voiceProfile.productAliases||{}; mem.voiceProfile.speakerStyle=Object.assign(defaultAiMemory().voiceProfile.speakerStyle, mem.voiceProfile.speakerStyle||{}); return mem; } catch { return defaultAiMemory(); } }
 function saveAiMemory(){ localStorage.setItem(AI_MEMORY_KEY, JSON.stringify(aiMemory)); }
 function defaultSettings(){ return {lang:'it', cloudEnabled:false, apiEndpoint:'/api', token:'', householdId:'', people:2, animals:0, autoSmart:true, alexaConnected:false, googleAssistantConnected:false, inventorySetupDone:false, inventoryStatus:'required', inventoryUpdatedAt:null, profile:{firstName:'',lastName:'',username:'',email:''}}; }
@@ -262,12 +262,25 @@ function seedLearnedRow(p){
 function ensureSeedVisionMemory(force=false){
   const seed=activeVisionSeedMemory();
   if(!seed) return false;
+  const seedProducts = Array.isArray(seed.products) ? seed.products : [];
+  const seedCategories = Array.isArray(seed.categories) ? seed.categories.length : 0;
   aiMemory.seedMemory=Object.assign({version:'',loaded:false,products:0,categories:0,lastLoadedAt:0}, aiMemory.seedMemory||{});
-  if(!force && aiMemory.seedMemory.loaded && aiMemory.seedMemory.version===seed.version) return true;
+  const b=ensureVisionBrain();
+  b.seedVersion=seed.version || 'seed';
+  b.seedProducts=seedProducts.length;
+  b.seedCategories=seedCategories;
+  b.seedRules=seed.rules||{};
+  b.seedLoadedAt=b.seedLoadedAt||Date.now();
+  if(!force && aiMemory.seedMemory.loaded && aiMemory.seedMemory.version===seed.version && Number(aiMemory.seedMemory.products||0)===seedProducts.length){
+    aiMemory.seedMemory.products=seedProducts.length;
+    aiMemory.seedMemory.categories=seedCategories;
+    aiMemory.seedMemory.indexed=true;
+    saveAiMemory();
+    return true;
+  }
   aiMemory.learnedProducts=Array.isArray(aiMemory.learnedProducts)?aiMemory.learnedProducts:[];
   const byKey=new Map(aiMemory.learnedProducts.map((r,i)=>[String(r.key||''), i]));
   let added=0, updated=0;
-  const seedProducts = Array.isArray(seed.products) ? seed.products : [];
   const seedRowsForLocalMemory = seedProducts.slice(0,900);
   for(const p of seedRowsForLocalMemory){
     if(!p?.name) continue;
@@ -276,10 +289,8 @@ function ensureSeedVisionMemory(force=false){
     if(idx===undefined){ aiMemory.learnedProducts.push(row); added++; }
     else { aiMemory.learnedProducts[idx]=Object.assign({}, row, aiMemory.learnedProducts[idx], {seed:true, seedVersion:row.seedVersion, formats:row.formats, ocrKeywords:row.ocrKeywords}); updated++; }
   }
-  const b=ensureVisionBrain();
-  b.seedVersion=seed.version; b.seedProducts=seedProducts.length; b.seedCategories=(seed.categories||[]).length; b.seedRules=seed.rules||{}; b.seedLoadedAt=Date.now();
-  aiMemory.seedMemory={version:seed.version,loaded:true,products:seedProducts.length,categories:(seed.categories||[]).length,lastLoadedAt:Date.now(),added,updated,indexed:true};
-  // Keep real user-confirmed rows first, then seed rows. Seeds are knowledge, not proof: they help but don't overrule confirmed corrections.
+  b.seedLoadedAt=Date.now();
+  aiMemory.seedMemory={version:seed.version||'seed',loaded:true,products:seedProducts.length,categories:seedCategories,lastLoadedAt:Date.now(),added,updated,indexed:true};
   aiMemory.learnedProducts.sort((a,b)=>{
     if(!!a.seed!==!!b.seed) return a.seed?1:-1;
     return Number(b.lastConfirmedAt||0)-Number(a.lastConfirmedAt||0);
@@ -1971,9 +1982,14 @@ async function askBackendAi(message){
 
 function refreshVisionBrainPanel(){
   const el=$('#visionBrainPanel'); if(!el) return;
-  const s=visionBrainStatus(); const vp=ensureVoiceProfile(); const heard=(vp.heard||[]).length, corr=(vp.corrections||[]).length, syncs=Number(ensureVisionBrain().serverSyncs||0);
-  el.innerHTML=`<strong>AI autonoma master</strong><small><span class="autonomy-badge">Vision ${s.autonomy}%</span><span class="autonomy-badge">${s.samples} esempi</span><span class="autonomy-badge">${s.models} modelli</span><span class="autonomy-badge">Voce ${heard}/${corr}</span><span class="autonomy-badge">Server sync ${syncs}</span><br>OpenAI fa da docente quando serve; quando il modello locale è sicuro lavora da solo.</small>`;
+  ensureSeedVisionMemory();
+  const s=visionBrainStatus(); const vp=ensureVoiceProfile();
+  const heard=(vp.heard||[]).length, corr=(vp.corrections||[]).length, syncs=Number(ensureVisionBrain().serverSyncs||0);
+  const seedProducts = Number(s.seedProducts||aiMemory.seedMemory?.products||activeVisionSeedMemory()?.products?.length||0);
+  const seedBadge = seedProducts ? `<span class="autonomy-badge seed-ok">Seed ${seedProducts.toLocaleString('it-IT')}</span>` : `<span class="autonomy-badge seed-warn">Seed in caricamento</span>`;
+  el.innerHTML=`<strong>AI autonoma master</strong><small>${seedBadge}<span class="autonomy-badge">Vision ${s.autonomy}%</span><span class="autonomy-badge">${s.samples} esempi reali</span><span class="autonomy-badge">${s.models} modelli utente</span><span class="autonomy-badge">Voce ${heard}/${corr}</span><span class="autonomy-badge">Server sync ${syncs}</span><br>Catalogo seed già caricato: prodotti, marche, formati e parole OCR. OpenAI resta docente solo quando serve; le conferme reali costruiscono i modelli autonomi.</small>`;
 }
+
 
 function ensureScannerLiveButtons(){
   const bar=document.querySelector('#groceryScannerDialog .scanner-actions');
@@ -3031,4 +3047,4 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-console.log('[Spesa Pronta] V27.44 seed-mega loaded: 11200 smart seed products integrated in ZIP');
+console.log('[Spesa Pronta] V27.45 seed-visible loaded: 11200 smart seed products visible and integrated');
