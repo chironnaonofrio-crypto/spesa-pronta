@@ -1074,7 +1074,7 @@ body::after{content:'V27.48 PREMIUM CORE 1M';position:fixed;right:14px;bottom:10
 
 /* V27.56 responsive text + layout fix */
 
-:root{--deploy-version:"V27.57 ROOT+PUBLIC FIX"}
+:root{--deploy-version:"V27.58 FUTURE UI"}
 .topbar,.top-title,.top-actions,.panel-head,.premium-hero,.premium-hero-copy,.premium-hero-image,.onboarding-steps.pro-steps article,.scanner-head,.scanner-title-block,.scanner-quick-cards,.scanner-card-premium .scanner-quick-cards>span,.scanner-card-premium .scanner-quick-cards .quick-copy,.seed-proof-head,.seed-proof-stats span{min-width:0!important}
 .topbar{gap:12px!important;flex-wrap:wrap!important;align-items:flex-start!important}
 .top-actions{margin-left:auto!important;flex-wrap:wrap!important;justify-content:flex-end!important;gap:10px!important;max-width:100%!important}
@@ -1146,7 +1146,7 @@ body::after{content:'V27.48 PREMIUM CORE 1M';position:fixed;right:14px;bottom:10
 }
 
 
-/* V27.57 final: root + public aligned, strict no-overflow */
+/* V27.58 final: root + public aligned, strict no-overflow */
 html,body{max-width:100%!important;overflow-x:hidden!important}
 *{box-sizing:border-box}
 .app-frame,.main,.topbar,.top-title,.top-actions,.view,.panel,.scanner-card-premium{max-width:100%!important}
@@ -1234,4 +1234,78 @@ img{max-width:100%;height:auto}
   .scanner-card-premium .scanner-quick-cards .quick-copy em{
     font-size:.68rem!important;
   }
+}
+
+
+/* V27.58 future UI cleanup */
+.deploy-version-pill,.deploy-floating-version{display:none!important}
+body::after{
+  content:'V27.58 FUTURE UI'!important;
+  position:fixed!important;
+  left:10px!important;
+  right:auto!important;
+  bottom:10px!important;
+  font-size:10px!important;
+  font-weight:900!important;
+  color:rgba(10,28,54,.34)!important;
+  letter-spacing:.04em!important;
+  pointer-events:none!important;
+  z-index:9999!important;
+}
+.topbar{align-items:flex-start!important}
+.top-title{min-width:0!important;flex:1 1 auto!important}
+.top-title h1{font-size:clamp(2.35rem,8vw,4rem)!important;line-height:.9!important}
+.top-actions{margin-left:auto!important}
+
+/* Square futuristic image cards */
+.onboarding-steps.pro-steps article strong,
+.scanner-card-premium .scanner-quick-cards > span > img.quick-card-art,
+.onboarding-steps.pro-steps .step-visual,
+.scanner-quick-cards img.quick-card-art{
+  border-radius:18px!important;
+}
+.onboarding-steps.pro-steps article strong{
+  width:96px!important;
+  height:96px!important;
+  display:grid!important;
+  place-items:center!important;
+  overflow:hidden!important;
+  border-radius:22px!important;
+  border:1px solid rgba(47,116,255,.18)!important;
+  background:linear-gradient(180deg,#f8fbff,#eef5ff)!important;
+  box-shadow:0 10px 30px rgba(18,102,241,.10), inset 0 0 0 1px rgba(255,255,255,.65)!important;
+}
+.onboarding-steps.pro-steps .step-visual{
+  width:100%!important;
+  height:100%!important;
+  object-fit:cover!important;
+  border:0!important;
+  box-shadow:none!important;
+  background:#edf5ff!important;
+}
+.scanner-card-premium .scanner-quick-cards > span{
+  align-items:center!important;
+}
+.scanner-card-premium .scanner-quick-cards > span > img.quick-card-art{
+  width:92px!important;
+  height:92px!important;
+  object-fit:cover!important;
+  border-radius:20px!important;
+  border:1px solid rgba(47,116,255,.18)!important;
+  background:linear-gradient(180deg,#f8fbff,#eef5ff)!important;
+  box-shadow:0 10px 30px rgba(18,102,241,.10), inset 0 0 0 1px rgba(255,255,255,.65)!important;
+}
+.seed-brain-proof .seed-proof-icon{
+  border-radius:24px!important;
+  border:1px solid rgba(47,116,255,.18)!important;
+  box-shadow:0 10px 30px rgba(18,102,241,.10)!important;
+}
+@media (max-width:700px){
+  .onboarding-steps.pro-steps article strong{width:84px!important;height:84px!important;border-radius:20px!important}
+  .scanner-card-premium .scanner-quick-cards > span > img.quick-card-art{width:76px!important;height:76px!important;border-radius:18px!important}
+}
+@media (max-width:420px){
+  body::after{left:8px!important;bottom:8px!important;font-size:9px!important}
+  .onboarding-steps.pro-steps article strong{width:76px!important;height:76px!important;border-radius:18px!important}
+  .scanner-card-premium .scanner-quick-cards > span > img.quick-card-art{width:64px!important;height:64px!important;border-radius:16px!important}
 }
