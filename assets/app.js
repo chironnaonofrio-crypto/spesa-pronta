@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v27.35-detail-ocr-size-pro';
+window.SPESA_PRONTA_VERSION='v27.36-polish-vision';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -1279,14 +1279,14 @@ function setVoiceToggleUi(){
   const btn=$('#scannerVoiceToggleBtn');
   if(!btn) return;
   btn.classList.toggle('active', !!liveScanSpeechEnabled);
-  btn.textContent=liveScanSpeechEnabled ? '🔊 Voce attiva' : '🔇 Voce disattivata';
+  btn.textContent=liveScanSpeechEnabled ? 'Voce attiva' : 'Voce disattivata';
 }
 function setMicToggleUi(){
   const btn=$('#scannerMicToggleBtn');
   if(!btn) return;
   btn.classList.toggle('active', !!scannerMicEnabled);
   btn.classList.toggle('listening', !!scannerMicListening);
-  btn.textContent=!scannerMicEnabled ? '🎙️ Mic off' : (scannerMicListening ? '🎙️ Mic in ascolto' : '🎙️ Mic attivo');
+  btn.textContent=!scannerMicEnabled ? 'Mic off' : (scannerMicListening ? 'Mic in ascolto' : 'Mic attivo');
 }
 function getActiveScannerResult(){
   const current=scannerMicCurrentResultId ? document.getElementById(scannerMicCurrentResultId) : null;
@@ -1408,7 +1408,9 @@ function canonicalVolume(raw=''){
   }
   if(/mezzo\s+litro|mezza\s+litro|0\.5\s*l/.test(s)) return {text:'500 ml', ml:500, raw:raw};
   if(/due\s+litri|2\s*l/.test(s)) return {text:'2 L', ml:2000, raw:raw};
+  if(/un\s+litro\s+e\s+mezzo|uno\s+e\s+mezzo|litro\s+e\s+mezzo|1\.5\s*l/.test(s)) return {text:'1,5 L', ml:1500, raw:raw};
   if(/un\s+litro|1\s*l/.test(s)) return {text:'1 L', ml:1000, raw:raw};
+  if(/cinquecento\s*(?:ml|millilitri)|cinque\s*cento\s*(?:ml|millilitri)/.test(s)) return {text:'500 ml', ml:500, raw:raw};
   return null;
 }
 function parseSizeFromSpeech(raw=''){
@@ -1447,7 +1449,8 @@ function getScanCompletionStatus(el, result={}){
   const s=getScanFormState(el,result);
   const brandRequired = !!result.brand && !s.brand && !el.dataset.voiceBrandDone;
   const sizeImportant = isBottleLike(result,s);
-  const sizeOk = !!s.size || el.dataset.voiceSizeDone==='1';
+  const rawSize=String(s.size||'').toLowerCase();
+  const sizeOk = (!!s.size && !/da confermare|capienza da confermare|1,5 l \/ 2 l/.test(rawSize)) || el.dataset.voiceSizeDone==='1';
   const checks=[
     {key:'name', label:'Nome', ok:!!s.name && !/^es\./i.test(s.name) && !isBadScanName(s.name), required:true, warn:Number(result.confidence||0)<0.50},
     {key:'brand', label:'Marca', ok:!!s.brand || !!result.brand || !brandRequired || el.dataset.voiceBrandDone==='1', required:brandRequired, warn:!s.brand},
@@ -1481,7 +1484,7 @@ function renderScanCompletionStatus(el, result={}){
   if(!box) return;
   const info=getScanCompletionStatus(el,result);
   const pct=Math.round((info.done/info.total)*100);
-  const progress=info.checks.map(c=>`<div class="step ${c.ok?'ok':(c.warn?'warn':'')} ${c.important?'important':''}">${c.ok?'✅':'•'} ${esc(c.label)}</div>`).join('');
+  const progress=info.checks.map(c=>`<div class="step ${c.ok?'ok':(c.warn?'warn':'')} ${c.important?'important':''}">${c.ok?'✓':'•'} ${esc(c.label)}</div>`).join('');
   const line = info.missing.length ? `Completamento ${pct}%. Mancano: ${info.missing.map(k=>({name:'nome',brand:'marca',size:'formato/capienza',qty:'quantità',expiry:'scadenza',category:'categoria',damage:'stato'}[k]||k)).join(', ')}.` : (info.warn.length ? `Scheda utilizzabile. Opzionali non letti: ${info.warn.map(k=>({brand:'marca',size:'formato/capienza',expiry:'scadenza'}[k]||k)).join(', ')}.` : 'Scheda completa: puoi confermare.');
   box.innerHTML=`<strong>Riepilogo smart</strong><div class="line">${esc(line)}</div><div class="scan-progress">${progress}</div>`;
 }
@@ -1786,7 +1789,7 @@ function ensureScannerLiveButtons(){
   if(!bar || $('#liveVisionBtn')) return;
   const fridge=bar.querySelector('#fridgeModeBtn');
   const wrap=document.createElement('div');
-  wrap.innerHTML='<button class="primary-btn" id="liveVisionBtn" type="button">🎥 Diretta AI auto-scan</button><button class="outline-btn" id="scannerCaptureNowBtn" type="button">⚡ Scatta ora</button>';
+  wrap.innerHTML='<button class="primary-btn" id="liveVisionBtn" type="button"><span class="action-symbol live"></span><span>Diretta AI</span></button><button class="outline-btn" id="scannerCaptureNowBtn" type="button"><span class="action-symbol zap"></span><span>Scatta ora</span></button>';
   bar.insertBefore(wrap.firstChild, fridge);
   bar.insertBefore(wrap.firstChild, fridge);
   $('#liveVisionBtn')?.addEventListener('click', ()=>startLiveVisionMode('smart'));
@@ -1796,7 +1799,7 @@ function openGroceryScanner(afterShopping=false){
   const dlg=$('#groceryScannerDialog'); if(!dlg) return;
   ensureScannerLiveButtons();
   dlg.dataset.afterShopping = afterShopping ? '1' : '0';
-  setScannerStatus(!settings.inventorySetupDone ? 'Inventario iniziale: usa la diretta AI o scatta una foto. La Vision AI prova a leggere marca, forma, scadenza, quantità e stato del prodotto prima di confermare.' : (afterShopping ? 'Hai premuto “Ho fatto la spesa”. Ora puoi usare la diretta AI: quando il prodotto entra bene nell’inquadratura, provo a scattare in automatico e a leggere marca, scadenza, quantità, categoria e danni.' : 'Metti un articolo davanti alla videocamera o carica una foto. La Vision AI ragiona su marca, forma, scadenza, tipologia, quantità e possibili danni.'));
+  setScannerStatus(!settings.inventorySetupDone ? 'Scansiona un prodotto per volta: nome, marca, formato, scadenza e stato. Confermi o correggi prima di salvare.' : (afterShopping ? 'Controllo spesa: inquadra ogni prodotto, conferma la scheda, poi dai OK per il prossimo.' : 'Scatta o avvia la diretta. La Vision legge dettagli e ti chiede conferma solo quando serve.'));
   try{ dlg.showModal(); }catch{ dlg.setAttribute('open',''); }
   openAiPanel();
 }
@@ -1842,7 +1845,7 @@ function markShoppingDoneToVerify(){
   addAiMessage('assistant','Ok, ho segnato la spesa come fatta ma da verificare. Quando puoi, riapri la diretta AI e controlliamo prodotto per prodotto.');
 }
 function startFridgeMode(){
-  setScannerStatus('Modalità frigo attiva: apro la diretta AI. Appoggia il prodotto davanti al frigo e, quando è ben centrato, provo a scattare da solo e a leggere marca, scadenza e quantità.', 'Modalità frigo attiva. Mostrami un prodotto ben centrato e, se puoi, tieni visibile anche la scadenza.', true);
+  setScannerStatus('Scansione frigo attiva: pensata per controllare prodotti mentre li riponi o li tiri fuori dal frigo. Priorità a scadenza, stato e quantità.', 'Scansione frigo attiva. Mostrami il prodotto vicino alla camera e, se puoi, porta in primo piano la zona scadenza.', true);
   startLiveVisionMode('fridge');
 }
 function renderLiveScanStage(note='Metti il prodotto nel riquadro: quando è ben centrato provo a scattare da solo.'){
@@ -1851,10 +1854,10 @@ function renderLiveScanStage(note='Metti il prodotto nel riquadro: quando è ben
   pv.innerHTML=`<div class="live-scan-stage">
     <video id="liveScanVideo" class="live-scan-video" autoplay playsinline muted></video>
     <div id="liveScanGuides" class="live-scan-guides"><div class="aim-box"></div></div>
-    <div class="live-scan-hud"><span id="liveScanMainPill" class="live-scan-pill">Diretta AI pronta</span><span id="liveScanAutoPill" class="live-scan-pill warn">Auto-scatto in attesa</span></div>
+    <div class="live-scan-hud"><span id="liveScanMainPill" class="live-scan-pill">Diretta pronta</span><span id="liveScanAutoPill" class="live-scan-pill warn">Attendo stabilità</span></div>
   </div>
-  <div class="live-scan-controls"><button class="primary-btn" id="scannerCaptureNowInlineBtn" type="button">⚡ Scatta adesso</button><button class="mini-btn" id="scannerVoiceToggleBtn" type="button">🔊 Voce attiva</button><button class="mini-btn mic" id="scannerMicToggleBtn" type="button">🎙️ Mic attivo</button><button class="mini-btn next-btn" id="scannerNextObjectBtn" type="button" hidden>➡️ Pronto per il prossimo</button><button class="outline-btn" id="scannerStopLiveBtn" type="button">Chiudi diretta</button></div>
-  <p class="live-scan-note"><strong>Assistente vocale + microfono attivi.</strong> <em>Puoi parlare con la Vision AI</em> mentre inquadri il prodotto e fino al completamento della scheda. <span class="live-tip">Dopo ogni scheda, per passare al prossimo oggetto devi dire <b>okay</b> oppure premere il pulsante dedicato.</span> ${esc(note)}</p>`;
+  <div class="live-scan-controls"><button class="primary-btn" id="scannerCaptureNowInlineBtn" type="button"><span class="action-symbol zap"></span><span>Scatta adesso</span></button><button class="mini-btn" id="scannerVoiceToggleBtn" type="button">Voce attiva</button><button class="mini-btn mic" id="scannerMicToggleBtn" type="button">Mic attivo</button><button class="mini-btn next-btn" id="scannerNextObjectBtn" type="button" hidden>OK prossimo prodotto</button><button class="outline-btn" id="scannerStopLiveBtn" type="button">Chiudi diretta</button></div>
+  <p class="live-scan-note"><strong>Guida live.</strong> La camera resta grande, tu tieni fermo il prodotto. Dopo ogni scheda si passa avanti solo con OK. <span class="live-tip">${esc(note)}</span></p>`;
   $('#scannerCaptureNowInlineBtn')?.addEventListener('click', ()=>captureLiveFrame(true));
   $('#scannerVoiceToggleBtn')?.addEventListener('click', ()=>{ liveScanSpeechEnabled=!liveScanSpeechEnabled; setVoiceToggleUi(); toast(liveScanSpeechEnabled ? 'Voce attivata' : 'Voce disattivata'); if(liveScanSpeechEnabled) speakNatural('Voce attivata. Ti guiderò durante la scansione.', {flush:true}); else if('speechSynthesis' in window) try{ speechSynthesis.cancel(); }catch{} });
   $('#scannerMicToggleBtn')?.addEventListener('click', ()=>{ scannerMicEnabled=!scannerMicEnabled; if(scannerMicEnabled){ setMicToggleUi(); startScannerMic(true); } else { stopScannerMic(); } });
@@ -1865,7 +1868,7 @@ function renderLiveScanStage(note='Metti il prodotto nel riquadro: quando è ben
 async function startLiveVisionMode(mode='smart'){
   ensureScannerLiveButtons();
   stopLiveVisionMode(true);
-  renderLiveScanStage(mode==='fridge' ? 'Modalità frigo: tieni il prodotto nel riquadro centrale. Quando è fermo e leggibile, provo a scattare e analizzare marca, scadenza, quantità e stato.' : 'Diretta AI: centra il prodotto, tienilo fermo e lascia che provi a scattare automaticamente quando lo vede bene.');
+  renderLiveScanStage(mode==='fridge' ? 'Frigo: mostra etichetta e data; se non leggo la scadenza ti chiedo di avvicinarla.' : 'Diretta: centra etichetta e formato; se la capienza non è certa te la chiedo prima di salvare.');
   const video=$('#liveScanVideo');
   if(!video) return;
   try{
@@ -1906,7 +1909,7 @@ function setNextObjectUi(waiting=false){
   if(!btn) return;
   btn.hidden=false;
   btn.className='mini-btn next-btn'+(waiting?' wait':'');
-  btn.textContent=waiting ? '✅ Dimmi o premi OK per il prossimo' : '➡️ Pronto per il prossimo';
+  btn.textContent=waiting ? 'Dimmi o premi OK per il prossimo' : 'Pronto per il prossimo';
 }
 function enterNextObjectGate(){
   liveScanAwaitNextOk=true;
@@ -2367,14 +2370,14 @@ function addScannerResult(result){
       <div class="scan-voice-helper ${helperMode}" data-scan-voice-note><span class="dot"></span><div><strong>Assistente live</strong><br>${esc(helperText)}</div></div>
       <div class="scan-summary-box" data-scan-summary></div>
       <div class="scan-warning-box ${result.isDamaged?'':'good'}" data-scan-warning><strong>${result.isDamaged?'Controllo qualità':'Controllo qualità OK'}</strong>${result.isDamaged?`Possibile irregolarità: ${esc(result.damageType||'da verificare')}. Conferma a voce se è integro o danneggiato.`:'Nessun danno evidente rilevato. Puoi correggere se noti qualcosa.'}</div>
-      <div class="scan-detail-box ${(result.sizeConfidence&&result.sizeConfidence<.75)||(!result.estimatedSize&&result.isLiquid)?'warn':'good'}" data-detail-box><strong>Lettura dettagli</strong>${esc(result.detailQuestion || (result.estimatedSize ? 'Formato rilevato: '+result.estimatedSize : 'Se la capienza o la scadenza non sono leggibili, dimmele a voce.'))}</div>
+      <div class="scan-detail-box ${(result.sizeConfidence&&result.sizeConfidence<.75)||(!result.estimatedSize&&result.isLiquid)?'warn':'good'}" data-detail-box><strong>Lettura dettagli</strong>${esc(result.detailQuestion || (result.estimatedSize ? 'Formato rilevato: '+result.estimatedSize : 'Se formato o scadenza non sono certi, dimmeli a voce: esempio 2 litri o scadenza 05/2027.'))}</div>
       ${scanEvidenceHtml(result)}
       ${result.needsRetake?'<button class="outline-btn" data-retake>Rifai foto</button>':`
       <label><small>Nome prodotto</small><input data-scan-name value="${esc(result.productName||'')}" placeholder="${esc(placeholder)}"></label>
       <div class="scan-grid-3 pro detail"><label><small>Marca</small><input data-scan-brand value="${esc(result.brand||'')}" placeholder="Es. Vera, Levissima, Divella"></label><label><small>Formato / capienza</small><input data-scan-size value="${esc(result.estimatedSize||'')}" placeholder="Es. 2 L, 1,5 L, 500 ml"></label><label><small>Quantità pezzi</small><input data-scan-qty type="number" min="0" step="0.1" value="${esc(result.quantity||1)}"></label></div>
       <div class="scan-grid-3 pro detail"><label><small>Unità</small><input data-scan-unit value="${esc(result.unit||'pz')}"></label><label><small>Scadenza</small><input data-scan-expiry value="${esc(result.expiryDate||'')}" placeholder="Es. 12/08/2026"></label><label><small>Categoria</small><select data-scan-cat>${categoryOptions(result.category||'food')}</select></label></div>
       <label><small>Stato prodotto</small><input data-scan-damage value="${esc(result.isDamaged?(result.damageType||'Danneggiato'):'Integro')}" placeholder="Integro / rotto / ammaccato"></label>
-      <div class="scan-actions-row"><button class="secondary-btn" type="button" data-scan-recap>🧠 Riepilogo AI</button><button class="danger-btn" type="button" data-force-rescan>🔁 Rifai questo</button><button class="primary-btn" data-confirm-scan>Conferma e aggiungi in casa</button></div>`}
+      <div class="scan-actions-row"><button class="secondary-btn" type="button" data-scan-recap>Riepilogo AI</button><button class="danger-btn" type="button" data-force-rescan>Rifai questo</button><button class="primary-btn" data-confirm-scan>Conferma e aggiungi in casa</button></div>`}
     </div>
   </article>`;
   $('#scannerResults').insertAdjacentHTML('afterbegin',html);
@@ -2435,6 +2438,12 @@ function confirmScanResult(el,result,silent=false){
   const expiryDate=el.querySelector('[data-scan-expiry]')?.value.trim() || '';
   const damageNote=el.querySelector('[data-scan-damage]')?.value.trim() || 'Integro';
   if(!productName || isBadScanName(productName)){ toast('Inserisci il nome reale del prodotto'); setScanVoiceHelper(el,'Nome non valido: dimmi il nome reale del prodotto.', 'warn'); return; }
+  if(isBottleLike(result,{category, size}) && (!size || /da confermare|capienza da confermare|1,5 l \/ 2 l/i.test(size)) && !el.dataset.voiceSizeDone){
+    toast('Conferma formato/capienza');
+    setScanVoiceHelper(el,'Prima di salvare conferma la capienza: puoi dire due litri, un litro e mezzo o cinquecento ml.', 'warn');
+    speakNatural('Prima di salvare conferma la capienza. Puoi dire due litri, un litro e mezzo o cinquecento ml.', {flush:true});
+    return;
+  }
   const item=findItemBySpeech(productName);
   result.brand = brand; result.estimatedSize=size;
   const aiMeta={brand,variant:result.variant||'',productType:result.productType||'',packageType:result.packageType||'',estimatedSize:size,sizeConfirmed:!!size,isLiquid:!!result.isLiquid,damageNote,expiryDate,confidence:result.confidence||null};

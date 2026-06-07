@@ -900,7 +900,8 @@ function buildVisionCandidatePool(catalog=[], settings={}, memory={}){
       category: cleanVisionString(item.category||''),
       brand:'',
       aliases: uniqueStrings(names,8),
-      unit: cleanVisionString(item.unit||'')
+      unit: cleanVisionString(item.unit||''),
+      estimatedSize: cleanVisionString(item.aiMeta?.estimatedSize || item.estimatedSize || '')
     });
   }
   for(const row of (Array.isArray(memory?.learnedProducts)?memory.learnedProducts:[]).slice(0,220)){
@@ -912,6 +913,7 @@ function buildVisionCandidatePool(catalog=[], settings={}, memory={}){
       brand: cleanVisionString(row.brand||''),
       aliases: uniqueStrings([row.productName,row.brand,row.variant,...(row.aliases||[])],10),
       unit: cleanVisionString(row.unit||''),
+      estimatedSize: cleanVisionString(row.estimatedSize||''),
       visualHints: uniqueStrings(row.visualHints||[],8)
     });
   }
@@ -947,6 +949,12 @@ function applyVisionMatching(result, candidates){
       result.productName = best.candidate.name;
     }
     if(!result.brand && best.candidate.brand) result.brand = best.candidate.brand;
+    if(best.candidate.estimatedSize && (!result.estimatedSize || /da confermare|capienza/i.test(result.estimatedSize) || Number(result.sizeConfidence||0)<0.75)){
+      result.estimatedSize = best.candidate.estimatedSize;
+      result.sizeDetectedRaw = result.sizeDetectedRaw || 'memoria confermata utente';
+      result.sizeConfidence = Math.max(Number(result.sizeConfidence||0), 0.82);
+      result.detailQuestion = result.detailQuestion || 'Formato suggerito dalla memoria: conferma se corretto.';
+    }
     if(!result.category || result.category==='food') result.category = best.candidate.category || result.category;
     result.confidence = Math.min(0.99, Math.max(result.confidence||0, 0.78 + Math.min(0.18,best.score/50)));
   }
@@ -1007,8 +1015,8 @@ function canonicalVisionVolume(raw=''){
   if(m){ const l=Number(m[1]); if(Number.isFinite(l)&&l>0&&l<=10) return {text:(Number.isInteger(l)?String(l):String(l).replace('.',','))+' L', ml:Math.round(l*1000), raw:m[0], confidence:.93}; }
   m=s.match(/(\d{2,5})\s*(?:ml|millilitri|millilitro)\b/);
   if(m){ const ml=Number(m[1]); if(Number.isFinite(ml)&&ml>0&&ml<=10000){ return {text:(ml>=1000&&ml%500===0?(ml/1000).toString().replace('.',',')+' L':ml+' ml'), ml, raw:m[0], confidence:.92}; } }
-  if(/due\s+litri/.test(s)) return {text:'2 L', ml:2000, raw, confidence:.90};
-  if(/un\s+litro\s+e\s+mezzo|uno\s+e\s+mezzo|1\.5\s*l/.test(s)) return {text:'1,5 L', ml:1500, raw, confidence:.88};
+  if(/due\s+litri|2\s*l|2l|2000\s*ml/.test(s)) return {text:'2 L', ml:2000, raw, confidence:.90};
+  if(/un\s+litro\s+e\s+mezzo|uno\s+e\s+mezzo|litro\s+e\s+mezzo|1\.5\s*l|1\s*5\s*l|1500\s*ml/.test(s)) return {text:'1,5 L', ml:1500, raw, confidence:.88};
   if(/mezzo\s+litro|0\.5\s*l/.test(s)) return {text:'500 ml', ml:500, raw, confidence:.88};
   return null;
 }
@@ -1034,6 +1042,16 @@ function looksLikeBottleDrink(result={}){
   const n=normalizeVisionText([result.productName,result.brand,result.variant,result.productType,result.packageType,result.category,result.estimatedSize,...(result.detectedText||[]),...(result.visibleEvidence||[])].join(' '));
   return !!(result.isLiquid || result.category==='drinks' || /\b(acqua|bottiglia|bevanda|naturale|frizzante|vera|levissima|sant anna|rocchetta|lete|uliveto)\b/.test(n));
 }
+function sanitizeVisionDamage(result={}){
+  const d=normalizeVisionText(result.damageType||'');
+  const ev=normalizeVisionText([...(result.visibleEvidence||[]),...(result.detectedText||[])].join(' '));
+  if(looksLikeBottleDrink(result) && /schiacciat|ammaccat|deformat/.test(d) && !/perdit|bucat|apert|rott|tappo rotto|liquido fuori/.test(d+' '+ev)){
+    result.isDamaged=false;
+    result.damageType='';
+    result.detailQuestion=result.detailQuestion || 'La bottiglia può sembrare deformata dalla presa: conferma solo se è davvero danneggiata o perde.';
+  }
+  return result;
+}
 function enrichVisionDetails(result={}){
   if(isJunkVisionName(result.productName)){ result.productName=''; result.needsManual=true; result.shouldAskConfirmation=true; }
   const vol=extractVisionVolume(result);
@@ -1050,6 +1068,7 @@ function enrichVisionDetails(result={}){
   const exp=extractVisionExpiry(result);
   if(exp){ result.expiryDate=exp.text; result.expiryDetectedRaw=exp.raw; result.expiryConfidence=Math.max(Number(result.expiryConfidence||0), exp.confidence); }
   else if(!result.expiryDate){ result.expiryConfidence=Number(result.expiryConfidence||0); }
+  sanitizeVisionDamage(result);
   return result;
 }
 
@@ -1114,9 +1133,9 @@ Regole severe anti-errore:
 - NON inventare mai. Se non leggi un dettaglio, lascia il campo vuoto o scrivi "da confermare" e metti needsManual true.
 - Il testo dell'etichetta vale più della forma e più della memoria.
 - Per bottiglie/bevande devi distinguere capienza: 500 ml, 750 ml, 1 L, 1,5 L, 2 L, 2000 ml. Non mettere 500 ml se non lo leggi o se non sei certo che sia una bottiglia piccola.
-- Se la bottiglia sembra grande ma non leggi la capienza, usa estimatedSize "1,5 L / 2 L da confermare" o "Capienza da confermare", non inventare.
+- Se la bottiglia occupa gran parte dell'inquadratura ed è larga/alta, NON classificarla 500 ml: scegli '2 L da confermare' o '1,5 L / 2 L da confermare' e chiedi conferma.
 - Cerca scadenze/TMC/EXP su etichetta, tappo, collo bottiglia, retro e base confezione. Se non leggibile, expiryDate vuota e detailQuestion chiara.
-- Rileva danni/irregolarità: ammaccato, schiacciato, aperto, rotto, bucato, perdita, etichetta rovinata, congelato/ghiacciato se anomalo.
+- Rileva danni veri: aperto, rotto, bucato, perdita, tappo rotto, etichetta illeggibile. Per bottiglie in plastica schiacciate dalla mano o naturalmente deformate, NON segnarle danneggiate: chiedi conferma.
 - Non chiamare Coca-Cola se il rosso è solo sfondo: serve testo Coca-Cola o etichetta/prodotto centrale rosso.
 - Scegli categoria fra: food, drinks, pets, house, pharmacy, aquarium, fruit, veg.
 Schema JSON: {"needsRetake":boolean,"needsManual":boolean,"multipleItems":boolean,"shouldAskConfirmation":boolean,"reason":"breve in italiano","productName":"nome prodotto","brand":"marca","variant":"variante/gusto/formato","productType":"tipo prodotto","packageType":"tipo confezione","estimatedSize":"formato/capienza","sizeDetectedRaw":"testo volume letto","sizeConfidence":number,"expiryDate":"data visibile o vuota","expiryDetectedRaw":"testo data letto","expiryConfidence":number,"detailQuestion":"domanda se mancano capienza/scadenza","isLiquid":boolean,"isDamaged":boolean,"damageType":"tipo danno o vuota","quantity":number,"unit":"pz|bt|lattina|conf|kg|g|lt|ml|busta|scatola","category":"food|drinks|pets|house|pharmacy|aquarium|fruit|veg","confidence":number,"detectedText":["testi letti"],"visibleEvidence":["prove visive"],"items":[]}
@@ -1125,7 +1144,7 @@ Catalogo ridotto: ${JSON.stringify(compact).slice(0,12000)}
 Prodotti imparati: ${JSON.stringify(learned).slice(0,9000)}
 Candidati memoria: ${JSON.stringify(candidates).slice(0,9000)}`;
   const detailPrompt=`Sei OCR specialist di Spesa Pronta. Ignora lo sfondo e concentrati su etichetta, collo, tappo, retro e base del prodotto.
-Leggi piccoli testi: capienza/formato, scadenza/TMC/EXP, lotto, marca, variante.
+Leggi piccoli testi con attenzione: capienza/formato, scadenza/TMC/EXP, lotto, marca, variante. Se la data è sul tappo/collo e non leggibile, non inventare: chiedi scan ravvicinato della data.
 Output SOLO JSON con gli stessi campi. Regole:
 - Per capienza cerca: 500 ml, 750 ml, 1 L, 1,5 L, 2 L, 2000 ml, cl, litri.
 - Per scadenza cerca: dd/mm/yyyy, dd-mm-yyyy, dd/mm/yy, mm/yyyy, EXP, SCAD, TMC, da consumarsi entro/preferibilmente entro.
