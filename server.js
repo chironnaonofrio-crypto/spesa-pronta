@@ -970,7 +970,9 @@ function mergeVisionOutputs(primaryRaw, ocrRaw){
   const merged=Object.assign({}, primary);
   const preferOcr = (!primary.productName || primary.confidence<0.8) && ocr.productName;
   if(preferOcr) merged.productName=ocr.productName;
-  for(const f of ['brand','variant','estimatedSize','expiryDate','productType','packageType','damageType']){ if(!merged[f] && ocr[f]) merged[f]=ocr[f]; }
+  for(const f of ['brand','variant','estimatedSize','expiryDate','productType','packageType','damageType','sizeDetectedRaw','expiryDetectedRaw','detailQuestion']){ if(!merged[f] && ocr[f]) merged[f]=ocr[f]; }
+  if(Number(ocr.sizeConfidence||0)>Number(primary.sizeConfidence||0)){ merged.estimatedSize=ocr.estimatedSize||merged.estimatedSize; merged.sizeDetectedRaw=ocr.sizeDetectedRaw||merged.sizeDetectedRaw; merged.sizeConfidence=ocr.sizeConfidence; }
+  if(Number(ocr.expiryConfidence||0)>Number(primary.expiryConfidence||0)){ merged.expiryDate=ocr.expiryDate||merged.expiryDate; merged.expiryDetectedRaw=ocr.expiryDetectedRaw||merged.expiryDetectedRaw; merged.expiryConfidence=ocr.expiryConfidence; }
   if((!merged.category || merged.category==='food') && ['fruit','veg','drinks','pets','house','pharmacy','aquarium'].includes(ocr.category)) merged.category=ocr.category;
   if(!merged.isDamaged && ocr.isDamaged){ merged.isDamaged=true; merged.damageType=ocr.damageType||merged.damageType; }
   if(!merged.isLiquid && ocr.isLiquid) merged.isLiquid=true;
@@ -994,6 +996,63 @@ function mergeVisionOutputs(primaryRaw, ocrRaw){
   return normalizeVisionResult(merged);
 }
 
+function isJunkVisionName(name=''){
+  const n=normalizeVisionText(name).replace(/\s+/g,' ').trim();
+  if(!n || n.length<3) return true;
+  return /^(sto|ok|okay|si|no|conferma|prodotto|articolo|manual|live|manual live|auto live|foto|scatta|scatto|questo|questa|image|img|photo|camera|scanner)$/.test(n) || /^\d+$/.test(n);
+}
+function canonicalVisionVolume(raw=''){
+  const s=String(raw||'').toLowerCase().replace(',', '.').replace(/\s+/g,' ').trim();
+  let m=s.match(/(\d+(?:\.\d+)?)\s*(?:l|lt|litro|litri)\b/);
+  if(m){ const l=Number(m[1]); if(Number.isFinite(l)&&l>0&&l<=10) return {text:(Number.isInteger(l)?String(l):String(l).replace('.',','))+' L', ml:Math.round(l*1000), raw:m[0], confidence:.93}; }
+  m=s.match(/(\d{2,5})\s*(?:ml|millilitri|millilitro)\b/);
+  if(m){ const ml=Number(m[1]); if(Number.isFinite(ml)&&ml>0&&ml<=10000){ return {text:(ml>=1000&&ml%500===0?(ml/1000).toString().replace('.',',')+' L':ml+' ml'), ml, raw:m[0], confidence:.92}; } }
+  if(/due\s+litri/.test(s)) return {text:'2 L', ml:2000, raw, confidence:.90};
+  if(/un\s+litro\s+e\s+mezzo|uno\s+e\s+mezzo|1\.5\s*l/.test(s)) return {text:'1,5 L', ml:1500, raw, confidence:.88};
+  if(/mezzo\s+litro|0\.5\s*l/.test(s)) return {text:'500 ml', ml:500, raw, confidence:.88};
+  return null;
+}
+function extractVisionVolume(result={}){
+  const sources=[result.estimatedSize,result.variant,result.productName,result.brand,result.productType,result.packageType,...(result.detectedText||[]),...(result.visibleEvidence||[])].filter(Boolean);
+  for(const src of sources){ const v=canonicalVisionVolume(src); if(v) return v; }
+  return null;
+}
+function canonicalVisionExpiry(raw=''){
+  const text=String(raw||'').trim();
+  let m=text.match(/(\d{1,2})[\/\-.\s](\d{1,2})[\/\-.\s](\d{2,4})/);
+  if(m){ let d=m[1].padStart(2,'0'), mo=m[2].padStart(2,'0'), y=m[3]; if(y.length===2) y='20'+y; return {text:`${d}/${mo}/${y}`, raw:m[0], confidence:.90}; }
+  m=text.match(/(\d{1,2})[\/\-.\s](\d{2,4})/);
+  if(m){ let mo=m[1].padStart(2,'0'), y=m[2]; if(y.length===2) y='20'+y; return {text:`${mo}/${y}`, raw:m[0], confidence:.72}; }
+  return null;
+}
+function extractVisionExpiry(result={}){
+  const sources=[result.expiryDate,result.expiryDetectedRaw,...(result.detectedText||[]),...(result.visibleEvidence||[])].filter(Boolean);
+  for(const src of sources){ const e=canonicalVisionExpiry(src); if(e) return e; }
+  return null;
+}
+function looksLikeBottleDrink(result={}){
+  const n=normalizeVisionText([result.productName,result.brand,result.variant,result.productType,result.packageType,result.category,result.estimatedSize,...(result.detectedText||[]),...(result.visibleEvidence||[])].join(' '));
+  return !!(result.isLiquid || result.category==='drinks' || /\b(acqua|bottiglia|bevanda|naturale|frizzante|vera|levissima|sant anna|rocchetta|lete|uliveto)\b/.test(n));
+}
+function enrichVisionDetails(result={}){
+  if(isJunkVisionName(result.productName)){ result.productName=''; result.needsManual=true; result.shouldAskConfirmation=true; }
+  const vol=extractVisionVolume(result);
+  if(vol){
+    result.estimatedSize=vol.text; result.sizeDetectedRaw=vol.raw; result.sizeConfidence=Math.max(Number(result.sizeConfidence||0), vol.confidence);
+  } else if(looksLikeBottleDrink(result)){
+    const n=normalizeVisionText([result.estimatedSize,...(result.visibleEvidence||[]),...(result.detectedText||[])].join(' '));
+    if(/\b(grande|alta|large|famiglia|domestica|2 l|2l|2000)\b/.test(n)){ result.estimatedSize='2 L da confermare'; result.sizeConfidence=Math.max(Number(result.sizeConfidence||0),.62); }
+    else if(/\b(piccola|small|500|mezzo litro)\b/.test(n)){ result.estimatedSize='500 ml da confermare'; result.sizeConfidence=Math.max(Number(result.sizeConfidence||0),.55); }
+    else { result.estimatedSize=result.estimatedSize || 'Capienza da confermare'; result.sizeConfidence=Math.max(Number(result.sizeConfidence||0),.25); }
+    result.needsManual=true; result.shouldAskConfirmation=true;
+    result.detailQuestion=result.detailQuestion || 'Capienza non letta con certezza: mostra più vicino 2 L / 1,5 L / 500 ml oppure dimmela a voce.';
+  }
+  const exp=extractVisionExpiry(result);
+  if(exp){ result.expiryDate=exp.text; result.expiryDetectedRaw=exp.raw; result.expiryConfidence=Math.max(Number(result.expiryConfidence||0), exp.confidence); }
+  else if(!result.expiryDate){ result.expiryConfidence=Number(result.expiryConfidence||0); }
+  return result;
+}
+
 function normalizeVisionResult(obj={}){
   const allowedCats=new Set(['food','drinks','pets','house','pharmacy','aquarium','fruit','veg']);
   const allowedUnits=new Set(['pz','pc','bt','lt','ml','kg','g','conf','pack','lattina','busta','scatola']);
@@ -1012,7 +1071,13 @@ function normalizeVisionResult(obj={}){
     expiryDate: cleanVisionString(obj.expiryDate || obj.expiry || ''),
     productType: cleanVisionString(obj.productType || obj.type || ''),
     packageType: cleanVisionString(obj.packageType || obj.shape || obj.container || ''),
-    estimatedSize: cleanVisionString(obj.estimatedSize || obj.size || ''),
+    estimatedSize: cleanVisionString(obj.estimatedSize || obj.size || obj.sizeCandidate || obj.volume || ''),
+    sizeDetectedRaw: cleanVisionString(obj.sizeDetectedRaw || obj.sizeRaw || obj.volumeRaw || ''),
+    sizeConfidence: Math.max(0, Math.min(1, Number(obj.sizeConfidence ?? obj.volumeConfidence ?? 0))),
+    expiryDetectedRaw: cleanVisionString(obj.expiryDetectedRaw || obj.expiryRaw || ''),
+    expiryConfidence: Math.max(0, Math.min(1, Number(obj.expiryConfidence ?? 0))),
+    detailQuestion: cleanVisionString(obj.detailQuestion || obj.question || ''),
+    detailScanNeeded: !!obj.detailScanNeeded,
     isLiquid: !!obj.isLiquid,
     isDamaged: !!obj.isDamaged,
     damageType: cleanVisionString(obj.damageType || ''),
@@ -1032,6 +1097,7 @@ function normalizeVisionResult(obj={}){
   if(!allowedUnits.has(result.unit)) result.unit='pz';
   if(result.productName && /^(image|img|foto|photo|screenshot|whatsapp|camera|pxl|dsc|dcim|\d{5,})/i.test(result.productName.replace(/\s+/g,''))) result.productName='';
   if(result.productName.length<2 && !result.needsRetake){ result.needsManual=true; result.shouldAskConfirmation=true; }
+  enrichVisionDetails(result);
   if(result.confidence<0.72 && !result.needsRetake) result.shouldAskConfirmation=true;
   return result;
 }
@@ -1043,32 +1109,45 @@ async function visionAnalyze({image,catalog,settings,memory}){
   const learned=summarizeLearnedProducts(memory).slice(0,35);
   const candidates=buildVisionCandidatePool(catalog, settings, memory).slice(0,45);
   const oneShotPrompt=`Sei la Vision AI cloud di Spesa Pronta. Analizza la foto reale e rispondi SOLO con JSON valido.
-Obiettivo: riconoscere prodotto e marca guardando soprattutto etichetta e testo OCR, non lo sfondo.
-Regole severe:
-- NON inventare mai. Se non sei sicuro, usa needsManual true ma compila ciò che leggi davvero.
-- Dai priorità al testo visibile su etichetta: marca, nome, formato, capacità, scadenza/TMC.
-- Se vedi una bottiglia d'acqua trasparente con etichetta blu/bianca, categoria drinks, unit bt, isLiquid true. Se leggi “Vero”, “Vera”, “Sepina”, “naturale”, usali in brand/variant/productName.
-- Non chiamare Coca-Cola o cola solo per uno sfondo rosso: Coca-Cola serve testo/brand Coca-Cola o etichetta/prodotto rosso centrale.
-- Rileva danni/irregolarità: ammaccato, aperto, rotto, bucato, perdita, etichetta rovinata, congelato/ghiacciato se anomalo.
-- Se la foto è davvero troppo sfocata/buia/tagliata, needsRetake true.
+OBIETTIVO: riconoscere prodotto, marca, formato/capienza, scadenza e stato con massima prudenza.
+Regole severe anti-errore:
+- NON inventare mai. Se non leggi un dettaglio, lascia il campo vuoto o scrivi "da confermare" e metti needsManual true.
+- Il testo dell'etichetta vale più della forma e più della memoria.
+- Per bottiglie/bevande devi distinguere capienza: 500 ml, 750 ml, 1 L, 1,5 L, 2 L, 2000 ml. Non mettere 500 ml se non lo leggi o se non sei certo che sia una bottiglia piccola.
+- Se la bottiglia sembra grande ma non leggi la capienza, usa estimatedSize "1,5 L / 2 L da confermare" o "Capienza da confermare", non inventare.
+- Cerca scadenze/TMC/EXP su etichetta, tappo, collo bottiglia, retro e base confezione. Se non leggibile, expiryDate vuota e detailQuestion chiara.
+- Rileva danni/irregolarità: ammaccato, schiacciato, aperto, rotto, bucato, perdita, etichetta rovinata, congelato/ghiacciato se anomalo.
+- Non chiamare Coca-Cola se il rosso è solo sfondo: serve testo Coca-Cola o etichetta/prodotto centrale rosso.
 - Scegli categoria fra: food, drinks, pets, house, pharmacy, aquarium, fruit, veg.
-Schema JSON: {"needsRetake":boolean,"needsManual":boolean,"multipleItems":boolean,"shouldAskConfirmation":boolean,"reason":"breve in italiano","productName":"nome prodotto","brand":"marca","variant":"variante/gusto/formato","productType":"tipo prodotto","packageType":"tipo confezione","estimatedSize":"formato visibile","expiryDate":"data visibile o vuota","isLiquid":boolean,"isDamaged":boolean,"damageType":"tipo danno o vuota","quantity":number,"unit":"pz|bt|lattina|conf|kg|g|lt|ml|busta|scatola","category":"food|drinks|pets|house|pharmacy|aquarium|fruit|veg","confidence":number,"detectedText":["testi letti"],"visibleEvidence":["prove visive"],"items":[]}
+Schema JSON: {"needsRetake":boolean,"needsManual":boolean,"multipleItems":boolean,"shouldAskConfirmation":boolean,"reason":"breve in italiano","productName":"nome prodotto","brand":"marca","variant":"variante/gusto/formato","productType":"tipo prodotto","packageType":"tipo confezione","estimatedSize":"formato/capienza","sizeDetectedRaw":"testo volume letto","sizeConfidence":number,"expiryDate":"data visibile o vuota","expiryDetectedRaw":"testo data letto","expiryConfidence":number,"detailQuestion":"domanda se mancano capienza/scadenza","isLiquid":boolean,"isDamaged":boolean,"damageType":"tipo danno o vuota","quantity":number,"unit":"pz|bt|lattina|conf|kg|g|lt|ml|busta|scatola","category":"food|drinks|pets|house|pharmacy|aquarium|fruit|veg","confidence":number,"detectedText":["testi letti"],"visibleEvidence":["prove visive"],"items":[]}
 Contesto utile, ma non deve sovrascrivere ciò che vedi nella foto:
 Catalogo ridotto: ${JSON.stringify(compact).slice(0,12000)}
 Prodotti imparati: ${JSON.stringify(learned).slice(0,9000)}
 Candidati memoria: ${JSON.stringify(candidates).slice(0,9000)}`;
+  const detailPrompt=`Sei OCR specialist di Spesa Pronta. Ignora lo sfondo e concentrati su etichetta, collo, tappo, retro e base del prodotto.
+Leggi piccoli testi: capienza/formato, scadenza/TMC/EXP, lotto, marca, variante.
+Output SOLO JSON con gli stessi campi. Regole:
+- Per capienza cerca: 500 ml, 750 ml, 1 L, 1,5 L, 2 L, 2000 ml, cl, litri.
+- Per scadenza cerca: dd/mm/yyyy, dd-mm-yyyy, dd/mm/yy, mm/yyyy, EXP, SCAD, TMC, da consumarsi entro/preferibilmente entro.
+- Se un dato non è leggibile con sicurezza, non inventarlo e scrivi detailQuestion con istruzione pratica: avvicina, gira, inclina o mostra zona scadenza.
+- detectedText deve contenere tutti i frammenti letti, anche incompleti.
+JSON: {"productName":"","brand":"","variant":"","estimatedSize":"","sizeDetectedRaw":"","sizeConfidence":0,"expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"detectedText":[],"visibleEvidence":[],"detailQuestion":"","needsManual":true,"shouldAskConfirmation":true,"confidence":0.1}`;
   try{
-    let raw=null;
+    let primaryRaw=null, detailRaw=null;
     try{
-      raw = await visionJsonCall('Rispondi solo con JSON valido. Analizza immagine + testo visibile. Non usare lo sfondo come marca/prodotto.', oneShotPrompt, image);
+      [primaryRaw, detailRaw] = await Promise.all([
+        visionJsonCall('Rispondi solo con JSON valido. Analizza immagine + testo visibile. Non usare lo sfondo come marca/prodotto.', oneShotPrompt, image),
+        visionJsonCall('Rispondi solo con JSON valido. Fai OCR mirato su capienza e scadenza. Non inventare.', detailPrompt, image)
+      ]);
     }catch(firstErr){
-      // Secondo tentativo ultra-leggero: serve quando il modello configurato è lento o il contesto pesa troppo.
-      const shortPrompt=`Analizza la foto. Rispondi SOLO JSON. Riconosci prodotto, marca, testo etichetta, quantità, categoria, scadenza, danni. Non inventare. Non chiamare Coca-Cola se il rosso è solo sfondo. Se è bottiglia d'acqua, productName acqua in bottiglia, category drinks, unit bt. Schema: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","variant":"","quantity":1,"unit":"pz","category":"food","confidence":0.1,"isLiquid":false,"isDamaged":false,"damageType":"","expiryDate":"","detectedText":[],"visibleEvidence":[],"reason":""}`;
-      raw = await visionJsonCall('Solo JSON valido.', shortPrompt, image);
+      const shortPrompt=`Analizza la foto. Rispondi SOLO JSON. Riconosci prodotto, marca, testo etichetta, capienza, categoria, scadenza, danni. Non inventare. Se capienza non leggibile lascia estimatedSize "Capienza da confermare". Se è bottiglia d'acqua, productName acqua naturale o acqua in bottiglia, category drinks, unit bt. Schema: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","variant":"","estimatedSize":"","sizeDetectedRaw":"","sizeConfidence":0,"quantity":1,"unit":"pz","category":"food","confidence":0.1,"isLiquid":false,"isDamaged":false,"damageType":"","expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"detectedText":[],"visibleEvidence":[],"detailQuestion":"","reason":""}`;
+      primaryRaw = await visionJsonCall('Solo JSON valido.', shortPrompt, image);
+      detailRaw = null;
     }
-    if(!raw) throw new Error('empty_json_from_openai');
-    let result=normalizeVisionResult(raw||{});
+    if(!primaryRaw && !detailRaw) throw new Error('empty_json_from_openai');
+    let result=mergeVisionOutputs(primaryRaw||{}, detailRaw||{});
     result=applyVisionMatching(result, candidates);
+    result=enrichVisionDetails(result);
     result.cloudVision=true;
     result.cloudOffline=false;
     result.cloudError='';

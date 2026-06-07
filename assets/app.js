@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v27.34-clean-version-lock';
+window.SPESA_PRONTA_VERSION='v27.35-detail-ocr-size-pro';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -1384,10 +1384,57 @@ function setScanVoiceHelper(el, text, mode='live'){
   box.className=`scan-voice-helper ${mode}`;
   box.innerHTML=`<span class="dot"></span><div><strong>Assistente live</strong><br>${esc(text)}</div>`;
 }
+const BAD_SCAN_NAMES = new Set(['sto','ok','okay','si','sì','no','conferma','confermo','prodotto','articolo','manual','live','manual live','auto live','foto','scatta','scatto','questo','questa','va bene']);
+function isBadScanName(value=''){
+  const n=normalizeText(String(value||'').trim()).replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
+  if(!n || n.length<3) return true;
+  if(BAD_SCAN_NAMES.has(n)) return true;
+  if(/^(manual|auto|live|scanner|capture|photo|foto|image|img|sto|ok|si|no)$/.test(n)) return true;
+  if(/^\d+$/.test(n)) return true;
+  return false;
+}
+function canonicalVolume(raw=''){
+  let s=String(raw||'').toLowerCase().replace(',', '.').replace(/\s+/g,' ').trim();
+  let m=s.match(/(\d+(?:\.\d+)?)\s*(?:l|lt|litro|litri)\b/);
+  if(m){
+    const l=Number(m[1]); if(Number.isFinite(l) && l>0) return {text:(Number.isInteger(l)?String(l):String(l).replace('.',','))+' L', ml:Math.round(l*1000), raw:m[0]};
+  }
+  m=s.match(/(\d{2,5})\s*(?:ml|millilitri|millilitro)\b/);
+  if(m){
+    const ml=Number(m[1]); if(Number.isFinite(ml) && ml>0){
+      if(ml>=1000 && ml%500===0) return {text:(ml/1000).toString().replace('.',',')+' L', ml, raw:m[0]};
+      return {text:ml+' ml', ml, raw:m[0]};
+    }
+  }
+  if(/mezzo\s+litro|mezza\s+litro|0\.5\s*l/.test(s)) return {text:'500 ml', ml:500, raw:raw};
+  if(/due\s+litri|2\s*l/.test(s)) return {text:'2 L', ml:2000, raw:raw};
+  if(/un\s+litro|1\s*l/.test(s)) return {text:'1 L', ml:1000, raw:raw};
+  return null;
+}
+function parseSizeFromSpeech(raw=''){
+  const c=canonicalVolume(raw); if(c) return c.text;
+  const n=normalizeText(raw);
+  if(/grande|bottiglia grande|formato famiglia/.test(n)) return '1,5 L / 2 L da confermare';
+  if(/piccola|bottiglia piccola/.test(n)) return '500 ml da confermare';
+  return '';
+}
+function parseExpiryLoose(raw=''){
+  const text=String(raw||'').trim();
+  let m=text.match(/(\d{1,2})[\/\-.\s](\d{1,2})[\/\-.\s](\d{2,4})/);
+  if(m){ let d=m[1].padStart(2,'0'), mo=m[2].padStart(2,'0'), y=m[3]; if(y.length===2) y='20'+y; return `${d}/${mo}/${y}`; }
+  m=text.match(/(?:scad(?:e|enza)?|exp|bb|tmc).*?(\d{1,2})[\/\-.\s](\d{1,2})[\/\-.\s](\d{2,4})/i);
+  if(m){ let d=m[1].padStart(2,'0'), mo=m[2].padStart(2,'0'), y=m[3]; if(y.length===2) y='20'+y; return `${d}/${mo}/${y}`; }
+  return '';
+}
+function isBottleLike(result={}, state={}){
+  const text=normalizeText([result.productName,result.brand,result.variant,result.productType,result.packageType,result.estimatedSize,...(result.visibleEvidence||[]),...(result.detectedText||[])].join(' '));
+  return !!(result.isLiquid || state.category==='drinks' || /acqua|bottiglia|bevanda|naturale|frizzante|vera|levissima|sant.?anna|rocchetta|lete|uliveto/.test(text));
+}
 function getScanFormState(el, result={}){
   return {
     name: el.querySelector('[data-scan-name]')?.value?.trim()||'',
     brand: el.querySelector('[data-scan-brand]')?.value?.trim()||'',
+    size: el.querySelector('[data-scan-size]')?.value?.trim() || result.estimatedSize || '',
     qty: Number(String(el.querySelector('[data-scan-qty]')?.value||'').replace(',','.'))||0,
     unit: el.querySelector('[data-scan-unit]')?.value?.trim()||'',
     expiry: el.querySelector('[data-scan-expiry]')?.value?.trim()||'',
@@ -1399,9 +1446,12 @@ function getScanFormState(el, result={}){
 function getScanCompletionStatus(el, result={}){
   const s=getScanFormState(el,result);
   const brandRequired = !!result.brand && !s.brand && !el.dataset.voiceBrandDone;
+  const sizeImportant = isBottleLike(result,s);
+  const sizeOk = !!s.size || el.dataset.voiceSizeDone==='1';
   const checks=[
-    {key:'name', label:'Nome', ok:!!s.name && !/^es\./i.test(s.name), required:true, warn:Number(result.confidence||0)<0.50},
+    {key:'name', label:'Nome', ok:!!s.name && !/^es\./i.test(s.name) && !isBadScanName(s.name), required:true, warn:Number(result.confidence||0)<0.50},
     {key:'brand', label:'Marca', ok:!!s.brand || !!result.brand || !brandRequired || el.dataset.voiceBrandDone==='1', required:brandRequired, warn:!s.brand},
+    {key:'size', label:'Formato', ok:!sizeImportant || sizeOk, required:sizeImportant && !sizeOk, warn:sizeImportant && !sizeOk, important:sizeImportant},
     {key:'qty', label:'Quantità', ok:s.qty>0 && !!s.unit, required:true},
     {key:'expiry', label:'Scadenza', ok:!!s.expiry || el.dataset.voiceExpiryDone==='1', required:false, warn:!s.expiry},
     {key:'category', label:'Categoria', ok:!!s.category, required:true},
@@ -1416,11 +1466,12 @@ function scanSummaryText(el, result={}){
   const parts=[];
   parts.push(`Prodotto: ${s.name || result.productName || 'non definito'}.`);
   if(s.brand || result.brand) parts.push(`Marca: ${s.brand || result.brand}.`);
+  if(s.size) parts.push(`Formato/capienza: ${s.size}.`);
   if(s.qty>0) parts.push(`Quantità: ${String(s.qty).replace('.',',')} ${s.unit||'pz'}.`);
   if(s.expiry) parts.push(`Scadenza: ${s.expiry}.`); else parts.push('Scadenza ancora da confermare.');
   if(s.category) parts.push(`Categoria: ${catName(s.category)}.`);
   if(s.damage) parts.push(`Stato: ${s.damage}.`);
-  if(info.missing.length){ parts.push(`Mi manca ancora: ${info.missing.map(k=>({name:'nome',brand:'marca',qty:'quantità',expiry:'scadenza',category:'categoria',damage:'stato'}[k]||k)).join(', ')}.`); }
+  if(info.missing.length){ parts.push(`Mi manca ancora: ${info.missing.map(k=>({name:'nome',brand:'marca',size:'formato/capienza',qty:'quantità',expiry:'scadenza',category:'categoria',damage:'stato'}[k]||k)).join(', ')}.`); }
   else if(info.warn.includes('expiry') || info.warn.includes('brand')) parts.push('La scheda è utilizzabile; marca o scadenza sono opzionali se non visibili.');
   else parts.push('La scheda è completa e pronta per la conferma.');
   return parts.join(' ');
@@ -1430,8 +1481,8 @@ function renderScanCompletionStatus(el, result={}){
   if(!box) return;
   const info=getScanCompletionStatus(el,result);
   const pct=Math.round((info.done/info.total)*100);
-  const progress=info.checks.map(c=>`<div class="step ${c.ok?'ok':(c.warn?'warn':'')}">${c.ok?'✅':'•'} ${esc(c.label)}</div>`).join('');
-  const line = info.missing.length ? `Completamento ${pct}%. Mancano: ${info.missing.map(k=>({name:'nome',brand:'marca',qty:'quantità',expiry:'scadenza',category:'categoria',damage:'stato'}[k]||k)).join(', ')}.` : (info.warn.length ? `Scheda utilizzabile. Opzionali non letti: ${info.warn.map(k=>({brand:'marca',expiry:'scadenza'}[k]||k)).join(', ')}.` : 'Scheda completa: puoi confermare.');
+  const progress=info.checks.map(c=>`<div class="step ${c.ok?'ok':(c.warn?'warn':'')} ${c.important?'important':''}">${c.ok?'✅':'•'} ${esc(c.label)}</div>`).join('');
+  const line = info.missing.length ? `Completamento ${pct}%. Mancano: ${info.missing.map(k=>({name:'nome',brand:'marca',size:'formato/capienza',qty:'quantità',expiry:'scadenza',category:'categoria',damage:'stato'}[k]||k)).join(', ')}.` : (info.warn.length ? `Scheda utilizzabile. Opzionali non letti: ${info.warn.map(k=>({brand:'marca',size:'formato/capienza',expiry:'scadenza'}[k]||k)).join(', ')}.` : 'Scheda completa: puoi confermare.');
   box.innerHTML=`<strong>Riepilogo smart</strong><div class="line">${esc(line)}</div><div class="scan-progress">${progress}</div>`;
 }
 function refreshScanResultCard(el, result={}){
@@ -1465,6 +1516,7 @@ function speakCurrentScanSummary(el,result={}){
 function getNextScanMicStep(el, result={}){
   const state=getScanFormState(el,result);
   if(!state.name || /^nome prodotto$/i.test(state.name) || /^es\./i.test(state.name) || (!el.dataset.voiceNameDone && Number(result.confidence||0)<0.45)) return 'name';
+  if(isBottleLike(result,state) && !state.size && !el.dataset.voiceSizeDone) return 'size';
   if(!(state.qty>0)) return 'qty';
   if(result.isDamaged && !el.dataset.voiceDamageDone) return 'damage';
   if(!state.category) return 'category';
@@ -1475,7 +1527,8 @@ function scanMicPromptForStep(step, el, result={}){
   const damageType=(result.damageType||el.querySelector('[data-scan-damage]')?.value||'irregolarità');
   if(step==='name') return Number(result.confidence||0)<0.45 ? 'Il nome non mi convince del tutto. Dimmi come si chiama il prodotto.' : 'Dimmi il nome del prodotto.';
   if(step==='brand') return 'Dimmi anche la marca, se vuoi correggerla o completarla.';
-  if(step==='qty') return 'Dimmi la quantità. Puoi dire per esempio uno, due, una bottiglia, mezzo chilo o tre pezzi.';
+  if(step==='size') return 'Dimmi la capienza o il formato. Per esempio: due litri, un litro e mezzo, cinquecento ml.';
+  if(step==='qty') return 'Dimmi la quantità di pezzi. Puoi dire per esempio una bottiglia, due bottiglie o tre pezzi.';
   if(step==='expiry') return 'Se riesci, dimmi la data di scadenza. Puoi anche dire salta se non la vuoi inserire adesso.';
   if(step==='damage') return `Attenzione, vedo una possibile irregolarità: ${damageType}. Dimmi se è integro, ammaccato, rotto, aperto, congelato o con perdita.`;
   if(step==='category') return 'In che categoria lo metto? Per esempio alimentari, bevande, frutta, verdura, animali, casa, farmacia o acquario.';
@@ -1546,21 +1599,22 @@ function applyScannerMicAnswer(el, result={}, raw=''){
   const current=getNextScanMicStep(el,result);
   const explicitName = current==='name' || /(^|\b)(non e|non è|si chiama|nome|prodotto|correggi.*nome|metti nome|cambia in|metti|^e |^è )(\b|$)/.test(norm);
   const explicitBrand = current==='brand' || /(^|\b)(marca|brand|di marca)(\b)/.test(norm);
-  const explicitQty = current==='qty' || /quantit|pezz|bottigli|litri|chili|gramm|unit/.test(norm);
+  const explicitSize = current==='size' || /capienz|formato|litri|litro|ml|millilitri|mezzo litro|bottiglia grande|bottiglia piccola/.test(norm);
+  const explicitQty = current==='qty' || /quantit|pezz|bottigli|unit/.test(norm);
   const explicitExpiry = current==='expiry' || /scad/.test(norm);
   const explicitDamage = current==='damage' || /integr|rott|ammacc|apert|bucat|perdit|schiacci|rovinat|scadut|congelat|ghiacciat/.test(norm);
   const explicitCategory = current==='category' || /categori|bevand|aliment|frutt|verdur|animal|casa|farmac|acquar/.test(norm);
 
   if(explicitName){
     const cleaned=parseNameFromSpeech(raw);
-    if(cleaned && cleaned.length>1){
+    if(cleaned && !isBadScanName(cleaned)){
       setScanFieldFromVoice(el,'[data-scan-name]', cleaned);
       el.dataset.voiceNameDone='1';
       result.productName=cleaned;
       setScanVoiceHelper(el, `Nome aggiornato: ${cleaned}.`, 'live');
       refreshScanResultCard(el,result);
       return true;
-    }
+    } else if(explicitName){ setScanVoiceHelper(el,'Quel nome non è valido. Dimmi il nome reale del prodotto, per esempio Acqua Vera Naturale.', 'warn'); return true; }
   }
 
   if(explicitBrand){
@@ -1576,6 +1630,17 @@ function applyScannerMicAnswer(el, result={}, raw=''){
     }
   }
 
+  const spokenSize=parseSizeFromSpeech(raw);
+  if(explicitSize && spokenSize){
+    setScanFieldFromVoice(el,'[data-scan-size]', spokenSize);
+    el.dataset.voiceSizeDone='1';
+    result.estimatedSize=spokenSize;
+    result.sizeConfirmed=true;
+    setScanVoiceHelper(el, `Formato aggiornato: ${spokenSize}.`, 'live');
+    refreshScanResultCard(el,result);
+    return true;
+  }
+
   const qtyInfo=parseQuantityUnitFromSpeech(raw);
   if(explicitQty && qtyInfo.quantity!=null){
     setScanFieldFromVoice(el,'[data-scan-qty]', String(qtyInfo.quantity).replace('.',','));
@@ -1585,7 +1650,7 @@ function applyScannerMicAnswer(el, result={}, raw=''){
     return true;
   }
 
-  const expiry=parseExpiryFromSpeech(raw);
+  const expiry=parseExpiryFromSpeech(raw) || parseExpiryLoose(raw);
   if(explicitExpiry){
     if(/salta|non so|non la so|nessuna/.test(norm)){ el.dataset.voiceExpiryDone='1'; setScanVoiceHelper(el, 'Scadenza saltata per ora.', 'live'); refreshScanResultCard(el,result); return true; }
     if(expiry){ setScanFieldFromVoice(el,'[data-scan-expiry]', expiry); el.dataset.voiceExpiryDone='1'; result.expiryDate=expiry; setScanVoiceHelper(el, `Scadenza aggiornata: ${expiry}.`, 'live'); refreshScanResultCard(el,result); return true; }
@@ -2209,7 +2274,7 @@ async function guessProductFromImage(dataUrl=''){
     const waterLike = (verticalShape && centerRatio>.38 && (centerClear>.20 || centerWhite>.14 || centerBlue>.05 || br>.08 || wr>.18 || cr>.22)) || (centerWhite>.18 && labelBlue>.025 && centerRed<.07);
     const cokeLike = !redLikelyBackground && centerRed>.11 && labelRed>.08 && (labelDark>.08 || centerDark>.12);
 
-    if(waterLike) return {needsManual:true, productName:'Acqua in bottiglia', brand:'', quantity:1, unit:'bt', category:'drinks', confidence:.58, productPlaceholder:'Acqua in bottiglia', isLiquid:true, localVision:true, reason:'Riconoscimento locale prudente: sembra una bottiglia d’acqua. La marca va confermata solo se la Cloud AI è attiva.'};
+    if(waterLike) return {needsManual:true, productName:'Acqua in bottiglia', brand:'', estimatedSize:'Capienza da confermare', sizeConfidence:.25, detailQuestion:'Non leggo la capienza: dimmi 2 litri, 1,5 litri o 500 ml.', quantity:1, unit:'bt', category:'drinks', confidence:.58, productPlaceholder:'Acqua in bottiglia', isLiquid:true, localVision:true, reason:'Riconoscimento locale prudente: sembra una bottiglia d’acqua. Conferma marca e capienza.'};
     if(cokeLike) return {needsManual:true, productName:'Bibita tipo cola', brand:'', quantity:1, unit:'bt', category:'drinks', confidence:.48, productPlaceholder:'Bibita tipo cola', isLiquid:true, localVision:true, reason:'Riconoscimento locale prudente: potrebbe essere una bibita tipo cola, ma conferma nome e marca.'};
     if(centerWhite>.32 && centerRed<.04 && centerDark<.38) return {needsManual:true, productName:'Latte', brand:'', quantity:1, unit:'pz', category:'drinks', confidence:.46, productPlaceholder:'Latte', isLiquid:true, localVision:true, reason:'Riconoscimento locale prudente: sembra latte. Controlla quantità e conferma.'};
     if(ratio(center,'green')>.16 && centerRed<.05) return {needsManual:true, productName:'Verdura', quantity:1, unit:'pz', category:'veg', confidence:.38, productPlaceholder:'Nome prodotto', localVision:true, reason:'Riconoscimento locale incerto: sembra verdura. Controlla nome e quantità.'};
@@ -2261,6 +2326,7 @@ function scanEvidenceHtml(result){
   if(result.variant) bits.push('Variante: '+result.variant);
   if(result.productType) bits.push('Tipo: '+result.productType);
   if(result.packageType) bits.push('Confezione: '+result.packageType);
+  if(result.estimatedSize) bits.push('Formato: '+result.estimatedSize);
   if(result.expiryDate) bits.push('Scadenza: '+result.expiryDate);
   if(result.isLiquid) bits.push('Liquido / bevanda');
   if(result.isDamaged) bits.push('Danneggiato: '+(result.damageType||'sì'));
@@ -2301,11 +2367,13 @@ function addScannerResult(result){
       <div class="scan-voice-helper ${helperMode}" data-scan-voice-note><span class="dot"></span><div><strong>Assistente live</strong><br>${esc(helperText)}</div></div>
       <div class="scan-summary-box" data-scan-summary></div>
       <div class="scan-warning-box ${result.isDamaged?'':'good'}" data-scan-warning><strong>${result.isDamaged?'Controllo qualità':'Controllo qualità OK'}</strong>${result.isDamaged?`Possibile irregolarità: ${esc(result.damageType||'da verificare')}. Conferma a voce se è integro o danneggiato.`:'Nessun danno evidente rilevato. Puoi correggere se noti qualcosa.'}</div>
+      <div class="scan-detail-box ${(result.sizeConfidence&&result.sizeConfidence<.75)||(!result.estimatedSize&&result.isLiquid)?'warn':'good'}" data-detail-box><strong>Lettura dettagli</strong>${esc(result.detailQuestion || (result.estimatedSize ? 'Formato rilevato: '+result.estimatedSize : 'Se la capienza o la scadenza non sono leggibili, dimmele a voce.'))}</div>
       ${scanEvidenceHtml(result)}
       ${result.needsRetake?'<button class="outline-btn" data-retake>Rifai foto</button>':`
       <label><small>Nome prodotto</small><input data-scan-name value="${esc(result.productName||'')}" placeholder="${esc(placeholder)}"></label>
-      <div class="scan-grid-3 pro"><label><small>Marca</small><input data-scan-brand value="${esc(result.brand||'')}" placeholder="Es. Coca-Cola, Levissima, Divella"></label><label><small>Quantità</small><input data-scan-qty type="number" min="0" step="0.1" value="${esc(result.quantity||1)}"></label><label><small>Unità</small><input data-scan-unit value="${esc(result.unit||'pz')}"></label></div>
-      <div class="scan-grid-3 pro"><label><small>Scadenza</small><input data-scan-expiry value="${esc(result.expiryDate||'')}" placeholder="Es. 12/08/2026"></label><label><small>Categoria</small><select data-scan-cat>${categoryOptions(result.category||'food')}</select></label><label><small>Stato prodotto</small><input data-scan-damage value="${esc(result.isDamaged?(result.damageType||'Danneggiato'):'Integro')}" placeholder="Integro / rotto / ammaccato"></label></div>
+      <div class="scan-grid-3 pro detail"><label><small>Marca</small><input data-scan-brand value="${esc(result.brand||'')}" placeholder="Es. Vera, Levissima, Divella"></label><label><small>Formato / capienza</small><input data-scan-size value="${esc(result.estimatedSize||'')}" placeholder="Es. 2 L, 1,5 L, 500 ml"></label><label><small>Quantità pezzi</small><input data-scan-qty type="number" min="0" step="0.1" value="${esc(result.quantity||1)}"></label></div>
+      <div class="scan-grid-3 pro detail"><label><small>Unità</small><input data-scan-unit value="${esc(result.unit||'pz')}"></label><label><small>Scadenza</small><input data-scan-expiry value="${esc(result.expiryDate||'')}" placeholder="Es. 12/08/2026"></label><label><small>Categoria</small><select data-scan-cat>${categoryOptions(result.category||'food')}</select></label></div>
+      <label><small>Stato prodotto</small><input data-scan-damage value="${esc(result.isDamaged?(result.damageType||'Danneggiato'):'Integro')}" placeholder="Integro / rotto / ammaccato"></label>
       <div class="scan-actions-row"><button class="secondary-btn" type="button" data-scan-recap>🧠 Riepilogo AI</button><button class="danger-btn" type="button" data-force-rescan>🔁 Rifai questo</button><button class="primary-btn" data-confirm-scan>Conferma e aggiungi in casa</button></div>`}
     </div>
   </article>`;
@@ -2316,7 +2384,7 @@ function addScannerResult(result){
   el.querySelector('[data-confirm-scan]')?.addEventListener('click',()=>confirmScanResult(el,result));
   el.querySelector('[data-scan-recap]')?.addEventListener('click',()=>speakCurrentScanSummary(el,result));
   el.querySelector('[data-force-rescan]')?.addEventListener('click',()=>{ liveScanPendingResult=false; liveScanAwaitNextOk=false; liveScanCooldownUntil=Date.now()+900; el.remove(); if(liveScanSpeechEnabled) speakNatural('Ok, rifacciamo questo prodotto. Tienilo nel riquadro e lo analizzo di nuovo.', {flush:true}); if(liveScanActive) queueLiveScanLoop(); });
-  el.querySelectorAll('[data-scan-name],[data-scan-brand],[data-scan-qty],[data-scan-unit],[data-scan-expiry],[data-scan-cat],[data-scan-damage]').forEach(field=>{
+  el.querySelectorAll('[data-scan-name],[data-scan-brand],[data-scan-size],[data-scan-qty],[data-scan-unit],[data-scan-expiry],[data-scan-cat],[data-scan-damage]').forEach(field=>{
     field.addEventListener('input',()=>refreshScanResultCard(el,result));
     field.addEventListener('change',()=>refreshScanResultCard(el,result));
     field.addEventListener('focus',()=>setActiveScannerResult(el));
@@ -2360,15 +2428,16 @@ function rememberLearnedProduct(payload={}){
 function confirmScanResult(el,result,silent=false){
   const productName=el.querySelector('[data-scan-name]').value.trim();
   const brand=el.querySelector('[data-scan-brand]')?.value.trim() || result.brand || '';
+  const size=el.querySelector('[data-scan-size]')?.value.trim() || result.estimatedSize || '';
   const qty=Number(el.querySelector('[data-scan-qty]').value)||1;
   const unit=el.querySelector('[data-scan-unit]').value.trim()||'pz';
   const category=el.querySelector('[data-scan-cat]').value||'food';
   const expiryDate=el.querySelector('[data-scan-expiry]')?.value.trim() || '';
   const damageNote=el.querySelector('[data-scan-damage]')?.value.trim() || 'Integro';
-  if(!productName){ toast('Inserisci il nome prodotto'); return; }
+  if(!productName || isBadScanName(productName)){ toast('Inserisci il nome reale del prodotto'); setScanVoiceHelper(el,'Nome non valido: dimmi il nome reale del prodotto.', 'warn'); return; }
   const item=findItemBySpeech(productName);
-  result.brand = brand;
-  const aiMeta={brand,variant:result.variant||'',productType:result.productType||'',packageType:result.packageType||'',estimatedSize:result.estimatedSize||'',isLiquid:!!result.isLiquid,damageNote,expiryDate,confidence:result.confidence||null};
+  result.brand = brand; result.estimatedSize=size;
+  const aiMeta={brand,variant:result.variant||'',productType:result.productType||'',packageType:result.packageType||'',estimatedSize:size,sizeConfirmed:!!size,isLiquid:!!result.isLiquid,damageNote,expiryDate,confidence:result.confidence||null};
   if(item){
     const old=item.qty; item.qty=qty; item.unit=unit; item.updatedAt=Date.now(); item.usage=Number(item.usage||0)+1; item.category=category; item.expiryDate=expiryDate||item.expiryDate||''; item.aiMeta=Object.assign({}, item.aiMeta||{}, aiMeta);
     rememberEvent('photo_restock',item,Math.max(0,qty-old),'Vision AI confermata');
@@ -2381,12 +2450,12 @@ function confirmScanResult(el,result,silent=false){
     el.classList.add('confirmed'); el.querySelector('.scan-fields strong').textContent='Aggiunto: '+productName;
   }
   aiMemory.scanHistory=aiMemory.scanHistory||[];
-  aiMemory.scanHistory.push({name:productName,qty,unit,category,expiryDate,damageNote,at:Date.now(),confidence:result.confidence||null});
+  aiMemory.scanHistory.push({name:productName,brand,size,qty,unit,category,expiryDate,damageNote,at:Date.now(),confidence:result.confidence||null});
   aiMemory.scanHistory=aiMemory.scanHistory.slice(-300);
-  rememberLearnedProduct({productName,brand,variant:result.variant||'',category,unit,productType:result.productType||'',packageType:result.packageType||'',estimatedSize:result.estimatedSize||'',isLiquid:!!result.isLiquid,visibleEvidence:result.visibleEvidence||[],baseName:result.productName||''});
+  rememberLearnedProduct({productName,brand,variant:result.variant||'',category,unit,productType:result.productType||'',packageType:result.packageType||'',estimatedSize:size,isLiquid:!!result.isLiquid,visibleEvidence:result.visibleEvidence||[],baseName:result.productName||''});
   aiMemory.pendingVerification=false;
   liveScanLastAcceptedSig = result.visualSignature || liveScanLastMetrics?.signature || liveScanLastAcceptedSig; liveScanLastAcceptedName=productName; liveScanSameObjectWarnings=0;
-  saveAiMemory(); saveAll(); render(); if(!silent){ toast('Articolo aggiornato in casa ✅'); const finalVoice=`Perfetto. Ho aggiornato ${productName}${brand ? ' marca '+brand : ''} in casa.${expiryDate? ' Scadenza registrata '+expiryDate+'.' : ''}${damageNote && damageNote!=='Integro' ? ' Ho segnato anche lo stato del prodotto.' : ''}`; speakNatural(finalVoice, {flush:true, rate:1.0, pitch:1.02}); } el.classList.remove('voice-active'); const next=document.querySelector('#scannerResults .scan-result:not(.confirmed):not(.bad)'); if(next){ setTimeout(()=>promptScannerConversation(next, next._scanResult||{}, true), 500); } else { enterNextObjectGate(); }
+  saveAiMemory(); saveAll(); render(); if(!silent){ toast('Articolo aggiornato in casa ✅'); const finalVoice=`Perfetto. Ho aggiornato ${productName}${brand ? ' marca '+brand : ''}${size ? ' formato '+size : ''} in casa.${expiryDate? ' Scadenza registrata '+expiryDate+'.' : ''}${damageNote && damageNote!=='Integro' ? ' Ho segnato anche lo stato del prodotto.' : ''}`; speakNatural(finalVoice, {flush:true, rate:1.0, pitch:1.02}); } el.classList.remove('voice-active'); const next=document.querySelector('#scannerResults .scan-result:not(.confirmed):not(.bad)'); if(next){ setTimeout(()=>promptScannerConversation(next, next._scanResult||{}, true), 500); } else { enterNextObjectGate(); }
 }
 
 function startAiVoiceOnce(){
