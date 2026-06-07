@@ -8,16 +8,16 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <!-- spesa-pronta-v27-11-inline-icons-no-broken-images -->
+  <!-- spesa-pronta-v27-10-stable-no-loop -->
   <meta name="description" content="Spesa Pronta: gestione spesa intelligente con cloud, Alexa, Google Assistant e suggerimenti automatici.">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="assets/styles.v27-11-stable.css?v=2711">
+  <link rel="stylesheet" href="assets/styles.v27-13-account-actions.css?v=2713">
   <title>Spesa Pronta</title>
 </head>
 <body>
-  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.11-INLINE-ICONS-NO-BROKEN-IMAGES -->
+  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.10-STABLE-NO-LOOP -->
   <div class="app-frame">
     <aside class="sidebar">
       <div class="side-brand">
@@ -152,14 +152,14 @@
             <label><span>Numero di telefono</span><input id="regPhoneNumber" inputmode="tel" required placeholder="Es. 3331234567"></label>
             <label><span data-i18n="peopleCount">Numero persone in casa</span><input id="regPeople" type="number" min="1" max="20" value="2"></label>
             <label><span data-i18n="animalCount">Numero animali</span><input id="regAnimals" type="number" min="0" max="30" value="3"></label>
-                        <div class="wide image-captcha-wrap">
+            <div class="wide image-captcha-wrap">
               <div class="captcha-title"><span data-i18n="captcha">Captcha visivo</span><button class="captcha-refresh-btn" id="refreshCaptchaBtn" type="button">↻ Cambia</button></div>
               <b id="captchaQuestion" class="captcha-question">Tocca l’immagine richiesta</b>
               <div id="captchaBox" class="image-captcha" role="group" aria-label="Captcha con immagini">
-                <button class="captcha-choice" type="button" data-captcha="fridge"><span class="captcha-visual-icon captcha-icon-fridge" aria-hidden="true"></span><span class="captcha-label">Frigo</span></button>
-                <button class="captcha-choice" type="button" data-captcha="lock"><span class="captcha-visual-icon captcha-icon-lock" aria-hidden="true"></span><span class="captcha-label">Lucchetto</span></button>
-                <button class="captcha-choice" type="button" data-captcha="milk"><span class="captcha-visual-icon captcha-icon-milk" aria-hidden="true"></span><span class="captcha-label">Latte</span></button>
-                <button class="captcha-choice" type="button" data-captcha="bread"><span class="captcha-visual-icon captcha-icon-bread" aria-hidden="true"></span><span class="captcha-label">Pane</span></button>
+                <button class="captcha-choice" type="button" data-captcha="fridge"><img src="assets/illustrations/fridge-clear.png" alt="Frigorifero"><span>Frigo</span></button>
+                <button class="captcha-choice" type="button" data-captcha="lock"><img src="assets/illustrations/lock-clear.png" alt="Lucchetto"><span>Lucchetto</span></button>
+                <button class="captcha-choice" type="button" data-captcha="milk"><img src="assets/illustrations/milk-clear.png" alt="Latte"><span>Latte</span></button>
+                <button class="captcha-choice" type="button" data-captcha="water"><img src="assets/illustrations/water-clear.png" alt="Acqua"><span>Acqua</span></button>
               </div>
               <input id="regCaptcha" type="hidden" required>
             </div>
@@ -172,19 +172,11 @@
           </form>
           <aside class="register-benefits futuristic-benefits ai-zone-upgraded">
             <div class="ai-benefits-hero">
-              <div class="ai-visual-hero" aria-label="Assistente AI Spesa Pronta">
-                <span class="ai-hero-orbit orbit-one"></span>
-                <span class="ai-hero-orbit orbit-two"></span>
-                <span class="ai-hero-core"></span>
-                <span class="ai-hero-dot dot-blue"></span>
-                <span class="ai-hero-dot dot-green"></span>
-                <span class="ai-hero-dot dot-orange"></span>
-                <span class="ai-hero-dot dot-yellow"></span>
-              </div>
+              <img class="hero-main" src="assets/illustrations/smart-ai-hero.svg" alt="Assistente AI Spesa Pronta">
               <div class="ai-badge-row">
-                <div class="ai-mini-badge"><span class="mini-service-icon mini-alexa" aria-hidden="true"></span><span>Alexa</span></div>
-                <div class="ai-mini-badge"><span class="mini-service-icon mini-google" aria-hidden="true"></span><span>Google</span></div>
-                <div class="ai-mini-badge"><span class="mini-service-icon mini-ai" aria-hidden="true"></span><span>AI</span></div>
+                <div class="ai-mini-badge"><img src="assets/illustrations/alexa.png" alt="Alexa"><span>Alexa</span></div>
+                <div class="ai-mini-badge"><img src="assets/illustrations/google-assistant.png" alt="Google Assistant"><span>Google</span></div>
+                <div class="ai-mini-badge"><img src="assets/illustrations/ai-learning-clear.png" alt="Intelligenza artificiale"><span>AI</span></div>
               </div>
             </div>
             <p class="benefits-kicker">ecosistema domestico intelligente</p>
@@ -192,35 +184,35 @@
             <p class="benefits-lead">Un sistema visivo e intelligente che controlla consumi, riconosce i prodotti e ti aiuta a comprare solo quello che serve davvero.</p>
             <ul class="benefit-orbit-list ai-benefits-list">
               <li>
-                <span class="ai-card-icon ai-icon-brain" aria-hidden="true"></span>
+                <img src="assets/illustrations/ai-learning-clear.png" alt="Apprendimento AI">
                 <div>
                   <b>Apprendimento AI</b>
                   <span>Analizza abitudini, preferenze e ritmo dei consumi della tua casa.</span>
                 </div>
               </li>
               <li>
-                <span class="ai-card-icon ai-icon-camera" aria-hidden="true"></span>
+                <img src="assets/illustrations/product-recognition-clear.png" alt="Riconoscimento prodotti">
                 <div>
                   <b>Riconoscimento prodotti</b>
                   <span>Legge le foto, riconosce gli articoli e ti chiede conferma solo quando serve.</span>
                 </div>
               </li>
               <li>
-                <span class="ai-card-icon ai-icon-shield" aria-hidden="true"></span>
+                <img src="assets/illustrations/account-security-clear.png" alt="Sicurezza account">
                 <div>
                   <b>Sicurezza account</b>
                   <span>Protezione con email e telefono prima di attivare cloud e automazioni.</span>
                 </div>
               </li>
               <li>
-                <span class="ai-card-icon ai-icon-voice" aria-hidden="true"></span>
+                <img src="assets/illustrations/voice-commands-clear.png" alt="Comandi vocali">
                 <div>
                   <b>Comandi vocali</b>
                   <span>Alexa e Google Assistant lavorano sulla stessa lista sincronizzata.</span>
                 </div>
               </li>
               <li>
-                <span class="ai-card-icon ai-icon-list" aria-hidden="true"></span>
+                <img src="assets/illustrations/ready-list-clear.png" alt="Lista pronta">
                 <div>
                   <b>Lista pronta all’uscita</b>
                   <span>Quando esci, trovi una lista chiara, ordinata e pronta da seguire.</span>
@@ -242,6 +234,7 @@
             <label class="wide"><span>Token di verifica</span><input id="verifyToken" placeholder="Incolla qui il token ricevuto via email"></label>
             <button class="primary-btn wide" type="submit">Verifica email e attiva account</button>
             <button class="outline-btn wide" id="resendVerificationBtn" type="button">Invia di nuovo email di verifica</button>
+            <button class="outline-btn wide" id="changeEmailBtn" type="button">Ho sbagliato email • Torna indietro e correggila</button>
           </form>
           <form id="verifyPhoneForm" class="form-grid verify-form phone-verify-form hidden">
             <label class="wide"><span>Codice SMS</span><input id="verifyPhoneCode" inputmode="numeric" maxlength="6" placeholder="Inserisci il codice a 6 cifre ricevuto via SMS"></label>
@@ -358,6 +351,14 @@
                 <div class="form-actions">
                   <button class="primary-btn" id="saveProfileBtn" type="button" data-i18n="saveProfile">Salva profilo</button>
                   <button class="outline-btn" id="goRegisterBtn" type="button" data-i18n="registerOrLogin">Registrati / Login</button>
+                </div>
+                <div class="account-actions-zone">
+                  <div>
+                    <strong>Gestione account</strong>
+                    <p>Disconnettiti o elimina definitivamente il tuo profilo cloud.</p>
+                  </div>
+                  <button class="outline-btn account-logout-btn" id="logoutAccountBtn" type="button">Disconnetti account</button>
+                  <button class="outline-btn account-delete-btn" id="deleteAccountBtn" type="button">Elimina account</button>
                 </div>
               </article>
               <article class="setting-card">
@@ -481,7 +482,33 @@
     </section>
   </dialog>
 
+  <dialog id="accountConfirmDialog" class="account-dialog">
+    <form method="dialog" class="account-confirm-card">
+      <div class="account-confirm-icon" id="accountConfirmIcon">↪</div>
+      <p class="account-confirm-kicker" id="accountConfirmKicker">Gestione account</p>
+      <h3 id="accountConfirmTitle">Conferma azione</h3>
+      <p id="accountConfirmText">Vuoi continuare?</p>
+      <label class="account-confirm-input hidden" id="accountConfirmInputWrap">
+        <span id="accountConfirmInputLabel">Scrivi ELIMINA per confermare</span>
+        <input id="accountConfirmInput" autocomplete="off" placeholder="ELIMINA">
+      </label>
+      <div class="dialog-actions account-confirm-actions">
+        <button class="outline-btn" id="accountConfirmCancelBtn" type="button">Annulla</button>
+        <button class="primary-btn" id="accountConfirmOkBtn" type="button">Conferma</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="account-notice hidden" id="accountNotice" role="status" aria-live="polite">
+    <div class="account-notice-icon" id="accountNoticeIcon">✓</div>
+    <div>
+      <strong id="accountNoticeTitle">Operazione completata</strong>
+      <p id="accountNoticeText">Tutto ok.</p>
+    </div>
+    <button id="accountNoticeCloseBtn" type="button" aria-label="Chiudi notifica">×</button>
+  </div>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/app.v27-11-stable.js?v=2711" defer></script>
+  <script src="assets/app.v27-13-account-actions.js?v=2713" defer></script>
 </body>
 </html>

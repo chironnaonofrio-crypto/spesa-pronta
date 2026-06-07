@@ -926,6 +926,23 @@ const server = http.createServer(async (req,res)=>{
       return send(res, 200, { ok:true, requiresEmailVerification:true, requiresPhoneVerification:true, email, phoneMasked:maskPhone(phone), smsReady:PHONE_VERIFY_READY, twilioVerifyReady:TWILIO_VERIFY_ENABLED, message:'verification_email_and_sms_sent' });
     }
 
+
+    if(req.method === 'POST' && pathName === '/api/auth/delete-account'){
+      const householdId=String(body.householdId||'').trim();
+      const providedToken=String(body.token||'').trim() || String((req.headers.authorization||'').replace(/^Bearer\s+/i,'')).trim();
+      const email=normalizeEmail(body.email||'');
+      if(!householdId || !providedToken) return send(res, 400, { error:'missing_credentials' });
+      const household=db.households?.[householdId];
+      if(!household || String(household.token||'')!==providedToken) return send(res, 403, { error:'not_authorized' });
+      const user=db.users?.[household.ownerUserId];
+      if(!user) return send(res, 404, { error:'user_not_found' });
+      if(email && normalizeEmail(user.email)!==email) return send(res, 400, { error:'email_mismatch' });
+      delete db.households[householdId];
+      delete db.users[user.id];
+      await saveDb();
+      return send(res, 200, { ok:true, deleted:true });
+    }
+
     if(req.method === 'POST' && pathName === '/api/auth/login'){
       const { email,password } = body;
       const user = Object.values(db.users).find(u=>String(u.email||'').toLowerCase()===String(email||'').toLowerCase());
@@ -955,6 +972,27 @@ const server = http.createServer(async (req,res)=>{
       }
       sendWelcomeEmail(user);
       return send(res, 200, { ok:true, user:safeUser(user), householdId:h.id, token:h.token, settings:h.settings, items:h.items, aiMemory:h.aiMemory||null, welcomeEmail:true });
+    }
+
+
+    if(req.method === 'POST' && pathName === '/api/auth/change-pending-email'){
+      const oldEmail=normalizeEmail(body.oldEmail);
+      const newEmail=normalizeEmail(body.newEmail);
+      if(!oldEmail || !newEmail) return send(res, 400, { error:'missing_fields' });
+      if(!isValidEmail(newEmail)) return send(res, 400, { error:'invalid_email' });
+      const user=Object.values(db.users||{}).find(u=>normalizeEmail(u.email)===oldEmail && (u.emailVerified === false || u.emailVerifyTokenHash));
+      if(!user) return send(res, 404, { error:'pending_user_not_found' });
+      const duplicate=Object.values(db.users||{}).find(u=>u.id!==user.id && normalizeEmail(u.email)===newEmail);
+      if(duplicate) return send(res, 409, { error:'email_exists' });
+      const raw=token();
+      user.email=newEmail;
+      user.emailVerified=false;
+      user.emailVerifyTokenHash=tokenHash(raw);
+      user.emailVerifyTokenExpiresAt=Date.now()+24*60*60*1000;
+      user.emailVerifySentAt=Date.now();
+      await saveDb();
+      sendVerificationEmail(user, raw);
+      return send(res, 200, { ok:true, requiresEmailVerification:true, requiresPhoneVerification:user.phoneVerified!==true, email:newEmail, phoneMasked:maskPhone(user.phone||'') });
     }
 
     if(req.method === 'POST' && pathName === '/api/auth/resend-verification'){

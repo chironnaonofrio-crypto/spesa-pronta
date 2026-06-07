@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v27.10-stable-no-loop';
+window.SPESA_PRONTA_VERSION='v27.13-account-actions';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -46,7 +46,7 @@ const translations = {
     helpText:'Esempi Alexa: “Alexa, chiedi a Spesa Pronta cosa devo comprare”, “aggiungi acqua”, “segna crocchette cane a 10 kg”.',
     nameIt:'Nome italiano', nameEn:'Nome inglese', nameEs:'Nome spagnolo', nameDe:'Nome tedesco', category:'Categoria', add:'Aggiungi',
     qty:'Quantità', unit:'Unità', availability:'Disponibilità', lowStock:'Scorta bassa', goodStock:'Scorta buona', inStock:'IN CASA', buyStock:'DA COMPRARE',
-    copied:'Copiato ✅', saved:'Salvato ✅', synced:'Sincronizzato', offline:'Offline', guest:'Ospite', registered:'Registrato', wrongCaptcha:'Captcha errato', required:'Compila i campi richiesti',
+    copied:'Copiato ✅', saved:'Salvato ✅', synced:'Sincronizzato', offline:'Offline', guest:'Ospite', registered:'Registrato', wrongCaptcha:'Captcha errato: tocca l’immagine richiesta.', required:'Compila tutti i campi richiesti',
     noBuy:'Niente da comprare 🎉', added:'Articolo aggiunto ✅', syncFail:'Sync non riuscita', alexaConnected:'Collegata', alexaNotConnected:'Non collegata',
     category_food:'Alimentari', category_drinks:'Bevande', category_pets:'Animali', category_house:'Casa', category_pharmacy:'Farmacia', category_aquarium:'Acquario', category_fruit:'Frutta', category_veg:'Verdura', firstName:'Nome', lastName:'Cognome', firstNamePh:'Inserisci il tuo nome', lastNamePh:'Inserisci il tuo cognome', profileTitle:'Profilo utente', saveProfile:'Salva profilo', registerOrLogin:'Registrati / Login', account:'Account', clickToProfile:'Apri profilo', clickToRegister:'Registrati per sincronizzare', profileSaved:'Profilo aggiornato ✅', profileGuestText:'Accedi per sincronizzare tutto e usare Alexa/Google Assistant.', homeDataTitle:'Dati casa per i consumi intelligenti', homeDataHint:'Questi numeri servono per calcolare acqua, crocchette e scorte consigliate.'
   },
@@ -170,6 +170,7 @@ let syncTimer = null;
 let aiMemory = loadAiMemory();
 let aiRecognition = null;
 let aiListening = false;
+let accountPendingAction = null;
 
 function loadState(){ try { const x=JSON.parse(localStorage.getItem(STORAGE_KEY)); return Array.isArray(x) ? migrateItems(x) : []; } catch { return []; } }
 function loadSettings(){ try { return Object.assign(defaultSettings(), JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}')); } catch { return defaultSettings(); } }
@@ -323,30 +324,23 @@ function stockPercent(item){ return Math.max(0, Math.min(100, Math.round((1 - (N
 
 function newCaptcha(){
   const pool=[
-    {id:'alexa', label:'Alexa', img:'assets/illustrations/alexa.png'},
-    {id:'google', label:'Google Assistant', img:'assets/illustrations/google-assistant.png'},
-    {id:'milk', label:'Latte', img:'assets/illustrations/milk.png'},
-    {id:'bread', label:'Pane', img:'assets/illustrations/bread.png'},
-    {id:'water', label:'Acqua', img:'assets/illustrations/water.png'},
-    {id:'dogfood', label:'Crocchette', img:'assets/illustrations/dogfood.png'},
-    {id:'key', label:'Chiave', img:'assets/illustrations/key.svg'},
-    {id:'lock', label:'Lucchetto', img:'assets/illustrations/lock.svg'},
-    {id:'fridge', label:'Frigo', img:'assets/illustrations/fridge.svg'}
+    {id:'milk', label:'Latte', img:'assets/illustrations/milk-clear.png'},
+    {id:'water', label:'Acqua', img:'assets/illustrations/water-clear.png'},
+    {id:'key', label:'Chiave', img:'assets/illustrations/key-clear.png'},
+    {id:'lock', label:'Lucchetto', img:'assets/illustrations/lock-clear.png'},
+    {id:'fridge', label:'Frigo', img:'assets/illustrations/fridge-clear.png'}
   ];
   const target=pool[Math.floor(Math.random()*pool.length)];
-  const options=[target];
-  while(options.length<4){
-    const x=pool[Math.floor(Math.random()*pool.length)];
-    if(!options.some(o=>o.id===x.id)) options.push(x);
-  }
-  options.sort(()=>Math.random()-.5);
+  const others=pool.filter(x=>x.id!==target.id).sort(()=>Math.random()-.5).slice(0,3);
+  const options=[target,...others].sort(()=>Math.random()-.5);
   return {target, options};
 }
 function renderCaptcha(){
-  const box=$('#captchaBox'); if(!box) return;
+  const box=$('#captchaBox'); if(!box || !$('#regCaptcha')) return;
   $('#regCaptcha').value='';
-  $('#captchaQuestion').textContent=(t('captchaPickItem')||'Tocca: ')+captcha.target.label;
-  box.innerHTML=captcha.options.map(o=>`<button class="captcha-choice" type="button" data-captcha="${esc(o.id)}" aria-label="${esc(o.label)}">${o.img?`<img src="${esc(o.img)}" alt="${esc(o.label)}" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">`:''}<span class="emoji ${o.img?'img-fallback':''}">${o.emoji || '✨'}</span><span>${esc(o.label)}</span></button>`).join('');
+  const q=$('#captchaQuestion');
+  if(q) q.textContent=(t('captchaPickItem')||'Tocca: ')+captcha.target.label;
+  box.innerHTML=captcha.options.map(o=>`<button class="captcha-choice" type="button" data-captcha="${esc(o.id)}" aria-label="${esc(o.label)}"><img src="${esc(o.img)}" alt="${esc(o.label)}"><span>${esc(o.label)}</span></button>`).join('');
   box.querySelectorAll('[data-captcha]').forEach(btn=>btn.addEventListener('click',()=>{
     box.querySelectorAll('.captcha-choice').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
@@ -390,6 +384,7 @@ function init(){
   render();
   showView(initialView());
   renderCaptcha();
+  fillRegistrationFormFromProfile();
   const params=new URLSearchParams(location.search);
   const resetToken=params.get('reset');
   const verifyToken=params.get('verify');
@@ -432,6 +427,7 @@ function bind(){
   $('#resetForm')?.addEventListener('submit', resetPassword);
   $('#verifyEmailForm')?.addEventListener('submit', verifyEmailSubmit);
   $('#resendVerificationBtn')?.addEventListener('click', resendVerificationEmail);
+  $('#changeEmailBtn')?.addEventListener('click', goBackToRegistrationForEmailFix);
   $('#verifyPhoneForm')?.addEventListener('submit', verifyPhoneSubmit);
   $('#resendPhoneBtn')?.addEventListener('click', resendPhoneCode);
   $('#continueToInventoryBtn')?.addEventListener('click', continueToInventory);
@@ -444,6 +440,11 @@ function bind(){
   $('#syncNowBtn').addEventListener('click', () => syncCloud(true));
   $('#saveProfileBtn').addEventListener('click', saveProfile);
   $('#goRegisterBtn').addEventListener('click', () => showView(session.user ? 'settings' : 'registration'));
+  $('#logoutAccountBtn')?.addEventListener('click', requestLogoutAccount);
+  $('#deleteAccountBtn')?.addEventListener('click', requestDeleteAccount);
+  $('#accountConfirmCancelBtn')?.addEventListener('click', closeAccountConfirm);
+  $('#accountConfirmOkBtn')?.addEventListener('click', confirmAccountAction);
+  $('#accountNoticeCloseBtn')?.addEventListener('click', () => hideAccountNotice());
   $('#connectAlexaBtn').addEventListener('click', connectAlexa);
   $('#connectAlexaBtn2').addEventListener('click', connectAlexa);
   $('#copyAlexaBtn').addEventListener('click', copyAlexaEndpoint);
@@ -518,6 +519,7 @@ function showView(v){
   $all('.view').forEach(x=>x.classList.remove('active'));
   $(`#view-${v}`)?.classList.add('active');
   $all('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
+  if(v==='registration') fillRegistrationFormFromProfile();
   if(v==='products') renderAllProducts();
   if(v==='shopping') renderShoppingFull();
   if(v==='suggestions') renderSuggestions();
@@ -573,6 +575,126 @@ function saveProfile(){
     Object.assign(session.user, settings.profile);
   }
   saveAll(); render(); toast(t('profileSaved'));
+}
+function showAccountNotice(title, text, kind='success'){
+  const el=$('#accountNotice'); if(!el){ toast(`${title}: ${text}`); return; }
+  $('#accountNoticeTitle').textContent=title;
+  $('#accountNoticeText').textContent=text;
+  $('#accountNoticeIcon').textContent=kind==='danger' ? '!' : kind==='info' ? 'i' : '✓';
+  el.classList.remove('hidden','danger','info','success');
+  el.classList.add(kind);
+  clearTimeout(showAccountNotice._t);
+  showAccountNotice._t=setTimeout(()=>hideAccountNotice(), 5200);
+}
+function hideAccountNotice(){
+  const el=$('#accountNotice'); if(el) el.classList.add('hidden');
+}
+function openAccountConfirm(config){
+  const dlg=$('#accountConfirmDialog'); if(!dlg) return false;
+  accountPendingAction=config.action;
+  $('#accountConfirmIcon').textContent=config.icon || '✓';
+  $('#accountConfirmKicker').textContent=config.kicker || 'Gestione account';
+  $('#accountConfirmTitle').textContent=config.title || 'Conferma azione';
+  $('#accountConfirmText').textContent=config.text || 'Vuoi continuare?';
+  const inputWrap=$('#accountConfirmInputWrap');
+  const input=$('#accountConfirmInput');
+  if(config.requireText){
+    inputWrap.classList.remove('hidden');
+    $('#accountConfirmInputLabel').textContent=config.inputLabel || `Scrivi ${config.requireText} per confermare`;
+    input.value='';
+    input.dataset.required=config.requireText;
+  }else{
+    inputWrap.classList.add('hidden');
+    input.value='';
+    input.dataset.required='';
+  }
+  const ok=$('#accountConfirmOkBtn');
+  ok.textContent=config.confirmLabel || 'Conferma';
+  ok.classList.toggle('danger-confirm', config.action==='delete');
+  dlg.showModal();
+  if(config.requireText) setTimeout(()=>input.focus(), 80);
+  return true;
+}
+function closeAccountConfirm(){
+  const dlg=$('#accountConfirmDialog');
+  accountPendingAction=null;
+  if(dlg?.open) dlg.close();
+}
+function confirmAccountAction(){
+  const input=$('#accountConfirmInput');
+  const required=input?.dataset.required || '';
+  if(required && String(input.value||'').trim().toUpperCase() !== required.toUpperCase()){
+    showAccountNotice('Conferma richiesta', `Per eliminare devi scrivere ${required}.`, 'danger');
+    return;
+  }
+  const action=accountPendingAction;
+  closeAccountConfirm();
+  if(action==='logout') performLogoutAccount();
+  if(action==='delete') performDeleteAccount();
+}
+function requestLogoutAccount(){
+  if(!session.user){ showAccountNotice('Nessun account attivo', 'Sei già nella schermata di accesso.', 'info'); showView('registration'); return; }
+  openAccountConfirm({
+    action:'logout',
+    icon:'↪',
+    title:'Disconnettere questo account?',
+    text:'Uscirai dal profilo e tornerai alla schermata Accedi o registrati. I dati cloud non verranno eliminati.',
+    confirmLabel:'Sì, disconnetti'
+  });
+}
+function resetLocalAccountState(){
+  const lang=settings.lang || 'it';
+  const apiEndpoint=settings.apiEndpoint || '/api';
+  state=[];
+  aiMemory=defaultAiMemory();
+  session={mode:'guest', user:null};
+  settings=defaultSettings();
+  settings.lang=lang;
+  settings.apiEndpoint=apiEndpoint;
+  saveAiMemory();
+  saveAll();
+  $('#loginForm')?.reset();
+  $('#registerForm')?.reset();
+  renderCaptcha();
+  applyLang();
+  render();
+  showView('registration');
+}
+function performLogoutAccount(){
+  resetLocalAccountState();
+  showAccountNotice('Disconnessione completata', 'Sei uscito correttamente. Puoi accedere di nuovo quando vuoi.', 'success');
+}
+function requestDeleteAccount(){
+  if(!session.user){ showAccountNotice('Nessun account da eliminare', 'Non risulta un account cloud attivo su questo dispositivo.', 'info'); showView('registration'); return; }
+  openAccountConfirm({
+    action:'delete',
+    icon:'!',
+    title:'Eliminare definitivamente l’account?',
+    text:'Questa azione cancella account, dati cloud, lista prodotti e collegamenti assistenti vocali. Non potrai annullarla.',
+    confirmLabel:'Elimina definitivamente',
+    requireText:'ELIMINA',
+    inputLabel:'Per sicurezza scrivi ELIMINA nel campo qui sotto'
+  });
+}
+async function performDeleteAccount(){
+  if(!settings.cloudEnabled || !settings.householdId || !settings.token){
+    resetLocalAccountState();
+    showAccountNotice('Profilo locale eliminato', 'I dati salvati su questo dispositivo sono stati rimossi.', 'success');
+    return;
+  }
+  try{
+    const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/auth/delete-account`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token}`},
+      body:JSON.stringify({householdId:settings.householdId, token:settings.token, email:session.user?.email || settings.profile?.email || ''})
+    });
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok || !data.ok) throw new Error(data.error||'delete_failed');
+    resetLocalAccountState();
+    showAccountNotice('Account eliminato', 'Account e dati cloud sono stati cancellati. Sei tornato alla schermata di accesso.', 'success');
+  }catch(err){
+    showAccountNotice('Eliminazione non riuscita', 'Non ho cancellato nulla. Controlla connessione/deploy backend e riprova.', 'danger');
+  }
 }
 
 function renderStats(){
@@ -692,6 +814,9 @@ function renderSettings(){
   const initials = ((($('#profileFirstName').value||'')[0]||'') + ((($('#profileLastName').value||'')[0]||'') || (($('#profileUsername').value||'')[0]||''))).toUpperCase() || 'SP';
   $('#profileAvatar').textContent = initials;
   $('#goRegisterBtn').textContent = session.user ? t('navSettings') : t('registerOrLogin');
+  const logged=!!session.user;
+  $('#logoutAccountBtn')?.toggleAttribute('disabled', !logged);
+  $('#deleteAccountBtn')?.toggleAttribute('disabled', !logged);
 }
 function saveSettingsFromForm(){
   settings.people=clampNumber($('#settingsPeople').value,1,20,1);
@@ -710,6 +835,23 @@ function renderWelcome(){
 function renderVerifyEmail(){
   const el=$('#verifyEmailTarget'); if(!el) return;
   el.textContent=session.pendingVerifyEmail || settings.profile?.email || 'la tua email';
+}
+
+function fillRegistrationFormFromProfile(){
+  const p=settings.profile||{};
+  if($('#regFirstName')) $('#regFirstName').value=p.firstName||'';
+  if($('#regLastName')) $('#regLastName').value=p.lastName||'';
+  if($('#regUsername')) $('#regUsername').value=p.username||'';
+  if($('#regEmail')) $('#regEmail').value=session.pendingVerifyEmail || p.email || '';
+  if($('#regPhoneCountry')) $('#regPhoneCountry').value=p.phoneCountry||'+39';
+  if($('#regPhoneNumber')) $('#regPhoneNumber').value=p.phoneNumber||'';
+  if($('#regPeople')) $('#regPeople').value=String(settings.people||2);
+  if($('#regAnimals')) $('#regAnimals').value=String(settings.animals||0);
+}
+function goBackToRegistrationForEmailFix(){
+  fillRegistrationFormFromProfile();
+  showView('registration');
+  setTimeout(()=>$('#regEmail')?.focus(), 80);
 }
 
 async function verifyPhoneSubmit(e){
@@ -784,7 +926,7 @@ async function login(e){
       if(data.error==='email_not_verified'){ session={mode:'pending-verification',user:null,pendingVerifyEmail:data.email||email,pendingVerifyPhone:!!data.requiresPhoneVerification,phoneMasked:data.phoneMasked||''}; saveAll(); render(); toast(t('emailNotVerified')); showView('verify-email'); return; }
       if(data.error==='phone_not_verified'){ session={mode:'pending-verification',user:null,pendingVerifyEmail:data.email||email,pendingVerifyPhone:true,phoneMasked:data.phoneMasked||''}; saveAll(); render(); setPhoneVerificationVisible(true); toast(t('phoneNotVerified')); showView('verify-email'); return; }
     }catch{}
-    toast('Accesso non riuscito: controlla email e password');
+    toast(err?.data?.error==='invalid_credentials' ? 'Accesso non riuscito: controlla email e password.' : 'Accesso non riuscito: riprova tra poco.');
   }
 }
 async function verifyEmailSubmit(e){
@@ -843,7 +985,7 @@ async function register(e){
   if(!firstName||!lastName||!username||!email||!password||!phoneNumber){ toast(t('required')); return; }
   if(firstName.length<2 || lastName.length<2){ toast('Nome e cognome devono avere almeno 2 lettere.'); return; }
   if(!/^[a-zA-Z0-9_.-]{3,32}$/.test(username)){ toast('Nome utente: minimo 3 caratteri, solo lettere, numeri, punto, trattino o underscore.'); return; }
-  if(!emailLooksValid(email)){ toast('Email non valida.'); return; }
+  if(!emailLooksValid(email)){ toast('Email non valida. Controlla bene l’indirizzo prima di continuare.'); $('#regEmail')?.focus(); return; }
   if(!passwordLooksStrong(password)){ toast('Password: minimo 8 caratteri con almeno una lettera e un numero.'); return; }
   if(!phoneLooksValid(phoneCountry, phoneNumber)){ toast(t('phoneRequired')); return; }
   settings.people=Number($('#regPeople').value)||1; settings.animals=Number($('#regAnimals').value)||0; settings.autoSmart=$('#regAutoSmart').checked; settings.apiEndpoint=$('#regEndpoint').value.trim()||settings.apiEndpoint;
@@ -852,9 +994,18 @@ async function register(e){
   settings.inventorySetupDone=false; settings.inventoryStatus='required'; settings.inventoryUpdatedAt=null;
   state=[];
   try{
-    const res=await fetch(`${settings.apiEndpoint}/auth/register`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({firstName,lastName,username,email,password,phoneCountry,phoneNumber,people:settings.people,animals:settings.animals,autoSmart:settings.autoSmart,items:[],aiMemory})});
-    const data=await res.json().catch(()=>({}));
-    if(!res.ok) throw new Error(data.error||'register fail');
+    let res, data;
+    const pendingEmail = String(session.pendingVerifyEmail||'').trim().toLowerCase();
+    if(pendingEmail && pendingEmail !== String(email).trim().toLowerCase()){
+      res=await fetch(`${settings.apiEndpoint}/auth/change-pending-email`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({oldEmail:session.pendingVerifyEmail,newEmail:email})});
+      data=await res.json().catch(()=>({}));
+      if(!res.ok) throw new Error(data.error||'change_pending_email_fail');
+      session={mode:'pending-verification',user:null,pendingVerifyEmail:data.email||email,pendingVerifyPhone:!!data.requiresPhoneVerification,phoneMasked:data.phoneMasked||session.phoneMasked||''};
+      saveAll(); render(); toast('Email aggiornata ✅ Ti abbiamo inviato una nuova verifica.'); showView('verify-email'); return;
+    }
+    res=await fetch(`${settings.apiEndpoint}/auth/register`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({firstName,lastName,username,email,password,phoneCountry,phoneNumber,people:settings.people,animals:settings.animals,autoSmart:settings.autoSmart,items:[],aiMemory})});
+    data=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.error||'register_fail');
     if(data.requiresEmailVerification){
       session={mode:'pending-verification',user:null,pendingVerifyEmail:data.email||email,pendingVerifyPhone:!!data.requiresPhoneVerification,phoneMasked:data.phoneMasked||''};
       settings.cloudEnabled=false; settings.token=''; settings.householdId='';
@@ -862,7 +1013,14 @@ async function register(e){
     }
     applyAuthPayload(data, true); toast(t('welcomeEmailSent')); showView('welcome');
   }catch(err){
-    toast('Registrazione non riuscita: controlla connessione e riprova.');
+    const code=String(err?.message||'');
+    if(code==='email_exists'){ toast('Questa email è già registrata. Prova ad accedere o recupera la password.'); $('#loginEmail') && ($('#loginEmail').value=email); showView('registration'); return; }
+    if(code==='phone_exists'){ toast('Questo numero è già registrato. Controllalo oppure usa un altro numero.'); showView('registration'); return; }
+    if(code==='invalid_email'){ toast('Email non valida. Correggila e riprova.'); goBackToRegistrationForEmailFix(); return; }
+    if(code==='invalid_phone'){ toast('Numero di telefono non valido.'); showView('registration'); return; }
+    if(code==='weak_password'){ toast('Password troppo debole.'); showView('registration'); return; }
+    if(code==='change_pending_email_fail'){ toast('Non sono riuscito a correggere l’email. Riprova.'); goBackToRegistrationForEmailFix(); return; }
+    toast('Registrazione non riuscita: controlla i dati e riprova.');
     showView('registration');
   }
 }
