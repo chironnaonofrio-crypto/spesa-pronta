@@ -8,16 +8,16 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <!-- spesa-pronta-v27-10-stable-no-loop -->
+  <!-- spesa-pronta-v27-11-inline-icons-no-broken-images -->
   <meta name="description" content="Spesa Pronta: gestione spesa intelligente con cloud, Alexa, Google Assistant e suggerimenti automatici.">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="assets/styles.v27-10-stable.css?v=2710">
+  <link rel="stylesheet" href="assets/styles.v27-11-stable.css?v=2711">
   <title>Spesa Pronta</title>
 </head>
 <body>
-  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.10-STABLE-NO-LOOP -->
+  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.11-INLINE-ICONS-NO-BROKEN-IMAGES -->
   <div class="app-frame">
     <aside class="sidebar">
       <div class="side-brand">
@@ -152,14 +152,14 @@
             <label><span>Numero di telefono</span><input id="regPhoneNumber" inputmode="tel" required placeholder="Es. 3331234567"></label>
             <label><span data-i18n="peopleCount">Numero persone in casa</span><input id="regPeople" type="number" min="1" max="20" value="2"></label>
             <label><span data-i18n="animalCount">Numero animali</span><input id="regAnimals" type="number" min="0" max="30" value="3"></label>
-            <div class="wide image-captcha-wrap">
+                        <div class="wide image-captcha-wrap">
               <div class="captcha-title"><span data-i18n="captcha">Captcha visivo</span><button class="captcha-refresh-btn" id="refreshCaptchaBtn" type="button">↻ Cambia</button></div>
               <b id="captchaQuestion" class="captcha-question">Tocca l’immagine richiesta</b>
               <div id="captchaBox" class="image-captcha" role="group" aria-label="Captcha con immagini">
-                <button class="captcha-choice" type="button" data-captcha="fridge"><img src="assets/illustrations/fridge.svg" alt="Frigo"><span>Frigo</span></button>
-                <button class="captcha-choice" type="button" data-captcha="lock"><img src="assets/illustrations/lock.svg" alt="Lucchetto"><span>Lucchetto</span></button>
-                <button class="captcha-choice" type="button" data-captcha="milk"><img src="assets/illustrations/milk.png" alt="Latte"><span>Latte</span></button>
-                <button class="captcha-choice" type="button" data-captcha="bread"><img src="assets/illustrations/bread.png" alt="Pane"><span>Pane</span></button>
+                <button class="captcha-choice" type="button" data-captcha="fridge"><span class="captcha-visual-icon captcha-icon-fridge" aria-hidden="true"></span><span class="captcha-label">Frigo</span></button>
+                <button class="captcha-choice" type="button" data-captcha="lock"><span class="captcha-visual-icon captcha-icon-lock" aria-hidden="true"></span><span class="captcha-label">Lucchetto</span></button>
+                <button class="captcha-choice" type="button" data-captcha="milk"><span class="captcha-visual-icon captcha-icon-milk" aria-hidden="true"></span><span class="captcha-label">Latte</span></button>
+                <button class="captcha-choice" type="button" data-captcha="bread"><span class="captcha-visual-icon captcha-icon-bread" aria-hidden="true"></span><span class="captcha-label">Pane</span></button>
               </div>
               <input id="regCaptcha" type="hidden" required>
             </div>
@@ -172,11 +172,19 @@
           </form>
           <aside class="register-benefits futuristic-benefits ai-zone-upgraded">
             <div class="ai-benefits-hero">
-              <img class="hero-main" src="assets/illustrations/smart-ai-hero.svg" alt="Assistente AI Spesa Pronta">
+              <div class="ai-visual-hero" aria-label="Assistente AI Spesa Pronta">
+                <span class="ai-hero-orbit orbit-one"></span>
+                <span class="ai-hero-orbit orbit-two"></span>
+                <span class="ai-hero-core"></span>
+                <span class="ai-hero-dot dot-blue"></span>
+                <span class="ai-hero-dot dot-green"></span>
+                <span class="ai-hero-dot dot-orange"></span>
+                <span class="ai-hero-dot dot-yellow"></span>
+              </div>
               <div class="ai-badge-row">
-                <div class="ai-mini-badge"><img src="assets/illustrations/alexa.png" alt="Alexa"><span>Alexa</span></div>
-                <div class="ai-mini-badge"><img src="assets/illustrations/google-assistant.png" alt="Google Assistant"><span>Google</span></div>
-                <div class="ai-mini-badge"><img src="assets/illustrations/ai-brain.svg" alt="Intelligenza artificiale"><span>AI</span></div>
+                <div class="ai-mini-badge"><span class="mini-service-icon mini-alexa" aria-hidden="true"></span><span>Alexa</span></div>
+                <div class="ai-mini-badge"><span class="mini-service-icon mini-google" aria-hidden="true"></span><span>Google</span></div>
+                <div class="ai-mini-badge"><span class="mini-service-icon mini-ai" aria-hidden="true"></span><span>AI</span></div>
               </div>
             </div>
             <p class="benefits-kicker">ecosistema domestico intelligente</p>
@@ -184,35 +192,35 @@
             <p class="benefits-lead">Un sistema visivo e intelligente che controlla consumi, riconosce i prodotti e ti aiuta a comprare solo quello che serve davvero.</p>
             <ul class="benefit-orbit-list ai-benefits-list">
               <li>
-                <img src="assets/illustrations/ai-brain.svg" alt="Apprendimento AI">
+                <span class="ai-card-icon ai-icon-brain" aria-hidden="true"></span>
                 <div>
                   <b>Apprendimento AI</b>
                   <span>Analizza abitudini, preferenze e ritmo dei consumi della tua casa.</span>
                 </div>
               </li>
               <li>
-                <img src="assets/illustrations/vision-camera.svg" alt="Riconoscimento prodotti">
+                <span class="ai-card-icon ai-icon-camera" aria-hidden="true"></span>
                 <div>
                   <b>Riconoscimento prodotti</b>
                   <span>Legge le foto, riconosce gli articoli e ti chiede conferma solo quando serve.</span>
                 </div>
               </li>
               <li>
-                <img src="assets/illustrations/shield-verify.svg" alt="Sicurezza account">
+                <span class="ai-card-icon ai-icon-shield" aria-hidden="true"></span>
                 <div>
                   <b>Sicurezza account</b>
                   <span>Protezione con email e telefono prima di attivare cloud e automazioni.</span>
                 </div>
               </li>
               <li>
-                <img src="assets/illustrations/voice-assistant.svg" alt="Comandi vocali">
+                <span class="ai-card-icon ai-icon-voice" aria-hidden="true"></span>
                 <div>
                   <b>Comandi vocali</b>
                   <span>Alexa e Google Assistant lavorano sulla stessa lista sincronizzata.</span>
                 </div>
               </li>
               <li>
-                <img src="assets/illustrations/whatsapp-list.svg" alt="Lista pronta">
+                <span class="ai-card-icon ai-icon-list" aria-hidden="true"></span>
                 <div>
                   <b>Lista pronta all’uscita</b>
                   <span>Quando esci, trovi una lista chiara, ordinata e pronta da seguire.</span>
@@ -474,6 +482,6 @@
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/app.v27-10-stable.js?v=2710" defer></script>
+  <script src="assets/app.v27-11-stable.js?v=2711" defer></script>
 </body>
 </html>

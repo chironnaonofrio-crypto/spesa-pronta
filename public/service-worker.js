@@ -1,5 +1,5 @@
-// Spesa Pronta V27.10 - service worker disattivato senza auto-refresh
-const CACHE='spesa-pronta-v27-10-stable-no-loop';
+// Spesa Pronta V27.11 - service worker disattivato senza auto-refresh
+const CACHE='spesa-pronta-v27-11-inline-icons-no-broken-images';
 self.addEventListener('install', event => {
   self.skipWaiting();
   event.waitUntil(caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).catch(()=>{}));
