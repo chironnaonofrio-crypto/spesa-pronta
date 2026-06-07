@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v27.30-vision-connect-mobile-fix';
+window.SPESA_PRONTA_VERSION='v27.31-cloud-guard-bottle-fix';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -1193,16 +1193,30 @@ function openAiPanel(){
   } else renderAiMessages();
   setTimeout(()=>$('#aiInput')?.focus(),80);
 }
-async function updateAiBackendStatus(){
-  const el=$('#aiStatusText'); if(!el || !settings.apiEndpoint) return;
+async function getVisionBackendStatus(force=false){
+  const now=Date.now();
+  if(!force && visionBackendStatus && now-visionBackendStatusAt<15000) return visionBackendStatus;
+  const base=visionApiBase ? visionApiBase() : ((settings.apiEndpoint||'/api').replace(/\/$/,''));
   try{
-    const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/ai/status`);
-    if(!res.ok) throw new Error('status');
+    const res=await fetch(`${base}/ai/status`,{cache:'no-store'});
+    if(!res.ok) throw new Error('status_'+res.status);
     const data=await res.json();
-    el.textContent = data.connected ? `AI vera collegata: chat + Vision AI attive (${data.visionModel||data.model}).` : 'AI locale attiva: per far riconoscere davvero le foto aggiungi OPENAI_API_KEY su Render.';
-  }catch{
-    el.textContent='AI locale attiva. Backend non raggiungibile o non ancora online.';
+    visionBackendStatus=Object.assign({reachable:true}, data);
+  }catch(err){
+    visionBackendStatus={reachable:false, connected:false, visionReady:false, provider:'offline', error:String(err?.message||err)};
   }
+  visionBackendStatusAt=now;
+  return visionBackendStatus;
+}
+function visionStatusLabel(st){
+  if(st?.connected && st?.visionReady) return `Cloud OpenAI attiva (${st.visionModel||st.model||'Vision'})`;
+  if(st?.reachable) return 'Cloud raggiunta ma OPENAI_API_KEY mancante';
+  return 'Cloud AI non raggiungibile';
+}
+async function updateAiBackendStatus(){
+  const el=$('#aiStatusText'); if(!el) return;
+  const data=await getVisionBackendStatus(true);
+  el.textContent = data.connected && data.visionReady ? `AI vera collegata: chat + Vision AI attive (${data.visionModel||data.model}).` : `${visionStatusLabel(data)}: il riconoscimento foto userà solo una stima locale, quindi va sempre corretto.`;
 }
 function closeAiPanel(){ $('#aiPanel').classList.add('hidden'); }
 function addAiMessage(role,text){
@@ -1722,7 +1736,7 @@ function openGroceryScanner(afterShopping=false){
   openAiPanel();
 }
 function stopLiveVisionMode(keepMessage=false){
-  liveScanActive=false; liveScanStableCount=0; liveScanLastHint=''; liveScanPrevSample=null; liveScanLastSpeechKey=''; liveScanReadySince=0; liveScanCooldownUntil=0; liveScanPendingResult=false; liveScanAwaitNextOk=false; stopScannerMic(true); if('speechSynthesis' in window) try{ speechSynthesis.cancel(); }catch{}
+  liveScanActive=false; liveScanStableCount=0; liveScanLastHint=''; liveScanPrevSample=null; liveScanLastSpeechKey=''; liveScanReadySince=0; liveScanCooldownUntil=0; liveScanPendingResult=false; liveScanAwaitNextOk=false, visionBackendStatus=null, visionBackendStatusAt=0; stopScannerMic(true); if('speechSynthesis' in window) try{ speechSynthesis.cancel(); }catch{}
   if(liveScanTimer){ clearTimeout(liveScanTimer); liveScanTimer=null; }
   if(liveScanStream){ try{ liveScanStream.getTracks().forEach(t=>t.stop()); }catch{} liveScanStream=null; }
   const pv=$('#scannerPreview');
@@ -2142,40 +2156,61 @@ async function guessProductFromImage(dataUrl=''){
   try{
     const img=await loadImageElement(dataUrl);
     const c=document.createElement('canvas');
-    const w=96,h=96; c.width=w; c.height=h;
+    const w=120,h=120; c.width=w; c.height=h;
     const ctx=c.getContext('2d',{willReadFrequently:true});
     ctx.drawImage(img,0,0,w,h);
     const d=ctx.getImageData(0,0,w,h).data;
-    let red=0,dark=0,white=0,blue=0,green=0,clear=0,total=0,edgeV=0,edgeH=0,centerLight=0,centerCount=0;
-    for(let y=6;y<h-6;y++){
-      for(let x=6;x<w-6;x++){
+    const stats={all:{red:0,dark:0,white:0,blue:0,green:0,clear:0,total:0}, center:{red:0,dark:0,white:0,blue:0,green:0,clear:0,total:0}, label:{red:0,dark:0,white:0,blue:0,green:0,clear:0,total:0}};
+    let edgeV=0, edgeH=0, centerLight=0, centerCount=0;
+    function put(bucket,r,g,b,lum,max,min){
+      bucket.total++;
+      if(r>120 && r>g*1.35 && r>b*1.22) bucket.red++;
+      if(lum<78) bucket.dark++;
+      if(r>185 && g>185 && b>178 && max-min<72) bucket.white++;
+      if(b>106 && b>r*.92 && b>g*.86) bucket.blue++;
+      if(g>115 && g>r*1.10 && g>b*.82) bucket.green++;
+      if(lum>132 && max-min<48) bucket.clear++;
+    }
+    for(let y=8;y<h-8;y++){
+      for(let x=8;x<w-8;x++){
         const i=(y*w+x)*4, r=d[i], g=d[i+1], b=d[i+2];
         const max=Math.max(r,g,b), min=Math.min(r,g,b), lum=.2126*r+.7152*g+.0722*b;
-        total++;
-        if(r>105 && r>g*1.28 && r>b*1.18) red++;
-        if(lum<78) dark++;
-        if(r>185 && g>185 && b>178 && max-min<68) white++;
-        if(b>112 && b>r*1.05 && b>g*.98) blue++;
-        if(g>115 && g>r*1.10 && g>b*.82) green++;
-        if(lum>135 && max-min<42) clear++;
-        if(x>34 && x<62 && y>12 && y<88){ centerCount++; if(lum>130) centerLight++; }
-        const j=(y*w+x+1)*4, k=((y+1)*w+x)*4;
-        if(x<w-7){ const lv2=.2126*d[j]+.7152*d[j+1]+.0722*d[j+2]; edgeV+=Math.abs(lum-lv2); }
-        if(y<h-7){ const lh2=.2126*d[k]+.7152*d[k+1]+.0722*d[k+2]; edgeH+=Math.abs(lum-lh2); }
+        const inCenter=x>40 && x<82 && y>12 && y<112;
+        const inLabel=x>36 && x<86 && y>42 && y<82;
+        put(stats.all,r,g,b,lum,max,min);
+        if(inCenter){ put(stats.center,r,g,b,lum,max,min); centerCount++; if(lum>125) centerLight++; }
+        if(inLabel) put(stats.label,r,g,b,lum,max,min);
+        const j=(y*w+Math.min(w-1,x+1))*4, k=(Math.min(h-1,y+1)*w+x)*4;
+        const lv2=.2126*d[j]+.7152*d[j+1]+.0722*d[j+2];
+        const lh2=.2126*d[k]+.7152*d[k+1]+.0722*d[k+2];
+        edgeV+=Math.abs(lum-lv2); edgeH+=Math.abs(lum-lh2);
       }
     }
-    const rr=red/total, dr=dark/total, wr=white/total, br=blue/total, gr=green/total, cr=clear/total, centerRatio=centerLight/Math.max(1,centerCount);
-    const verticalShape = edgeV/Math.max(1,total) > edgeH/Math.max(1,total)*1.05;
-    if(rr>.045 && dr>.13) return {needsManual:true, productName:'Coca-Cola', brand:'Coca-Cola', quantity:1, unit:'bt', category:'drinks', confidence:.64, productPlaceholder:'Coca-Cola', localVision:true, reason:'Riconoscimento locale: sembra Coca-Cola. Controlla quantità, marca e scadenza.'};
-    if((br>.12 && (wr>.06 || cr>.22)) || (verticalShape && centerRatio>.45 && (br>.06 || wr>.18 || cr>.28))) return {needsManual:true, productName:'Acqua in bottiglia', brand:'', quantity:1, unit:'bt', category:'drinks', confidence:.66, productPlaceholder:'Acqua in bottiglia', isLiquid:true, localVision:true, reason:'Riconoscimento locale: sembra una bottiglia d’acqua. Controlla marca e scadenza se visibili.'};
-    if(wr>.32 && rr<.04 && dr<.38) return {needsManual:true, productName:'Latte', brand:'', quantity:1, unit:'pz', category:'drinks', confidence:.54, productPlaceholder:'Latte', isLiquid:true, localVision:true, reason:'Riconoscimento locale: sembra latte. Controlla quantità e conferma.'};
-    if(gr>.16 && rr<.05) return {needsManual:true, productName:'Verdura', quantity:1, unit:'pz', category:'veg', confidence:.42, productPlaceholder:'Nome prodotto', localVision:true, reason:'Riconoscimento locale incerto: sembra verdura. Controlla nome e quantità.'};
+    const ratio=(bucket,key)=>bucket.total?bucket[key]/bucket.total:0;
+    const all=stats.all, center=stats.center, label=stats.label;
+    const rr=ratio(all,'red'), centerRed=ratio(center,'red'), labelRed=ratio(label,'red');
+    const wr=ratio(all,'white'), br=ratio(all,'blue'), cr=ratio(all,'clear');
+    const centerWhite=ratio(center,'white'), centerBlue=ratio(center,'blue'), centerClear=ratio(center,'clear'), centerDark=ratio(center,'dark');
+    const labelWhite=ratio(label,'white'), labelBlue=ratio(label,'blue'), labelDark=ratio(label,'dark');
+    const verticalShape = edgeV/Math.max(1,all.total) > edgeH/Math.max(1,all.total)*1.02;
+    const centerRatio=centerLight/Math.max(1,centerCount);
+
+    // Regola principale: se il rosso è soprattutto nello sfondo e NON sul prodotto centrale, non chiamarlo Coca-Cola.
+    // Per Coca-Cola serve rosso forte nel centro/etichetta + zona scura da label, non solo tovaglia rossa dietro.
+    const redLikelyBackground = rr>.06 && centerRed < rr*.48 && labelRed < .055;
+    const waterLike = (verticalShape && centerRatio>.38 && (centerClear>.20 || centerWhite>.14 || centerBlue>.05 || br>.08 || wr>.18 || cr>.22)) || (centerWhite>.18 && labelBlue>.025 && centerRed<.07);
+    const cokeLike = !redLikelyBackground && centerRed>.11 && labelRed>.08 && (labelDark>.08 || centerDark>.12);
+
+    if(waterLike) return {needsManual:true, productName:'Acqua in bottiglia', brand:'', quantity:1, unit:'bt', category:'drinks', confidence:.58, productPlaceholder:'Acqua in bottiglia', isLiquid:true, localVision:true, reason:'Riconoscimento locale prudente: sembra una bottiglia d’acqua. La marca va confermata solo se la Cloud AI è attiva.'};
+    if(cokeLike) return {needsManual:true, productName:'Bibita tipo cola', brand:'', quantity:1, unit:'bt', category:'drinks', confidence:.48, productPlaceholder:'Bibita tipo cola', isLiquid:true, localVision:true, reason:'Riconoscimento locale prudente: potrebbe essere una bibita tipo cola, ma conferma nome e marca.'};
+    if(centerWhite>.32 && centerRed<.04 && centerDark<.38) return {needsManual:true, productName:'Latte', brand:'', quantity:1, unit:'pz', category:'drinks', confidence:.46, productPlaceholder:'Latte', isLiquid:true, localVision:true, reason:'Riconoscimento locale prudente: sembra latte. Controlla quantità e conferma.'};
+    if(ratio(center,'green')>.16 && centerRed<.05) return {needsManual:true, productName:'Verdura', quantity:1, unit:'pz', category:'veg', confidence:.38, productPlaceholder:'Nome prodotto', localVision:true, reason:'Riconoscimento locale incerto: sembra verdura. Controlla nome e quantità.'};
   }catch(_){ }
   return null;
 }
 async function guessScanFallback(fileName='',dataUrl='',previous=null){
   const visual=await guessProductFromImage(dataUrl);
-  if(visual) return {...previous,...visual, needsManual:true, cloudOffline:true};
+  if(visual) return {...previous,...visual, needsManual:true, shouldAskConfirmation:true, cloudOffline:true, confidence:Math.min(Number(visual.confidence||0),.58)};
   const fromName=cleanFileProductName(fileName);
   if(fromName) return {...previous, needsManual:true, productName:fromName, quantity:1, unit:'pz', category:'food', confidence:.32, productPlaceholder:'Nome prodotto', cloudOffline:true, reason:'Vision AI cloud non pronta: riconoscimento locale da controllare.'};
   return {...previous, needsManual:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.18, productPlaceholder:'Es. Coca-Cola, latte, acqua...', cloudOffline:true, reason:'Vision AI cloud non pronta: inserisci manualmente nome e quantità. Non userò nomi tecnici tipo manual-live.'};
@@ -2186,6 +2221,12 @@ function visionApiBase(){
   return raw.replace(/\/$/, '');
 }
 async function askVisionAi(dataUrl){
+  const st=await getVisionBackendStatus(false);
+  if(!(st.connected && st.visionReady)){
+    const e=new Error('cloud_vision_not_ready');
+    e.visionError=st;
+    throw e;
+  }
   const catalog=state.map(i=>({id:i.id,names:i.names,unit:i.unit,unitOptions:i.unitOptions,category:i.category,qty:i.qty}));
   const endpoint=visionApiBase();
   const res=await fetch(`${endpoint}/ai/vision`,{
@@ -2202,6 +2243,7 @@ async function askVisionAi(dataUrl){
   const data=await res.json();
   if(data.memory){ aiMemory=Object.assign(aiMemory,data.memory); aiMemory.learnedProducts=Array.isArray(aiMemory.learnedProducts)?aiMemory.learnedProducts:[]; saveAiMemory(); }
   const r=data.result || data;
+  if(r) { r.cloudVision=true; r.cloudOffline=false; }
   if(r && r.productName && /^(image|img|foto|photo|screenshot|whatsapp|camera|pxl|dsc|dcim|manual-live|auto-live|manual|auto|live|\d{5,})/i.test(String(r.productName).replace(/\s+/g,''))) r.productName='';
   return r;
 }
@@ -2245,7 +2287,7 @@ function addScannerResult(result){
         ${result.expiryDate?`<span class="good">Scadenza: ${esc(result.expiryDate)}</span>`:''}
         ${result.isDamaged?`<span class="danger">Danneggiato${result.damageType?`: ${esc(result.damageType)}`:''}</span>`:'<span class="good">Confezione ok</span>'}
         ${result.estimatedSize?`<span class="info">Formato: ${esc(result.estimatedSize)}</span>`:''}
-        ${result.cloudOffline?'<span class="cloud-warn">Cloud AI non collegata</span>':''}
+        ${result.cloudVision?'<span class="good">Cloud OpenAI attiva</span>':''}${result.cloudOffline?'<span class="cloud-warn">Cloud AI non collegata: stima locale</span>':''}${result.localVision?'<span class="info">Stima locale prudente</span>':''}
       </div>
       <div class="scan-voice-helper ${helperMode}" data-scan-voice-note><span class="dot"></span><div><strong>Assistente live</strong><br>${esc(helperText)}</div></div>
       <div class="scan-summary-box" data-scan-summary></div>

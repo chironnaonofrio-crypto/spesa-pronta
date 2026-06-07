@@ -1390,6 +1390,8 @@ const server = http.createServer(async (req,res)=>{
       if(householdId && db.households[householdId] && db.households[householdId].token===bearer) h=db.households[householdId];
       const activeMemory=h ? ensureHouseholdMemory(h) : memory;
       const result = await visionAnalyze({image,catalog:h?(h.items||[]):catalog,settings:h?(h.settings||{}):settings,memory:activeMemory});
+      result.cloudVision = aiConnected();
+      result.cloudOffline = !aiConnected();
       if(h){
         activeMemory.scanHistory.push({
           productName:result.productName||'', quantity:result.quantity||null, unit:result.unit||'', category:result.category||'', confidence:result.confidence||0, needsRetake:!!result.needsRetake, reason:result.reason||'', visibleEvidence:result.visibleEvidence||[], at:Date.now()
