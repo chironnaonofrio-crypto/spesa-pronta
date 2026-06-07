@@ -13,10 +13,10 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="assets/styles.css?v=2762">
+  <link rel="stylesheet" href="assets/styles.css?v=2763">
   <title>Spesa Pronta</title>
 
-<style id="v2762-responsive-fix">
+<style id="v2763-responsive-fix">
   .deploy-version-pill{display:inline-flex!important;align-items:center!important;justify-content:center!important;min-height:34px!important;padding:0 12px!important;border-radius:999px!important;background:linear-gradient(135deg,#1266f1,#18bf72)!important;color:#fff!important;font-size:.74rem!important;font-weight:1000!important;letter-spacing:.08em!important;white-space:nowrap!important;box-shadow:0 12px 28px rgba(18,102,241,.22)!important;z-index:20!important}
   .deploy-floating-version{position:fixed!important;right:12px!important;bottom:calc(74px + env(safe-area-inset-bottom,0px))!important;z-index:99999!important;background:linear-gradient(135deg,#1266f1,#18bf72)!important;color:#fff!important;border-radius:999px!important;padding:9px 12px!important;font:1000 11px/1 Inter,Arial,sans-serif!important;letter-spacing:.08em!important;box-shadow:0 14px 34px rgba(18,102,241,.28)!important;pointer-events:none!important}
   .premium-hero-image img,.hero-ref-img,.step-visual,.quick-card-art,.seed-proof-visual{opacity:1!important;visibility:visible!important;display:block!important;filter:none!important;mix-blend-mode:normal!important}
@@ -53,8 +53,8 @@
 </style>
 
 
-<style id="v2762-final-visible-cleanup">
-  /* V27.62: niente badge grandi, solo micro versione basso/sinistra */
+<style id="v2763-final-visible-cleanup">
+  /* V27.63: niente badge grandi, solo micro versione basso/sinistra */
   .deploy-version-pill,
   .deploy-floating-version{
     display:none!important;
@@ -67,7 +67,7 @@
   }
 
   body::after{
-    content:'V27.62 MODERN LANGUAGE MENU'!important;
+    content:'V27.63 CENTER FLAG MENU'!important;
     position:fixed!important;
     left:9px!important;
     right:auto!important;
@@ -167,10 +167,10 @@
 </style>
 
 
-<style id="v2762-square-grid-fix">
-/* V27.62 square compact grid fix */
+<style id="v2763-square-grid-fix">
+/* V27.63 square compact grid fix */
 .deploy-version-pill,.deploy-floating-version{display:none!important}
-body::after{content:'V27.62 MODERN LANGUAGE MENU'!important;position:fixed!important;left:8px!important;bottom:7px!important;right:auto!important;z-index:9999!important;font:900 8.5px/1 Inter,Arial,sans-serif!important;letter-spacing:.045em!important;color:rgba(7,27,52,.30)!important;pointer-events:none!important;background:transparent!important;padding:0!important;border:0!important;box-shadow:none!important}
+body::after{content:'V27.63 CENTER FLAG MENU'!important;position:fixed!important;left:8px!important;bottom:7px!important;right:auto!important;z-index:9999!important;font:900 8.5px/1 Inter,Arial,sans-serif!important;letter-spacing:.045em!important;color:rgba(7,27,52,.30)!important;pointer-events:none!important;background:transparent!important;padding:0!important;border:0!important;box-shadow:none!important}
 
 /* Head text smaller inside modal */
 .scanner-title-block p{font-size:.9rem!important;line-height:1.22!important;letter-spacing:.015em!important;overflow-wrap:anywhere!important;word-break:normal!important}
@@ -277,9 +277,9 @@ body::after{content:'V27.62 MODERN LANGUAGE MENU'!important;position:fixed!impor
 }
 </style>
 
-<style id="v2762-title-hero-fix">
-/* V27.62 title + hero image fix */
-body::after{content:'V27.62 MODERN LANGUAGE MENU'!important}
+<style id="v2763-title-hero-fix">
+/* V27.63 title + hero image fix */
+body::after{content:'V27.63 CENTER FLAG MENU'!important}
 
 /* Make title adapt nicely */
 .topbar{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;gap:12px!important;align-items:start!important}
@@ -325,7 +325,7 @@ body::after{content:'V27.62 MODERN LANGUAGE MENU'!important}
 </style>
 </head>
 <body>
-  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.62-MODERN-LANGUAGE-MENU -->
+  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.63-CENTER-FLAG-MENU -->
   <div class="app-frame">
     <aside class="sidebar">
       <div class="side-brand">
@@ -362,19 +362,27 @@ body::after{content:'V27.62 MODERN LANGUAGE MENU'!important}
               <option value="es">ES</option>
               <option value="de">DE</option>
             </select>
-            <button class="lang-trigger" id="langTrigger" type="button" aria-label="Scegli lingua" aria-haspopup="true" aria-expanded="false">
-              <span class="lang-trigger-orb" aria-hidden="true">✦</span>
-              <span class="lang-trigger-copy">
-                <small>Lingua</small>
-                <strong id="langTriggerValue">IT • Italiano</strong>
-              </span>
+            <button class="lang-trigger" id="langTrigger" type="button" aria-label="Scegli lingua" aria-haspopup="dialog" aria-expanded="false">
+              <span class="lang-mini-flag flag-it" id="langTriggerFlag" aria-hidden="true"></span>
+              <strong id="langTriggerCode">IT</strong>
               <span class="lang-trigger-caret" aria-hidden="true">⌄</span>
             </button>
-            <div class="lang-menu" id="langMenu" hidden>
-              <button class="lang-option active" type="button" data-lang-option="it"><span class="lang-code">IT</span><span class="lang-name">Italiano</span><span class="lang-check">✓</span></button>
-              <button class="lang-option" type="button" data-lang-option="en"><span class="lang-code">EN</span><span class="lang-name">English</span><span class="lang-check">✓</span></button>
-              <button class="lang-option" type="button" data-lang-option="es"><span class="lang-code">ES</span><span class="lang-name">Español</span><span class="lang-check">✓</span></button>
-              <button class="lang-option" type="button" data-lang-option="de"><span class="lang-code">DE</span><span class="lang-name">Deutsch</span><span class="lang-check">✓</span></button>
+            <div class="lang-overlay" id="langOverlay" hidden>
+              <div class="lang-modal" role="dialog" aria-modal="true" aria-labelledby="langModalTitle">
+                <div class="lang-modal-head">
+                  <div>
+                    <small>Scegli lingua</small>
+                    <h4 id="langModalTitle">Seleziona la tua lingua</h4>
+                  </div>
+                  <button class="lang-close" id="langClose" type="button" aria-label="Chiudi">×</button>
+                </div>
+                <div class="lang-options">
+                  <button class="lang-option flag-bg-it active" type="button" data-lang-option="it"><span class="lang-mini-flag flag-it" aria-hidden="true"></span><span class="lang-option-copy"><b>IT</b><em>Italiano</em></span><span class="lang-check">✓</span></button>
+                  <button class="lang-option flag-bg-en" type="button" data-lang-option="en"><span class="lang-mini-flag flag-en" aria-hidden="true"></span><span class="lang-option-copy"><b>EN</b><em>English</em></span><span class="lang-check">✓</span></button>
+                  <button class="lang-option flag-bg-es" type="button" data-lang-option="es"><span class="lang-mini-flag flag-es" aria-hidden="true"></span><span class="lang-option-copy"><b>ES</b><em>Español</em></span><span class="lang-check">✓</span></button>
+                  <button class="lang-option flag-bg-de" type="button" data-lang-option="de"><span class="lang-mini-flag flag-de" aria-hidden="true"></span><span class="lang-option-copy"><b>DE</b><em>Deutsch</em></span><span class="lang-check">✓</span></button>
+                </div>
+              </div>
             </div>
           </div>
           <button class="icon-btn" id="syncNowBtn" type="button" title="Sync">☁</button>
@@ -882,8 +890,8 @@ body::after{content:'V27.62 MODERN LANGUAGE MENU'!important}
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/vision-seed-memory.js?v=2762" defer></script>
-  <script src="assets/vision-mega-index.js?v=2762" defer></script>
-  <script src="assets/app.v27-48-premium-mega-vision.js?v=2762" defer></script>
+  <script src="assets/vision-seed-memory.js?v=2763" defer></script>
+  <script src="assets/vision-mega-index.js?v=2763" defer></script>
+  <script src="assets/app.v27-48-premium-mega-vision.js?v=2763" defer></script>
 </body>
 </html>

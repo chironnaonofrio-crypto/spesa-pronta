@@ -635,33 +635,39 @@ function init(){
 }
 
 const LANGUAGE_META = {
-  it: 'IT • Italiano',
-  en: 'EN • English',
-  es: 'ES • Español',
-  de: 'DE • Deutsch'
+  it: { code: 'IT', flagClass: 'flag-it' },
+  en: { code: 'EN', flagClass: 'flag-en' },
+  es: { code: 'ES', flagClass: 'flag-es' },
+  de: { code: 'DE', flagClass: 'flag-de' }
 };
 function closeLangMenu(){
   const picker = $('#langPicker');
-  const menu = $('#langMenu');
+  const overlay = $('#langOverlay');
   const trigger = $('#langTrigger');
-  if(!picker || !menu || !trigger) return;
+  if(!picker || !overlay || !trigger) return;
   picker.classList.remove('open');
-  menu.hidden = true;
+  overlay.hidden = true;
   trigger.setAttribute('aria-expanded','false');
 }
 function openLangMenu(){
   const picker = $('#langPicker');
-  const menu = $('#langMenu');
+  const overlay = $('#langOverlay');
   const trigger = $('#langTrigger');
-  if(!picker || !menu || !trigger) return;
+  if(!picker || !overlay || !trigger) return;
   picker.classList.add('open');
-  menu.hidden = false;
+  overlay.hidden = false;
   trigger.setAttribute('aria-expanded','true');
 }
 function syncLanguagePicker(){
   const value = settings.lang || 'it';
-  const triggerValue = $('#langTriggerValue');
-  if(triggerValue) triggerValue.textContent = LANGUAGE_META[value] || 'IT • Italiano';
+  const meta = LANGUAGE_META[value] || LANGUAGE_META.it;
+  const triggerCode = $('#langTriggerCode');
+  const triggerFlag = $('#langTriggerFlag');
+  if(triggerCode) triggerCode.textContent = meta.code;
+  if(triggerFlag){
+    triggerFlag.classList.remove('flag-it','flag-en','flag-es','flag-de');
+    triggerFlag.classList.add(meta.flagClass);
+  }
   $all('[data-lang-option]').forEach(btn => btn.classList.toggle('active', btn.dataset.langOption === value));
   const native = $('#languageSelect');
   if(native) native.value = value;
@@ -669,12 +675,20 @@ function syncLanguagePicker(){
 function bindLanguagePicker(){
   const trigger = $('#langTrigger');
   const picker = $('#langPicker');
-  if(!trigger || !picker || picker.dataset.bound === '1') return;
+  const overlay = $('#langOverlay');
+  const closeBtn = $('#langClose');
+  const modal = overlay?.querySelector('.lang-modal');
+  if(!trigger || !picker || !overlay || picker.dataset.bound === '1') return;
   picker.dataset.bound = '1';
   trigger.addEventListener('click', (e) => {
     e.preventDefault();
     if(picker.classList.contains('open')) closeLangMenu(); else openLangMenu();
   });
+  closeBtn?.addEventListener('click', closeLangMenu);
+  overlay.addEventListener('click', (e) => {
+    if(e.target === overlay) closeLangMenu();
+  });
+  modal?.addEventListener('click', (e) => e.stopPropagation());
   $all('[data-lang-option]').forEach(btn => btn.addEventListener('click', () => {
     settings.lang = btn.dataset.langOption || 'it';
     saveAll();
@@ -682,15 +696,11 @@ function bindLanguagePicker(){
     render();
     closeLangMenu();
   }));
-  document.addEventListener('click', (e) => {
-    if(!picker.contains(e.target)) closeLangMenu();
-  });
   document.addEventListener('keydown', (e) => {
     if(e.key === 'Escape') closeLangMenu();
   });
   syncLanguagePicker();
 }
-
 function bind(){
   $all('.nav-item').forEach(b => b.addEventListener('click', () => showView(b.dataset.view)));
   $('#mobileMenuBtn')?.addEventListener('click', () => toggleMobileMenu(true));
