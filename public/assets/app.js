@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v27.31-cloud-guard-bottle-fix';
+window.SPESA_PRONTA_VERSION='v27.32-cloud-force-html-fix';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -2212,8 +2212,8 @@ async function guessScanFallback(fileName='',dataUrl='',previous=null){
   const visual=await guessProductFromImage(dataUrl);
   if(visual) return {...previous,...visual, needsManual:true, shouldAskConfirmation:true, cloudOffline:true, confidence:Math.min(Number(visual.confidence||0),.58)};
   const fromName=cleanFileProductName(fileName);
-  if(fromName) return {...previous, needsManual:true, productName:fromName, quantity:1, unit:'pz', category:'food', confidence:.32, productPlaceholder:'Nome prodotto', cloudOffline:true, reason:'Vision AI cloud non pronta: riconoscimento locale da controllare.'};
-  return {...previous, needsManual:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.18, productPlaceholder:'Es. Coca-Cola, latte, acqua...', cloudOffline:true, reason:'Vision AI cloud non pronta: inserisci manualmente nome e quantità. Non userò nomi tecnici tipo manual-live.'};
+  if(fromName) return {...previous, needsManual:true, productName:fromName, quantity:1, unit:'pz', category:'food', confidence:.32, productPlaceholder:'Nome prodotto', cloudOffline:true, reason:'Cloud OpenAI richiesta ma risposta non disponibile: stima locale da controllare.'};
+  return {...previous, needsManual:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.18, productPlaceholder:'Es. Coca-Cola, latte, acqua...', cloudOffline:true, reason:'Cloud OpenAI richiesta ma non ha risposto: inserisci manualmente nome e quantità. Non userò nomi tecnici tipo manual-live.'};
 }
 function visionApiBase(){
   const raw=(settings.apiEndpoint || '/api').trim() || '/api';
@@ -2420,3 +2420,5 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.addEventListener('click', (e)=>{ e.preventDefault(); register(e); });
   }
 });
+
+console.log('[Spesa Pronta] V27.32 cloud-force-html-fix loaded: frontend now points to this build');
