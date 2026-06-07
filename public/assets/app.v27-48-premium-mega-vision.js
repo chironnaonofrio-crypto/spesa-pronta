@@ -1,10 +1,10 @@
-window.SPESA_PRONTA_VERSION='v27.47-blank-page-fixed';
+window.SPESA_PRONTA_VERSION='V27.55-IMG-FIX';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
-    const flag='spesaProntaNoLoopCleanedV2710';
-    if(!sessionStorage.getItem(flag)){
-      sessionStorage.setItem(flag,'1');
+    const flag='spesaProntaNoLoopCleanedV2755';
+    if(true){
+      try{{ sessionStorage.setItem(flag,'1'); }}catch(_){{}}
       if('serviceWorker' in navigator){
         navigator.serviceWorker.getRegistrations()
           .then(regs=>regs.forEach(reg=>reg.unregister().catch(()=>{})))
@@ -3060,4 +3060,4 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-console.log('[Spesa Pronta] V27.48 premium-mega-vision loaded: uppercase UI + 1M virtual seed core + 11200 active products');
+console.log('[Spesa Pronta] V27.55 IMG FIX loaded: inline images + visible version + overflow fixed');

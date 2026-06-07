@@ -1074,7 +1074,7 @@ body::after{content:'V27.48 PREMIUM CORE 1M';position:fixed;right:14px;bottom:10
 
 /* V27.56 responsive text + layout fix */
 
-:root{--deploy-version:"V27.56 RESPONSIVE FIX"}
+:root{--deploy-version:"V27.57 ROOT+PUBLIC FIX"}
 .topbar,.top-title,.top-actions,.panel-head,.premium-hero,.premium-hero-copy,.premium-hero-image,.onboarding-steps.pro-steps article,.scanner-head,.scanner-title-block,.scanner-quick-cards,.scanner-card-premium .scanner-quick-cards>span,.scanner-card-premium .scanner-quick-cards .quick-copy,.seed-proof-head,.seed-proof-stats span{min-width:0!important}
 .topbar{gap:12px!important;flex-wrap:wrap!important;align-items:flex-start!important}
 .top-actions{margin-left:auto!important;flex-wrap:wrap!important;justify-content:flex-end!important;gap:10px!important;max-width:100%!important}
@@ -1143,4 +1143,95 @@ body::after{content:'V27.48 PREMIUM CORE 1M';position:fixed;right:14px;bottom:10
   .scanner-card-premium .scanner-quick-cards .quick-copy em{font-size:.73rem!important}
   .scanner-actions{grid-template-columns:1fr!important}
   .deploy-floating-version{right:8px!important;left:8px!important;bottom:calc(68px + env(safe-area-inset-bottom,0px))!important}
+}
+
+
+/* V27.57 final: root + public aligned, strict no-overflow */
+html,body{max-width:100%!important;overflow-x:hidden!important}
+*{box-sizing:border-box}
+.app-frame,.main,.topbar,.top-title,.top-actions,.view,.panel,.scanner-card-premium{max-width:100%!important}
+img{max-width:100%;height:auto}
+.deploy-version-pill::after{content:"";}
+
+/* make scanner cards truly adaptive */
+.scanner-card-premium .scanner-quick-cards,
+.onboarding-steps.pro-steps,
+.scanner-actions{
+  width:100%!important;
+  max-width:100%!important;
+}
+
+.scanner-card-premium .scanner-quick-cards > span,
+.onboarding-steps.pro-steps article{
+  width:100%!important;
+  max-width:100%!important;
+  min-width:0!important;
+}
+
+.scanner-card-premium .scanner-quick-cards .quick-copy,
+.onboarding-steps.pro-steps article span{
+  min-width:0!important;
+  max-width:100%!important;
+  overflow:visible!important;
+}
+
+.scanner-card-premium .scanner-quick-cards .quick-copy b,
+.scanner-card-premium .scanner-quick-cards .quick-copy em,
+.onboarding-steps.pro-steps article span b,
+.onboarding-steps.pro-steps article span em,
+.scanner-title-block p,
+.seed-brain-proof p{
+  white-space:normal!important;
+  overflow-wrap:anywhere!important;
+  word-break:normal!important;
+  hyphens:auto!important;
+}
+
+/* tablet/wide phones: 2 columns balanced */
+@media (min-width:701px){
+  .scanner-card-premium .scanner-quick-cards{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+  .scanner-card-premium .scanner-quick-cards > span{
+    grid-template-columns:minmax(86px,112px) minmax(0,1fr)!important;
+  }
+}
+
+/* phones: single column, image + text in the same row */
+@media (max-width:700px){
+  .scanner-card-premium .scanner-quick-cards,
+  .onboarding-steps.pro-steps,
+  .scanner-actions{
+    grid-template-columns:1fr!important;
+  }
+  .scanner-card-premium .scanner-quick-cards > span{
+    grid-template-columns:clamp(58px,20vw,82px) minmax(0,1fr)!important;
+    gap:10px!important;
+  }
+  .scanner-card-premium .scanner-quick-cards > span > img.quick-card-art{
+    width:clamp(56px,19vw,76px)!important;
+    height:clamp(50px,16vw,66px)!important;
+  }
+}
+
+/* very narrow phones: still no text outside */
+@media (max-width:360px){
+  .scanner-card-premium{
+    width:calc(100vw - 8px)!important;
+    max-width:calc(100vw - 8px)!important;
+    padding:10px!important;
+  }
+  .scanner-card-premium .scanner-quick-cards > span{
+    grid-template-columns:54px minmax(0,1fr)!important;
+    gap:8px!important;
+  }
+  .scanner-card-premium .scanner-quick-cards > span > img.quick-card-art{
+    width:52px!important;height:48px!important;
+  }
+  .scanner-card-premium .scanner-quick-cards .quick-copy b{
+    font-size:.84rem!important;
+  }
+  .scanner-card-premium .scanner-quick-cards .quick-copy em{
+    font-size:.68rem!important;
+  }
 }
