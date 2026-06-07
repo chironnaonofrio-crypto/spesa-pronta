@@ -656,3 +656,7 @@ body.auth-required .top-subtitle{
 #view-registration .registration-panel{gap:20px!important}
 #loginForm,#registerForm{overflow:visible!important}
 @media(max-width:820px){.form-section-intro{padding:14px}.form-section-intro h3{font-size:1.16rem}.form-section-intro p{font-size:.86rem}.login-submit-btn,.register-submit-btn{min-height:62px!important;border-radius:18px!important}.login-submit-btn .btn-main,.register-submit-btn .btn-main{font-size:1rem}.login-submit-btn .btn-sub,.register-submit-btn .btn-sub{font-size:.72rem}.captcha-choice{min-height:92px!important;border-radius:20px!important}.captcha-choice img,.captcha-choice .img-fallback,.captcha-choice .emoji{width:42px!important;height:42px!important}}
+
+
+/* V27.10 stable no reload */
+body::after{content:'V27.10';position:fixed;right:8px;bottom:8px;font-size:10px;font-weight:900;color:rgba(7,27,52,.18);pointer-events:none;z-index:9999}

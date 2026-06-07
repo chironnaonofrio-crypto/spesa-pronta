@@ -1,0 +1,1267 @@
+window.SPESA_PRONTA_VERSION='v27.10-stable-no-loop';
+// V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
+(function(){
+  try{
+    const flag='spesaProntaNoLoopCleanedV2710';
+    if(!sessionStorage.getItem(flag)){
+      sessionStorage.setItem(flag,'1');
+      if('serviceWorker' in navigator){
+        navigator.serviceWorker.getRegistrations()
+          .then(regs=>regs.forEach(reg=>reg.unregister().catch(()=>{})))
+          .catch(()=>{});
+      }
+      if('caches' in window){
+        caches.keys()
+          .then(keys=>Promise.all(keys.map(k=>caches.delete(k))))
+          .catch(()=>{});
+      }
+    }
+  }catch(_){}
+})();
+
+const STORAGE_KEY = 'spesa-pronta-final:v19';
+const SETTINGS_KEY = 'spesa-pronta-final:settings:v19';
+const SESSION_KEY = 'spesa-pronta-final:session:v19';
+const AI_MEMORY_KEY = 'spesa-pronta-final:ai-memory:v23';
+const SYNC_WAIT = 650;
+
+const translations = {
+  it: {
+    navDashboard:'Dashboard', navProducts:'Prodotti', navShopping:'Lista della spesa', navSuggestions:'Suggerimenti', navSettings:'Impostazioni', navHelp:'Aiuto',
+    heroEyebrow:'Organizzatore domestico', appTitle:'SPESA PRONTA', subtitle:'Quando finisce, scorri. Quando esci, compri.', statusSituation:'Situazione spesa', totalItems:'articoli totali', inHome:'In casa', readyAvailable:'scorte sufficienti',
+    toBuy:'Da comprare', missingItems:'scorte in esaurimento', syncStatus:'Stato sync', yourProducts:'I tuoi prodotti', dashboardHint:'Gestisci quantità, unità e stato della spesa.',
+    addArticle:'Aggiungi articolo', shoppingDone:'Ho fatto la spesa', searchPlaceholder:'Cerca un articolo', allCategories:'Tutte le categorie',
+    catalogNote:'Qui trovi un menu generico con molti articoli comuni. Se qualcosa manca, aggiungilo tu.', quickList:'Lista rapida', quickListHint:'Solo ciò che devi comprare.',
+    copyList:'Copia lista', suggestedTitle:'Consigliati per te', suggestedHint:'Articoli che consumi spesso o che stanno per finire.', alexaTitle:'Collegamento Alexa',
+    alexaTextShort:'Alexa legge e aggiorna la lista cloud.', connectAlexa:'Connetti Alexa', copyAlexaEndpoint:'Copia endpoint Alexa', registerTitle:'Accedi o registrati',
+    registerText:'Prima di vedere i prodotti devi accedere o creare un profilo. Poi fai l’inventario iniziale con foto.', username:'Nome utente', usernamePh:'Inserisci il tuo nome',
+    email:'Email', password:'Password', passwordPh:'Minimo 8 caratteri', peopleCount:'Numero persone in casa', animalCount:'Numero animali', captcha:'Captcha', phonePrefix:'Prefisso telefono', phoneNumber:'Numero di telefono', phoneRequired:'Inserisci un numero di telefono valido', phoneSmsSent:'SMS di verifica inviato ✅', phoneVerified:'Telefono verificato ✅', phoneNotVerified:'Devi verificare il telefono via SMS.', whatsappListSent:'Lista inviata su WhatsApp ✅', whatsappListReady:'Lista generata: WhatsApp non configurato, l’ho copiata negli appunti.', 
+    apiEndpoint:'API endpoint', autoSmartOrdering:'Spesa intelligente automatica', registerCreate:'Registrati', continueOffline:'Continua offline', whyRegister:'Perché registrarsi?',
+    benefitCloud:'Sincronizzazione sicura su cloud', benefitSecurity:'Dati cifrati nel database', forgotPassword:'Hai dimenticato la password?', resetMailSent:'Se l’indirizzo è presente, riceverai una email con link/token di recupero.', verifyMailSent:'Ti abbiamo inviato una email di verifica ✅', emailVerified:'Email verificata ✅', emailNotVerified:'Devi verificare la tua email prima di accedere.', passwordUpdated:'Password aggiornata ✅', captchaPick:'Tocca l’immagine richiesta', captchaPickItem:'Tocca: ', welcomeEmailSent:'Email di benvenuto inviata ✅', benefitDevices:'Accesso da più dispositivi', benefitSmart:'Suggerimenti personalizzati', benefitAlexa:'Integrazione con Alexa', benefitGoogle:'Compatibilità Google Assistant', voiceTitle:'Assistenti vocali', voiceTextShort:'Alexa e Google Assistant aggiornano la stessa lista cloud.', voiceLong:'Collega Alexa e Google Assistant allo stesso database: quando modifichi un articolo, la lista vocale si aggiorna per entrambi.', connectGoogle:'Connetti Google Assistant', copyGoogleEndpoint:'Copia endpoint Google Assistant', googleConnected:'Google Assistant collegato',
+    productsHint:'Catalogo completo e gestione articoli personalizzati.', shoppingHint:'Questa è la lista che Alexa e Google Assistant leggeranno dal cloud.', suggestionsSmart:'Suggerimenti intelligenti',
+    suggestionsExplain:'Raccomandazioni basate su persone, animali e consumo reale.', peopleInHome:'Persone in casa', animalsInHome:'Animali', smartAnalysis:'Analisi consumi',
+    smartHow:'Analizziamo i consumi abituali e il numero di persone/animali per prevedere cosa sta per finire.', language:'Lingua dell’app', cloudSync:'Cloud & Sincronizzazione',
+    enableCloud:'Abilita sync cloud', householdId:'ID famiglia', apiToken:'Token API', saveSettings:'Salva impostazioni', household:'Famiglia', smartShopping:'Suggerimenti spesa intelligenti',
+    autoSmartExplain:'Se disattivato, l’app non aggiunge suggerimenti automatici alla lista.', alexaLong:'Collega Alexa allo stesso database: quando modifichi un articolo, la lista vocale si aggiorna.',
+    helpText:'Esempi Alexa: “Alexa, chiedi a Spesa Pronta cosa devo comprare”, “aggiungi acqua”, “segna crocchette cane a 10 kg”.',
+    nameIt:'Nome italiano', nameEn:'Nome inglese', nameEs:'Nome spagnolo', nameDe:'Nome tedesco', category:'Categoria', add:'Aggiungi',
+    qty:'Quantità', unit:'Unità', availability:'Disponibilità', lowStock:'Scorta bassa', goodStock:'Scorta buona', inStock:'IN CASA', buyStock:'DA COMPRARE',
+    copied:'Copiato ✅', saved:'Salvato ✅', synced:'Sincronizzato', offline:'Offline', guest:'Ospite', registered:'Registrato', wrongCaptcha:'Captcha errato', required:'Compila i campi richiesti',
+    noBuy:'Niente da comprare 🎉', added:'Articolo aggiunto ✅', syncFail:'Sync non riuscita', alexaConnected:'Collegata', alexaNotConnected:'Non collegata',
+    category_food:'Alimentari', category_drinks:'Bevande', category_pets:'Animali', category_house:'Casa', category_pharmacy:'Farmacia', category_aquarium:'Acquario', category_fruit:'Frutta', category_veg:'Verdura', firstName:'Nome', lastName:'Cognome', firstNamePh:'Inserisci il tuo nome', lastNamePh:'Inserisci il tuo cognome', profileTitle:'Profilo utente', saveProfile:'Salva profilo', registerOrLogin:'Registrati / Login', account:'Account', clickToProfile:'Apri profilo', clickToRegister:'Registrati per sincronizzare', profileSaved:'Profilo aggiornato ✅', profileGuestText:'Accedi per sincronizzare tutto e usare Alexa/Google Assistant.', homeDataTitle:'Dati casa per i consumi intelligenti', homeDataHint:'Questi numeri servono per calcolare acqua, crocchette e scorte consigliate.'
+  },
+  en: {
+    navDashboard:'Dashboard', navProducts:'Products', navShopping:'Shopping list', navSuggestions:'Suggestions', navSettings:'Settings', navHelp:'Help',
+    heroEyebrow:'Home organizer', appTitle:'READY GROCERIES', subtitle:'When it runs out, swipe. When you go out, buy.', statusSituation:'Shopping status', totalItems:'total items', inHome:'At home', readyAvailable:'enough stock',
+    toBuy:'To buy', missingItems:'running low', syncStatus:'Sync status', yourProducts:'Your products', dashboardHint:'Manage quantity, unit and shopping status.',
+    addArticle:'Add item', shoppingDone:'Shopping completed', searchPlaceholder:'Search item', allCategories:'All categories',
+    catalogNote:'Here is a generic menu with many common items. Add yours if something is missing.', quickList:'Quick list', quickListHint:'Only what you need to buy.',
+    copyList:'Copy list', suggestedTitle:'Suggested for you', suggestedHint:'Items you use often or that are running low.', alexaTitle:'Alexa connection',
+    alexaTextShort:'Alexa reads and updates the cloud list.', connectAlexa:'Connect Alexa', copyAlexaEndpoint:'Copy Alexa endpoint', registerTitle:'Login or register',
+    registerText:'Before seeing products, sign in or create a profile. Then complete the first photo inventory.', username:'Username', usernamePh:'Enter your name',
+    email:'Email', password:'Password', passwordPh:'Minimum 8 characters', peopleCount:'People at home', animalCount:'Animals', captcha:'Captcha', phonePrefix:'Phone prefix', phoneNumber:'Phone number', phoneRequired:'Enter a valid phone number', phoneSmsSent:'SMS di verifica inviato ✅', phoneVerified:'Telefono verificato ✅', phoneNotVerified:'Devi verificare il telefono via SMS.', whatsappListSent:'Lista inviata su WhatsApp ✅', whatsappListReady:'Lista generata: WhatsApp non configurato, l’ho copiata negli appunti.', 
+    apiEndpoint:'API endpoint', autoSmartOrdering:'Automatic smart shopping', registerCreate:'Register', continueOffline:'Continue offline', whyRegister:'Why register?',
+    benefitCloud:'Secure cloud synchronization', benefitDevices:'Access from multiple devices', benefitSmart:'Personalized suggestions', benefitAlexa:'Alexa integration', benefitGoogle:'Google Assistant compatibility', voiceTitle:'Voice assistants', voiceTextShort:'Alexa and Google Assistant update the same cloud list.', voiceLong:'Connect Alexa and Google Assistant to the same database: when you edit an item, the voice list updates for both.', connectGoogle:'Connect Google Assistant', copyGoogleEndpoint:'Copy Google Assistant endpoint', googleConnected:'Google Assistant connected',
+    productsHint:'Full catalog and custom item management.', shoppingHint:'This is the list Alexa will read from the cloud.', suggestionsSmart:'Smart suggestions',
+    suggestionsExplain:'Recommendations based on people, pets and real consumption.', peopleInHome:'People at home', animalsInHome:'Animals', smartAnalysis:'Consumption analysis',
+    smartHow:'We analyze typical consumption and household size/pets to predict what is running low.', language:'App language', cloudSync:'Cloud & Sync',
+    enableCloud:'Enable cloud sync', householdId:'Household ID', apiToken:'API token', saveSettings:'Save settings', household:'Household', smartShopping:'Smart shopping suggestions',
+    autoSmartExplain:'If disabled, the app will not automatically add smart suggestions to the list.', alexaLong:'Connect Alexa to the same database: when you edit an item, the voice list updates.',
+    helpText:'Alexa examples: “Alexa, ask Ready Groceries what should I buy”, “add water”, “set dog food to 10 kg”.',
+    nameIt:'Italian name', nameEn:'English name', nameEs:'Spanish name', nameDe:'German name', category:'Category', add:'Add',
+    qty:'Quantity', unit:'Unit', availability:'Availability', lowStock:'Low stock', goodStock:'Good stock', inStock:'AT HOME', buyStock:'TO BUY',
+    copied:'Copied ✅', saved:'Saved ✅', synced:'Synced', offline:'Offline', guest:'Guest', registered:'Registered', wrongCaptcha:'Wrong captcha', required:'Fill required fields',
+    noBuy:'Nothing to buy 🎉', added:'Item added ✅', syncFail:'Sync failed', alexaConnected:'Connected', alexaNotConnected:'Not connected',
+    category_food:'Groceries', category_drinks:'Drinks', category_pets:'Pets', category_house:'Home', category_pharmacy:'Pharmacy', category_aquarium:'Aquarium', category_fruit:'Fruit', category_veg:'Vegetables', firstName:'First name', lastName:'Last name', firstNamePh:'Enter your first name', lastNamePh:'Enter your last name', profileTitle:'User profile', saveProfile:'Save profile', registerOrLogin:'Register / Login', account:'Account', clickToProfile:'Open profile', clickToRegister:'Register to sync', profileSaved:'Profile updated ✅', profileGuestText:'Sign in to sync everything and use Alexa.', homeDataTitle:'Home data for smart consumption', homeDataHint:'These numbers calculate water, pet food and recommended stock.'
+  },
+  es: {
+    navDashboard:'Panel', navProducts:'Productos', navShopping:'Lista de compra', navSuggestions:'Sugerencias', navSettings:'Ajustes', navHelp:'Ayuda',
+    heroEyebrow:'Organizador doméstico', appTitle:'COMPRA LISTA', subtitle:'Cuando se acaba, desliza. Cuando sales, compra.', statusSituation:'Situación compra', totalItems:'artículos totales', inHome:'En casa', readyAvailable:'stock suficiente',
+    toBuy:'Por comprar', missingItems:'stock bajo', syncStatus:'Estado sync', yourProducts:'Tus productos', dashboardHint:'Gestiona cantidad, unidad y estado de compra.',
+    addArticle:'Añadir artículo', shoppingDone:'Compra hecha', searchPlaceholder:'Buscar artículo', allCategories:'Todas las categorías',
+    catalogNote:'Aquí tienes un menú genérico con muchos artículos comunes. Añade los tuyos si falta algo.', quickList:'Lista rápida', quickListHint:'Solo lo que debes comprar.',
+    copyList:'Copiar lista', suggestedTitle:'Sugeridos para ti', suggestedHint:'Artículos que usas a menudo o que se están acabando.', alexaTitle:'Conexión Alexa',
+    alexaTextShort:'Alexa lee y actualiza la lista cloud.', connectAlexa:'Conectar Alexa', copyAlexaEndpoint:'Copiar endpoint Alexa', registerTitle:'Acceder o registrarse',
+    registerText:'Antes de ver productos, accede o crea un perfil. Luego completa el inventario inicial con fotos.', username:'Usuario', usernamePh:'Introduce tu nombre',
+    email:'Email', password:'Contraseña', passwordPh:'Mínimo 8 caracteres', peopleCount:'Personas en casa', animalCount:'Animales', captcha:'Captcha', phonePrefix:'Prefijo telefónico', phoneNumber:'Número de teléfono', phoneRequired:'Introduce un número de teléfono válido', phoneSmsSent:'SMS di verifica inviato ✅', phoneVerified:'Telefono verificato ✅', phoneNotVerified:'Devi verificare il telefono via SMS.', whatsappListSent:'Lista inviata su WhatsApp ✅', whatsappListReady:'Lista generata: WhatsApp non configurato, l’ho copiata negli appunti.', 
+    apiEndpoint:'API endpoint', autoSmartOrdering:'Compra inteligente automática', registerCreate:'Registrarse', continueOffline:'Continuar offline', whyRegister:'¿Por qué registrarse?',
+    benefitCloud:'Sincronización segura en la nube', benefitSecurity:'Datos cifrados en la base de datos', forgotPassword:'¿Olvidaste la contraseña?', resetMailSent:'Si el email existe, recibirás un enlace/token.', verifyMailSent:'Email de verificación enviado ✅', emailVerified:'Email verificado ✅', emailNotVerified:'Debes verificar tu email antes de entrar.', passwordUpdated:'Contraseña actualizada ✅', captchaPick:'Toca la imagen solicitada', captchaPickItem:'Toca: ', welcomeEmailSent:'Email de bienvenida enviado ✅', benefitDevices:'Acceso desde varios dispositivos', benefitSmart:'Sugerencias personalizadas', benefitAlexa:'Integración con Alexa', benefitGoogle:'Compatibilidad con Google Assistant', voiceTitle:'Asistentes de voz', voiceTextShort:'Alexa y Google Assistant actualizan la misma lista cloud.', voiceLong:'Conecta Alexa y Google Assistant a la misma base de datos: al modificar un artículo, la lista vocal se actualiza para ambos.', connectGoogle:'Conectar Google Assistant', copyGoogleEndpoint:'Copiar endpoint Google Assistant', googleConnected:'Google Assistant conectado',
+    productsHint:'Catálogo completo y gestión de artículos personalizados.', shoppingHint:'Esta es la lista que Alexa leerá desde la nube.', suggestionsSmart:'Sugerencias inteligentes',
+    suggestionsExplain:'Recomendaciones basadas en personas, animales y consumo real.', peopleInHome:'Personas en casa', animalsInHome:'Animales', smartAnalysis:'Análisis de consumo',
+    smartHow:'Analizamos consumos habituales y número de personas/animales para prever lo que se acaba.', language:'Idioma de la app', cloudSync:'Cloud y sincronización',
+    enableCloud:'Activar sincronización cloud', householdId:'ID familia', apiToken:'Token API', saveSettings:'Guardar ajustes', household:'Familia', smartShopping:'Sugerencias inteligentes',
+    autoSmartExplain:'Si está desactivado, la app no añade sugerencias automáticas a la lista.', alexaLong:'Conecta Alexa a la misma base de datos: al modificar un artículo, se actualiza la lista por voz.',
+    helpText:'Ejemplos Alexa: “Alexa, pregunta a Compra Lista qué debo comprar”, “añade agua”, “marca comida de perro a 10 kg”.',
+    nameIt:'Nombre italiano', nameEn:'Nombre inglés', nameEs:'Nombre español', nameDe:'Nombre alemán', category:'Categoría', add:'Añadir',
+    qty:'Cantidad', unit:'Unidad', availability:'Disponibilidad', lowStock:'Stock bajo', goodStock:'Stock bueno', inStock:'EN CASA', buyStock:'POR COMPRAR',
+    copied:'Copiado ✅', saved:'Guardado ✅', synced:'Sincronizado', offline:'Offline', guest:'Invitado', registered:'Registrado', wrongCaptcha:'Captcha incorrecto', required:'Rellena los campos requeridos',
+    noBuy:'Nada que comprar 🎉', added:'Artículo añadido ✅', syncFail:'Sync fallida', alexaConnected:'Conectada', alexaNotConnected:'No conectada',
+    category_food:'Alimentos', category_drinks:'Bebidas', category_pets:'Animales', category_house:'Casa', category_pharmacy:'Farmacia', category_aquarium:'Acuario', category_fruit:'Fruta', category_veg:'Verdura', firstName:'Nombre', lastName:'Apellido', firstNamePh:'Introduce tu nombre', lastNamePh:'Introduce tu apellido', profileTitle:'Perfil de usuario', saveProfile:'Guardar perfil', registerOrLogin:'Registrarse / Login', account:'Cuenta', clickToProfile:'Abrir perfil', clickToRegister:'Regístrate para sincronizar', profileSaved:'Perfil actualizado ✅', profileGuestText:'Inicia sesión para sincronizar todo y usar Alexa.', homeDataTitle:'Datos de casa para consumo inteligente', homeDataHint:'Estos números calculan agua, comida de animales y stock recomendado.'
+  },
+  de: {
+    navDashboard:'Dashboard', navProducts:'Produkte', navShopping:'Einkaufsliste', navSuggestions:'Vorschläge', navSettings:'Einstellungen', navHelp:'Hilfe',
+    heroEyebrow:'Haushalts-Organizer', appTitle:'EINKAUF BEREIT', subtitle:'Wenn es ausgeht, wische. Wenn du rausgehst, kaufe.', statusSituation:'Einkaufsstatus', totalItems:'Artikel gesamt', inHome:'Zu Hause', readyAvailable:'genug Vorrat',
+    toBuy:'Zu kaufen', missingItems:'Vorrat niedrig', syncStatus:'Sync-Status', yourProducts:'Deine Produkte', dashboardHint:'Menge, Einheit und Einkaufsstatus verwalten.',
+    addArticle:'Artikel hinzufügen', shoppingDone:'Einkauf erledigt', searchPlaceholder:'Artikel suchen', allCategories:'Alle Kategorien',
+    catalogNote:'Hier findest du viele häufige Artikel. Füge eigene Artikel hinzu, wenn etwas fehlt.', quickList:'Schnellliste', quickListHint:'Nur was du kaufen musst.',
+    copyList:'Liste kopieren', suggestedTitle:'Für dich empfohlen', suggestedHint:'Artikel, die du oft verbrauchst oder die knapp werden.', alexaTitle:'Alexa-Verbindung',
+    alexaTextShort:'Alexa liest und aktualisiert die Cloud-Liste.', connectAlexa:'Alexa verbinden', copyAlexaEndpoint:'Alexa-Endpunkt kopieren', registerTitle:'Einloggen oder registrieren',
+    registerText:'Melde dich an oder erstelle ein Profil, bevor Produkte angezeigt werden. Danach folgt die Foto-Erstinventur.', username:'Benutzername', usernamePh:'Namen eingeben',
+    email:'E-Mail', password:'Passwort', passwordPh:'Mindestens 8 Zeichen', peopleCount:'Personen im Haushalt', animalCount:'Tiere', captcha:'Captcha', phonePrefix:'Telefonvorwahl', phoneNumber:'Telefonnummer', phoneRequired:'Gib eine gültige Telefonnummer ein', phoneSmsSent:'SMS di verifica inviato ✅', phoneVerified:'Telefono verificato ✅', phoneNotVerified:'Devi verificare il telefono via SMS.', whatsappListSent:'Lista inviata su WhatsApp ✅', whatsappListReady:'Lista generata: WhatsApp non configurato, l’ho copiata negli appunti.', 
+    apiEndpoint:'API-Endpunkt', autoSmartOrdering:'Automatische intelligente Einkaufsliste', registerCreate:'Registrieren', continueOffline:'Offline fortfahren', whyRegister:'Warum registrieren?',
+    benefitCloud:'Sichere Cloud-Synchronisierung', benefitSecurity:'Verschlüsselte Datenbankdaten', forgotPassword:'Passwort vergessen?', resetMailSent:'Wenn die Adresse existiert, erhältst du eine E-Mail.', verifyMailSent:'Bestätigungs-E-Mail gesendet ✅', emailVerified:'E-Mail bestätigt ✅', emailNotVerified:'Bitte bestätige deine E-Mail vor dem Login.', passwordUpdated:'Passwort aktualisiert ✅', captchaPick:'Tippe auf das gewünschte Bild', captchaPickItem:'Tippe: ', welcomeEmailSent:'Willkommensmail gesendet ✅', benefitDevices:'Zugriff von mehreren Geräten', benefitSmart:'Personalisierte Vorschläge', benefitAlexa:'Alexa-Integration', benefitGoogle:'Google Assistant-Kompatibilität', voiceTitle:'Sprachassistenten', voiceTextShort:'Alexa und Google Assistant aktualisieren dieselbe Cloud-Liste.', voiceLong:'Verbinde Alexa und Google Assistant mit derselben Datenbank: Änderungen aktualisieren die Sprachliste für beide.', connectGoogle:'Google Assistant verbinden', copyGoogleEndpoint:'Google Assistant-Endpunkt kopieren', googleConnected:'Google Assistant verbunden',
+    productsHint:'Vollständiger Katalog und eigene Artikel verwalten.', shoppingHint:'Diese Liste liest Alexa aus der Cloud.', suggestionsSmart:'Intelligente Vorschläge',
+    suggestionsExplain:'Empfehlungen nach Personen, Tieren und tatsächlichem Verbrauch.', peopleInHome:'Personen im Haushalt', animalsInHome:'Tiere', smartAnalysis:'Verbrauchsanalyse',
+    smartHow:'Wir analysieren Verbrauch, Personen und Tiere, um vorherzusagen, was knapp wird.', language:'App-Sprache', cloudSync:'Cloud & Synchronisierung',
+    enableCloud:'Cloud-Sync aktivieren', householdId:'Haushalts-ID', apiToken:'API-Token', saveSettings:'Einstellungen speichern', household:'Haushalt', smartShopping:'Intelligente Einkaufsvorschläge',
+    autoSmartExplain:'Wenn deaktiviert, fügt die App keine automatischen Vorschläge zur Liste hinzu.', alexaLong:'Verbinde Alexa mit derselben Datenbank: Änderungen aktualisieren die Sprachliste.',
+    helpText:'Alexa-Beispiele: „Alexa, frage Einkauf Bereit, was ich kaufen muss“, „Wasser hinzufügen“, „Hundefutter auf 10 kg setzen“.',
+    nameIt:'Italienischer Name', nameEn:'Englischer Name', nameEs:'Spanischer Name', nameDe:'Deutscher Name', category:'Kategorie', add:'Hinzufügen',
+    qty:'Menge', unit:'Einheit', availability:'Verfügbarkeit', lowStock:'Niedriger Vorrat', goodStock:'Guter Vorrat', inStock:'ZU HAUSE', buyStock:'ZU KAUFEN',
+    copied:'Kopiert ✅', saved:'Gespeichert ✅', synced:'Synchronisiert', offline:'Offline', guest:'Gast', registered:'Registriert', wrongCaptcha:'Captcha falsch', required:'Pflichtfelder ausfüllen',
+    noBuy:'Nichts zu kaufen 🎉', added:'Artikel hinzugefügt ✅', syncFail:'Sync fehlgeschlagen', alexaConnected:'Verbunden', alexaNotConnected:'Nicht verbunden',
+    category_food:'Lebensmittel', category_drinks:'Getränke', category_pets:'Tiere', category_house:'Haushalt', category_pharmacy:'Apotheke', category_aquarium:'Aquarium', category_fruit:'Obst', category_veg:'Gemüse', firstName:'Vorname', lastName:'Nachname', firstNamePh:'Vorname eingeben', lastNamePh:'Nachname eingeben', profileTitle:'Benutzerprofil', saveProfile:'Profil speichern', registerOrLogin:'Registrieren / Login', account:'Konto', clickToProfile:'Profil öffnen', clickToRegister:'Zum Synchronisieren registrieren', profileSaved:'Profil aktualisiert ✅', profileGuestText:'Melde dich an, um alles zu synchronisieren und Alexa zu nutzen.', homeDataTitle:'Haushaltsdaten für intelligente Vorräte', homeDataHint:'Diese Zahlen berechnen Wasser, Tierfutter und empfohlene Vorräte.'
+  }
+};
+
+const categories = ['food','drinks','pets','house','pharmacy','aquarium','fruit','veg'];
+
+function createItem(id, image, category, names, qty, maxQty, baseThreshold, unitOptions, opts={}) {
+  return {
+    id, image, category, names, qty, maxQty, baseThreshold, unit: unitOptions[0], unitOptions,
+    usage: opts.usage || 0, kind: opts.kind || 'generic', perPersonMin: opts.perPersonMin || 0,
+    perAnimalMin: opts.perAnimalMin || 0, recommendedBuy: opts.recommendedBuy || Math.max(maxQty, 1),
+    custom: !!opts.custom, updatedAt: Date.now()
+  };
+}
+
+const defaults = [
+  createItem('latte','assets/illustrations/milk.png','drinks',{it:'Latte',en:'Milk',es:'Leche',de:'Milch'},1,6,2,['lt','bt','cf'],{perPersonMin:.8,recommendedBuy:6,usage:4}),
+  createItem('pane','assets/illustrations/bread.png','food',{it:'Pane',en:'Bread',es:'Pan',de:'Brot'},2,6,1,['pz','pc'],{perPersonMin:.5,recommendedBuy:4,usage:2}),
+  createItem('acqua','assets/illustrations/water.png','drinks',{it:'Acqua',en:'Water',es:'Agua',de:'Wasser'},2,24,4,['lt','bt','cf'],{kind:'water',perPersonMin:2,recommendedBuy:12,usage:5}),
+  createItem('crocchette-cane','assets/illustrations/dogfood.png','pets',{it:'Crocchette cane',en:'Dog food',es:'Comida perro',de:'Hundefutter'},10,30,4,['kg','cf'],{kind:'petfood',perAnimalMin:4,recommendedBuy:15,usage:3}),
+  createItem('cerotti','assets/illustrations/bandage.png','pharmacy',{it:'Cerotti',en:'Bandages',es:'Tiritas',de:'Pflaster'},2,12,3,['pz','cf'],{recommendedBuy:12,usage:1}),
+  createItem('pasta','assets/illustrations/pasta.png','food',{it:'Pasta',en:'Pasta',es:'Pasta',de:'Nudeln'},3,10,2,['pz','cf'],{perPersonMin:.5,recommendedBuy:6}),
+  createItem('uova','assets/illustrations/eggs.png','food',{it:'Uova',en:'Eggs',es:'Huevos',de:'Eier'},4,20,4,['pz','cf'],{perPersonMin:1.5,recommendedBuy:12}),
+  createItem('carta','assets/illustrations/toilet-paper.png','house',{it:'Carta igienica',en:'Toilet paper',es:'Papel higiénico',de:'Toilettenpapier'},3,20,4,['pz','cf'],{perPersonMin:2,recommendedBuy:12}),
+  createItem('mangime-pesci','assets/illustrations/fishfood.png','aquarium',{it:'Mangime pesci',en:'Fish food',es:'Comida peces',de:'Fischfutter'},1,5,1,['cf','pz'],{recommendedBuy:3}),
+  createItem('biocondizionatore','assets/illustrations/conditioner.png','aquarium',{it:'Biocondizionatore',en:'Water conditioner',es:'Acondicionador agua',de:'Wasseraufbereiter'},1,4,1,['bt','lt'],{recommendedBuy:2}),
+  createItem('mele','assets/illustrations/apple.png','fruit',{it:'Mele',en:'Apples',es:'Manzanas',de:'Äpfel'},3,10,2,['pz','kg'],{perPersonMin:1,recommendedBuy:6}),
+  createItem('banane','assets/illustrations/banana.png','fruit',{it:'Banane',en:'Bananas',es:'Plátanos',de:'Bananen'},2,10,2,['pz','kg'],{perPersonMin:1,recommendedBuy:6}),
+  createItem('pomodori','assets/illustrations/tomato.png','veg',{it:'Pomodori',en:'Tomatoes',es:'Tomates',de:'Tomaten'},2,8,2,['kg','pz'],{perPersonMin:.5,recommendedBuy:4}),
+  createItem('patate','assets/illustrations/potato.png','veg',{it:'Patate',en:'Potatoes',es:'Patatas',de:'Kartoffeln'},5,12,3,['kg','pz'],{perPersonMin:1,recommendedBuy:8}),
+  createItem('insalata','assets/illustrations/lettuce.png','veg',{it:'Insalata',en:'Lettuce',es:'Lechuga',de:'Salat'},1,4,1,['pz'],{recommendedBuy:2}),
+  createItem('riso','assets/illustrations/rice.png','food',{it:'Riso',en:'Rice',es:'Arroz',de:'Reis'},2,6,1,['kg','cf'],{perPersonMin:.5,recommendedBuy:4}),
+  createItem('formaggio','assets/illustrations/cheese.png','food',{it:'Formaggio',en:'Cheese',es:'Queso',de:'Käse'},1,5,1,['pz','gr'],{recommendedBuy:3}),
+  createItem('detersivo','assets/illustrations/detergent.png','house',{it:'Detersivo',en:'Detergent',es:'Detergente',de:'Waschmittel'},1,4,1,['bt','lt'],{recommendedBuy:2}),
+  createItem('sacchetti-cane','assets/illustrations/bags.png','pets',{it:'Sacchetti cane',en:'Dog bags',es:'Bolsas perro',de:'Hundebeutel'},12,30,6,['pz','cf'],{perAnimalMin:4,recommendedBuy:20}),
+  createItem('farmaci','assets/illustrations/medicine.png','pharmacy',{it:'Farmaci',en:'Medicines',es:'Medicinas',de:'Medikamente'},8,20,4,['cp','cf'],{recommendedBuy:12})
+];
+
+let state = loadState();
+let settings = loadSettings();
+let session = loadSession();
+let activeView = 'dashboard';
+let filter = 'all';
+let searchTerm = '';
+let categoryFilter = 'all';
+let captcha = newCaptcha();
+let syncTimer = null;
+let aiMemory = loadAiMemory();
+let aiRecognition = null;
+let aiListening = false;
+
+function loadState(){ try { const x=JSON.parse(localStorage.getItem(STORAGE_KEY)); return Array.isArray(x) ? migrateItems(x) : []; } catch { return []; } }
+function loadSettings(){ try { return Object.assign(defaultSettings(), JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}')); } catch { return defaultSettings(); } }
+function loadSession(){ try { return Object.assign({mode:'guest', user:null}, JSON.parse(localStorage.getItem(SESSION_KEY)||'{}')); } catch { return {mode:'guest', user:null}; } }
+function defaultAiMemory(){ return {messages:[], facts:[], events:[], scanHistory:[], pendingVerification:false, lastGreetingDate:'', summary:'', lastInsights:{}, consumptionProfile:{version:27, learnedItems:{}, lastAnalysisAt:0}, personality:{warmth:1}}; }
+function loadAiMemory(){ try { return Object.assign(defaultAiMemory(), JSON.parse(localStorage.getItem(AI_MEMORY_KEY)||'{}')); } catch { return defaultAiMemory(); } }
+function saveAiMemory(){ localStorage.setItem(AI_MEMORY_KEY, JSON.stringify(aiMemory)); }
+function defaultSettings(){ return {lang:'it', cloudEnabled:false, apiEndpoint:'/api', token:'', householdId:'', people:2, animals:0, autoSmart:true, alexaConnected:false, googleAssistantConnected:false, inventorySetupDone:false, inventoryStatus:'required', inventoryUpdatedAt:null, profile:{firstName:'',lastName:'',username:'',email:''}}; }
+function migrateItems(items){ return items.map(x => ({...createItem(x.id||cryptoId(), x.image||'assets/illustrations/generic-item.png', x.category||'food', x.names||{it:x.name||x.id,en:x.name||x.id,es:x.name||x.id,de:x.name||x.id}, x.qty??1, x.maxQty??6, x.baseThreshold??2, x.unitOptions||['pz','pc','lt','kg'], {custom:x.custom, usage:x.usage||0, kind:x.kind, perPersonMin:x.perPersonMin, perAnimalMin:x.perAnimalMin, recommendedBuy:x.recommendedBuy}), ...x})); }
+function saveAll(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); localStorage.setItem(SESSION_KEY, JSON.stringify(session)); scheduleSync(); }
+function t(k){ return translations[settings.lang]?.[k] || translations.it[k] || k; }
+function nameOf(item){ return item.names?.[settings.lang] || item.names?.it || item.id; }
+function catName(cat){ return t('category_'+cat); }
+function cryptoId(){ return 'i_'+Math.random().toString(36).slice(2,10); }
+function $(s){ return document.querySelector(s); }
+function $all(s){ return [...document.querySelectorAll(s)]; }
+function esc(s=''){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function emailLooksValid(value){ return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(String(value||'')); }
+function phoneLooksValid(prefix, number){ return /^\+[1-9]\d{7,14}$/.test(String(prefix||'+39') + String(number||'').replace(/\D+/g,'')); }
+function passwordLooksStrong(pwd){ return String(pwd||'').length>=8 && /[A-Za-z]/.test(pwd) && /\d/.test(pwd); }
+function setPhoneVerificationVisible(show){ const f=$('#verifyPhoneForm'); if(f) f.classList.toggle('hidden', !show); }
+function daysBetween(a,b){ return Math.max(1,(b-a)/86400000); }
+function clampNumber(value,min,max,fallback){ const n=Number(value); return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback; }
+function normalizeHouseholdSettings(){
+  settings.people = clampNumber(settings.people, 1, 20, 1);
+  settings.animals = clampNumber(settings.animals, 0, 30, 0);
+  return { people:settings.people, animals:settings.animals };
+}
+function aiEventsFor(id,type){ return (aiMemory.events||[]).filter(e=>e.itemId===id && (!type || e.type===type)); }
+function learnedDailyConsumption(item){
+  const now=Date.now(), since=now-1000*60*60*24*45;
+  const consumeEvents=aiEventsFor(item.id).filter(e=>e.at>=since && e.type==='consume');
+  const total=consumeEvents.reduce((s,e)=>s+Math.abs(Number(e.delta)||0),0);
+  if(total<=0) return 0;
+  const first=Math.min(...consumeEvents.map(e=>e.at));
+  return total / daysBetween(first, now);
+}
+function baseDailyConsumption(item){
+  const {people,animals}=normalizeHouseholdSettings();
+  const label=normalizeText(`${item.id||''} ${item.category||''} ${nameOf(item)||''}`);
+  if(item.kind==='water' || label.includes('acqua')) return Math.max(.4, people * 1.5);
+  if(item.kind==='petfood' || label.includes('crocchette')) return Math.max(.08, animals * .28);
+  if(label.includes('sacchetti')) return Math.max(.05, animals * 2);
+  if(item.category==='pets') return Math.max(.03, animals * .15);
+  if(item.category==='drinks') return Math.max(.15, people * .55);
+  if(item.category==='fruit' || item.category==='veg') return Math.max(.12, people * .28);
+  if(item.category==='food') return Math.max(.08, people * .18);
+  if(item.category==='house') return Math.max(.03, people * .06);
+  if(item.category==='aquarium') return .035;
+  if(item.category==='pharmacy') return .018;
+  return Math.max(.03, people * .08);
+}
+function aiVelocity(item){
+  const learned=learnedDailyConsumption(item);
+  const base=baseDailyConsumption(item);
+  if(learned>0) return Math.max(.01, (learned*.72) + (base*.28));
+  return Math.max(.01, base*.55);
+}
+function targetDaysFor(item){
+  const label=normalizeText(`${item.id||''} ${item.category||''} ${nameOf(item)||''}`);
+  if(item.kind==='water' || label.includes('acqua')) return 7;
+  if(item.kind==='petfood' || item.category==='pets') return 18;
+  if(item.category==='fruit' || item.category==='veg') return 4;
+  if(item.category==='food') return 10;
+  if(item.category==='house') return 24;
+  if(item.category==='aquarium') return 30;
+  if(item.category==='pharmacy') return 35;
+  return 12;
+}
+function alertDaysFor(item){
+  const target=targetDaysFor(item);
+  if(item.category==='fruit' || item.category==='veg') return Math.min(2,target);
+  if(item.kind==='water') return 2;
+  if(item.kind==='petfood' || item.category==='pets') return 7;
+  return Math.max(2, Math.round(target*.35));
+}
+function rememberEvent(type,item,delta=0,note=''){
+  aiMemory.events = aiMemory.events || [];
+  aiMemory.events.push({type,itemId:item?.id||null,itemName:item?nameOf(item):'',delta:Number(delta)||0,note,at:Date.now()});
+  aiMemory.events = aiMemory.events.slice(-800);
+  aiMemory.consumptionProfile = aiMemory.consumptionProfile || {version:27, learnedItems:{}, lastAnalysisAt:0};
+  aiMemory.consumptionProfile.lastAnalysisAt = Date.now();
+  saveAiMemory();
+}
+
+function smartThreshold(item){
+  if(!settings.autoSmart) return Math.max(1, Number(item.baseThreshold)||1);
+  normalizeHouseholdSettings();
+  let th = Math.max(1, Number(item.baseThreshold)||1);
+  if(item.perPersonMin) th = Math.max(th, Math.ceil(item.perPersonMin * settings.people));
+  if(item.perAnimalMin) th = Math.max(th, Math.ceil(item.perAnimalMin * settings.animals));
+  if(Number(item.usage||0) >= 6) th = Math.max(th, (Number(item.baseThreshold)||1) + 2);
+  if(item.kind === 'water') th = Math.max(th, settings.people * 2);
+  if(item.kind === 'petfood') th = Math.max(th, settings.animals * 4);
+  th = Math.max(th, Math.ceil(aiVelocity(item) * alertDaysFor(item)));
+  return Math.ceil(th);
+}
+function statusOf(item){ return Number(item.qty||0) <= smartThreshold(item) ? 'buy' : 'home'; }
+function buyItems(){ return state.filter(i => statusOf(i)==='buy'); }
+function daysLeft(item){ const v=aiVelocity(item); return v>0 ? Math.max(0, Number(item.qty||0)/v) : null; }
+function recommendedQty(item){
+  normalizeHouseholdSettings();
+  const base=Number(item.recommendedBuy||item.maxQty||item.baseThreshold||1);
+  let r = Math.max(base, smartThreshold(item));
+  if(item.kind==='water') r = Math.max(r, settings.people * 7);
+  if(item.kind==='petfood') r = Math.max(r, settings.animals * 6);
+  const velocity = aiVelocity(item);
+  r = Math.max(r, Math.ceil(velocity * targetDaysFor(item)));
+  return Math.max(1, Math.ceil(r));
+}
+function consumptionIntel(item){
+  const th=smartThreshold(item), rec=recommendedQty(item), days=daysLeft(item), qty=Number(item.qty||0);
+  const missing=Math.max(0, rec-qty);
+  const urgency = qty<=0 ? 100 : statusOf(item)==='buy' ? Math.min(99, 76 + Math.max(0, th-qty)*6) : Math.max(1, Math.round(100 - Math.min(100, (days??targetDaysFor(item))*7)));
+  let level='ok', label='Scorta ok', emoji='✅';
+  if(qty<=0){ level='critical'; label='Finito'; emoji='🚨'; }
+  else if(statusOf(item)==='buy'){ level='low'; label='Da comprare'; emoji='⚠️'; }
+  else if(days!==null && days<alertDaysFor(item)+1){ level='watch'; label='Da controllare'; emoji='👀'; }
+  const basis=learnedDailyConsumption(item)>0 ? 'consumo reale registrato' : 'stima iniziale su persone/animali';
+  const reason=`${emoji} ${label}: ${days!==null?`circa ${days.toFixed(days<10?1:0)} giorni rimasti`: 'giorni non stimabili'}, soglia ${th} ${item.unit}, consiglio ${rec} ${item.unit} (${basis}).`;
+  return {th, rec, days, missing, urgency, level, label, reason, velocity:aiVelocity(item), basis};
+}
+function suggestionScore(item){ const intel=consumptionIntel(item); return intel.urgency + Number(item.usage||0)*5 + Math.max(0, intel.th-Number(item.qty||0))*7; }
+function pantryScore(){
+  if(!state.length) return 0;
+  const scores=state.map(item=>{
+    const intel=consumptionIntel(item);
+    if(intel.level==='critical') return 18;
+    if(intel.level==='low') return 45;
+    if(intel.level==='watch') return 68;
+    const ratio=Math.min(1.25, Number(item.qty||0)/Math.max(intel.th,1));
+    return Math.min(100, Math.round(72 + ratio*22));
+  });
+  return Math.round(scores.reduce((a,b)=>a+b,0)/scores.length);
+}
+function householdInsight(){
+  const sorted=[...state].sort((a,b)=>suggestionScore(b)-suggestionScore(a));
+  const urgent=sorted.filter(i=>statusOf(i)==='buy');
+  const next=sorted[0] || null;
+  const score=pantryScore();
+  const totalDaily=state.reduce((s,i)=>s+aiVelocity(i),0);
+  return {score,totalDaily,urgent,next,sorted};
+}
+function householdInsightText(){
+  const h=householdInsight();
+  if(!state.length) return 'Non ho ancora abbastanza prodotti reali: fai l’inventario con foto e poi calcolo consumi, giorni rimasti e quantità consigliate.';
+  const next=h.next ? `${nameOf(h.next)} (${consumptionIntel(h.next).label})` : 'nessun prodotto critico';
+  return `Analisi AI consumi: indice dispensa ${h.score}/100, prodotti da comprare ${h.urgent.length}, prossimo controllo ${next}. Stima consumo totale: ${h.totalDaily.toFixed(1)} unità/giorno, basata su ${settings.people} persone e ${settings.animals} animali più gli eventi registrati.`;
+}
+function stockPercent(item){ return Math.max(0, Math.min(100, Math.round((1 - (Number(item.qty||0) / Math.max(item.maxQty||1, recommendedQty(item)))) * 100))); }
+
+function newCaptcha(){
+  const pool=[
+    {id:'alexa', label:'Alexa', img:'assets/illustrations/alexa.png'},
+    {id:'google', label:'Google Assistant', img:'assets/illustrations/google-assistant.png'},
+    {id:'milk', label:'Latte', img:'assets/illustrations/milk.png'},
+    {id:'bread', label:'Pane', img:'assets/illustrations/bread.png'},
+    {id:'water', label:'Acqua', img:'assets/illustrations/water.png'},
+    {id:'dogfood', label:'Crocchette', img:'assets/illustrations/dogfood.png'},
+    {id:'key', label:'Chiave', img:'assets/illustrations/key.svg'},
+    {id:'lock', label:'Lucchetto', img:'assets/illustrations/lock.svg'},
+    {id:'fridge', label:'Frigo', img:'assets/illustrations/fridge.svg'}
+  ];
+  const target=pool[Math.floor(Math.random()*pool.length)];
+  const options=[target];
+  while(options.length<4){
+    const x=pool[Math.floor(Math.random()*pool.length)];
+    if(!options.some(o=>o.id===x.id)) options.push(x);
+  }
+  options.sort(()=>Math.random()-.5);
+  return {target, options};
+}
+function renderCaptcha(){
+  const box=$('#captchaBox'); if(!box) return;
+  $('#regCaptcha').value='';
+  $('#captchaQuestion').textContent=(t('captchaPickItem')||'Tocca: ')+captcha.target.label;
+  box.innerHTML=captcha.options.map(o=>`<button class="captcha-choice" type="button" data-captcha="${esc(o.id)}" aria-label="${esc(o.label)}">${o.img?`<img src="${esc(o.img)}" alt="${esc(o.label)}" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">`:''}<span class="emoji ${o.img?'img-fallback':''}">${o.emoji || '✨'}</span><span>${esc(o.label)}</span></button>`).join('');
+  box.querySelectorAll('[data-captcha]').forEach(btn=>btn.addEventListener('click',()=>{
+    box.querySelectorAll('.captcha-choice').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    $('#regCaptcha').value=btn.dataset.captcha;
+  }));
+}
+
+
+function ensureRegistrationPhoneFields(){
+  const form=document.querySelector('#registerForm');
+  if(!form) return;
+  const peopleLabel=document.querySelector('#regPeople')?.closest('label');
+  // Se una versione vecchia dell'HTML viene servita da root o cache, inietto comunque i campi telefono.
+  if(!document.querySelector('#regPhoneCountry')){
+    const wrap=document.createElement('label');
+    wrap.className='phone-field phone-prefix-field';
+    wrap.innerHTML=`<span>Prefisso telefono</span><select id="regPhoneCountry" required>
+      <option value="+39">🇮🇹 +39 Italia</option><option value="+1">🇺🇸 +1 USA/Canada</option><option value="+44">🇬🇧 +44 UK</option><option value="+49">🇩🇪 +49 Germania</option><option value="+33">🇫🇷 +33 Francia</option><option value="+34">🇪🇸 +34 Spagna</option><option value="+40">🇷🇴 +40 Romania</option><option value="+41">🇨🇭 +41 Svizzera</option><option value="+355">🇦🇱 +355 Albania</option>
+    </select>`;
+    form.insertBefore(wrap, peopleLabel || form.querySelector('.image-captcha-wrap') || form.firstChild);
+  }
+  if(!document.querySelector('#regPhoneNumber')){
+    const wrap=document.createElement('label');
+    wrap.className='phone-field phone-number-field';
+    wrap.innerHTML=`<span>Numero di telefono</span><input id="regPhoneNumber" inputmode="tel" autocomplete="tel" required placeholder="Es. 3331234567">`;
+    form.insertBefore(wrap, peopleLabel || form.querySelector('.image-captcha-wrap') || form.firstChild);
+  }
+  // Captcha sempre visibile: se il box manca o è vuoto lo ricreo con scelte grafiche.
+  if(!document.querySelector('#captchaBox')){
+    const block=document.createElement('div');
+    block.className='wide image-captcha-wrap';
+    block.innerHTML=`<div class="captcha-title"><span data-i18n="captcha">Captcha visivo</span><button class="captcha-refresh-btn" id="refreshCaptchaBtn" type="button">↻ Cambia</button></div><b id="captchaQuestion" class="captcha-question">Tocca l’immagine richiesta</b><div id="captchaBox" class="image-captcha" role="group" aria-label="Captcha con immagini"></div><input id="regCaptcha" type="hidden" required>`;
+    form.insertBefore(block, form.querySelector('.switch-row') || form.querySelector('.form-actions'));
+  }
+}
+
+function init(){
+  ensureRegistrationPhoneFields();
+  bind();
+  applyLang();
+  render();
+  showView(initialView());
+  renderCaptcha();
+  const params=new URLSearchParams(location.search);
+  const resetToken=params.get('reset');
+  const verifyToken=params.get('verify');
+  if(resetToken){ setTimeout(()=>{ $('#resetToken').value=resetToken; $('#resetDialog').showModal(); }, 250); }
+  if(verifyToken){ setTimeout(()=>verifyEmailWithToken(verifyToken), 300); }
+  $('#alexaExamples').textContent = [
+    'Alexa, chiedi a Spesa Pronta cosa devo comprare',
+    'Alexa, chiedi a Spesa Pronta di aggiungere acqua',
+    'Alexa, chiedi a Spesa Pronta di segnare crocchette cane a 10 kg',
+    'Hey Google, chiedi a Spesa Pronta cosa devo comprare',
+    'Hey Google, aggiungi acqua alla lista Spesa Pronta',
+    'Hey Google, imposta crocchette cane a 10 kg'
+  ].join('\n');
+  if(new URLSearchParams(location.search).get('openMenu') === '1') setTimeout(() => toggleMobileMenu(true), 120);
+  // V27.10: service worker disabled to prevent auto-refresh loop.
+  // if('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
+}
+function bind(){
+  $all('.nav-item').forEach(b => b.addEventListener('click', () => showView(b.dataset.view)));
+  $('#mobileMenuBtn')?.addEventListener('click', () => toggleMobileMenu(true));
+  $('#mobileNavBackdrop')?.addEventListener('click', () => toggleMobileMenu(false));
+  $all('[data-view-shortcut]').forEach(b => b.addEventListener('click', () => showView(b.dataset.viewShortcut)));
+  $('#userShortcutBtn').addEventListener('click', handleUserShortcut);
+  $('#languageSelect').addEventListener('change', e => { settings.lang=e.target.value; saveAll(); applyLang(); render(); });
+  $('#settingsLanguage').addEventListener('change', e => { settings.lang=e.target.value; saveAll(); applyLang(); render(); });
+  $('#searchInput').addEventListener('input', e => { searchTerm=e.target.value.toLowerCase(); renderProducts(); });
+  $('#categorySelect').addEventListener('change', e => { categoryFilter=e.target.value; renderProducts(); });
+  $all('.status-tab').forEach(b => b.addEventListener('click', () => { filter=b.dataset.filter; $all('.status-tab').forEach(x=>x.classList.toggle('active',x===b)); renderProducts(); }));
+  $('#shoppingDoneBtn').addEventListener('click', shoppingDone);
+  $('#shoppingDoneBtn2').addEventListener('click', shoppingDone);
+  $('#copyListBtn').addEventListener('click', copyList);
+  $('#sendWhatsappListBtn')?.addEventListener('click', sendWhatsappList);
+  $('#addProductBtn').addEventListener('click', openAdd);
+  $('#addProductBtn2').addEventListener('click', openAdd);
+  $('#closeDialogBtn').addEventListener('click', () => $('#productDialog').close());
+  $('#customProductForm').addEventListener('submit', addCustom);
+  $('#loginForm')?.addEventListener('submit', login);
+  $('#forgotPasswordBtn')?.addEventListener('click', forgotPassword);
+  $('#resetCloseBtn')?.addEventListener('click', () => $('#resetDialog').close());
+  $('#resetForm')?.addEventListener('submit', resetPassword);
+  $('#verifyEmailForm')?.addEventListener('submit', verifyEmailSubmit);
+  $('#resendVerificationBtn')?.addEventListener('click', resendVerificationEmail);
+  $('#verifyPhoneForm')?.addEventListener('submit', verifyPhoneSubmit);
+  $('#resendPhoneBtn')?.addEventListener('click', resendPhoneCode);
+  $('#continueToInventoryBtn')?.addEventListener('click', continueToInventory);
+  $('#registerForm').addEventListener('submit', register);
+  $('#refreshCaptchaBtn')?.addEventListener('click', () => { captcha=newCaptcha(); renderCaptcha(); });
+  $('#continueOfflineBtn')?.addEventListener('click', () => toast('Per usare Spesa Pronta serve accesso o registrazione cloud.'));
+  $('#initialScanBtn')?.addEventListener('click', () => openGroceryScanner(true));
+  $('#initialVerifyLaterBtn')?.addEventListener('click', markInitialInventoryToVerify);
+  $('#saveSettingsBtn').addEventListener('click', saveSettingsFromForm);
+  $('#syncNowBtn').addEventListener('click', () => syncCloud(true));
+  $('#saveProfileBtn').addEventListener('click', saveProfile);
+  $('#goRegisterBtn').addEventListener('click', () => showView(session.user ? 'settings' : 'registration'));
+  $('#connectAlexaBtn').addEventListener('click', connectAlexa);
+  $('#connectAlexaBtn2').addEventListener('click', connectAlexa);
+  $('#copyAlexaBtn').addEventListener('click', copyAlexaEndpoint);
+  $('#copyAlexaBtn2').addEventListener('click', copyAlexaEndpoint);
+  $('#connectGoogleBtn')?.addEventListener('click', connectGoogleAssistant);
+  $('#copyGoogleBtn')?.addEventListener('click', copyGoogleEndpoint);
+  $('#copyGoogleBtn2')?.addEventListener('click', copyGoogleEndpoint);
+  $('#aiFab').addEventListener('click', openAiPanel);
+  $('#aiCloseBtn').addEventListener('click', closeAiPanel);
+  $('#aiForm').addEventListener('submit', submitAiForm);
+  $('#aiVoiceBtn').addEventListener('click', startAiVoiceOnce);
+  $('#aiWakeToggle').addEventListener('change', e => toggleWakeWord(e.target.checked));
+  $('#aiOpenScannerBtn')?.addEventListener('click', () => openGroceryScanner(false));
+  $('#scannerCloseBtn')?.addEventListener('click', closeGroceryScanner);
+  $('#scannerFinishBtn')?.addEventListener('click', finishScanner);
+  $('#scannerResetBtn')?.addEventListener('click', resetScannerResults);
+  $('#markVerifyBtn')?.addEventListener('click', markShoppingDoneToVerify);
+  $('#fridgeModeBtn')?.addEventListener('click', startFridgeMode);
+  $('#groceryPhotoInput')?.addEventListener('change', e => handleGroceryFiles(e.target.files));
+  $('#groceryGalleryInput')?.addEventListener('change', e => handleGroceryFiles(e.target.files));
+}
+
+function applyLang(){
+  document.documentElement.lang = settings.lang;
+  $all('[data-i18n]').forEach(el => {
+    const key = el.dataset.i18n;
+    const value = t(key);
+    if(value && value !== key) el.textContent = value;
+  });
+  $all('[data-i18n-placeholder]').forEach(el => {
+    const key = el.dataset.i18nPlaceholder;
+    const value = t(key);
+    if(value && value !== key) el.placeholder = value;
+  });
+  $('#languageSelect').value = settings.lang;
+  $('#settingsLanguage').value = settings.lang;
+  $('#categorySelect').innerHTML = `<option value="all">${esc(t('allCategories'))}</option>` + categories.map(c=>`<option value="${c}">${esc(catName(c))}</option>`).join('');
+  $('#customCategory').innerHTML = categories.map(c=>`<option value="${c}">${esc(catName(c))}</option>`).join('');
+  renderCaptcha();
+}
+function toggleMobileMenu(open){
+  document.querySelector('.sidebar')?.classList.toggle('open', !!open);
+  $('#mobileNavBackdrop')?.classList.toggle('show', !!open);
+  document.body.classList.toggle('menu-open', !!open);
+}
+
+
+function isSignedIn(){
+  return !!(session.user && (session.user.username || session.user.email));
+}
+function needsInitialInventory(){
+  return isSignedIn() && !settings.inventorySetupDone;
+}
+function initialView(){
+  if(session.pendingVerifyEmail || session.pendingVerifyPhone) return 'verify-email';
+  if(!isSignedIn()) return 'registration';
+  if(session.welcomePending) return 'welcome';
+  if(needsInitialInventory()) return 'onboarding';
+  return 'dashboard';
+}
+function updateFlowClasses(){
+  document.body.classList.toggle('auth-required', !isSignedIn());
+  document.body.classList.toggle('inventory-required', needsInitialInventory());
+}
+function showView(v){
+  toggleMobileMenu(false);
+  if(!isSignedIn() && !['registration','verify-email'].includes(v)) v='registration';
+  if(needsInitialInventory() && !['welcome','onboarding','registration','settings','help'].includes(v)) v='onboarding';
+  if(v==='welcome' && !session.welcomePending) v='onboarding';
+  updateFlowClasses();
+  activeView=v;
+  $all('.view').forEach(x=>x.classList.remove('active'));
+  $(`#view-${v}`)?.classList.add('active');
+  $all('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
+  if(v==='products') renderAllProducts();
+  if(v==='shopping') renderShoppingFull();
+  if(v==='suggestions') renderSuggestions();
+  if(v==='settings') renderSettings();
+}
+function render(){
+  setPhoneVerificationVisible(!!session.pendingVerifyPhone);
+  updateFlowClasses();
+  renderStats(); renderProducts(); renderSide(); renderSettings(); renderAllProducts(); renderShoppingFull(); renderSuggestions(); renderWelcome(); renderVerifyEmail();
+  renderUserPill();
+}
+
+function renderUserPill(){
+  const btn = $('#userShortcutBtn');
+  const label = $('#userLabel');
+  const sub = $('#userPillSub');
+  const icon = $('#userPillIcon');
+  const registered = !!(session.user && (session.user.username || settings.profile?.username));
+  btn.classList.toggle('guest', !registered);
+  btn.classList.toggle('registered', registered);
+  if(registered){
+    const first = settings.profile?.firstName || session.user?.firstName || '';
+    const last = settings.profile?.lastName || session.user?.lastName || '';
+    const full = `${first} ${last}`.trim() || session.user?.username || settings.profile?.username || 'Utente';
+    label.textContent = full;
+    sub.textContent = t('clickToProfile');
+    icon.textContent = (first?.[0] || session.user?.username?.[0] || 'U').toUpperCase();
+  } else {
+    label.textContent = t('registerOrLogin');
+    sub.textContent = t('clickToRegister');
+    icon.textContent = '👤';
+  }
+}
+
+function handleUserShortcut(){
+  showView(session.user ? 'settings' : 'registration');
+  if(session.user){
+    setTimeout(() => document.querySelector('.profile-card')?.scrollIntoView({behavior:'smooth', block:'start'}), 60);
+  }
+}
+
+function saveProfile(){
+  settings.profile = settings.profile || {};
+  settings.profile.firstName = $('#profileFirstName').value.trim();
+  settings.profile.lastName = $('#profileLastName').value.trim();
+  settings.profile.username = $('#profileUsername').value.trim();
+  settings.profile.email = $('#profileEmail').value.trim();
+  settings.people = Math.max(1, Math.min(20, Number($('#profilePeople').value) || 1));
+  settings.animals = Math.max(0, Math.min(30, Number($('#profileAnimals').value) || 0));
+  if(!session.user && settings.profile.username){
+    session.user = { username: settings.profile.username, firstName: settings.profile.firstName, lastName: settings.profile.lastName, email: settings.profile.email };
+  } else if(session.user){
+    Object.assign(session.user, settings.profile);
+  }
+  saveAll(); render(); toast(t('profileSaved'));
+}
+
+function renderStats(){
+  $('#statTotal').textContent = state.length;
+  $('#statHome').textContent = state.filter(i=>statusOf(i)==='home').length;
+  $('#statBuy').textContent = buyItems().length;
+  $('#statSync').textContent = settings.cloudEnabled ? t('synced') : t('offline');
+  $('#statSyncSub').textContent = settings.cloudEnabled ? (settings.householdId || 'cloud') : 'local';
+  $('#alexaStatus').textContent = settings.alexaConnected ? t('alexaConnected') : t('alexaNotConnected');
+  $('#alexaDot').classList.toggle('connected', !!settings.alexaConnected);
+}
+function filteredItems(){
+  return state.filter(item => {
+    const st=statusOf(item);
+    const byFilter = filter==='all' || filter===st;
+    const byCat = categoryFilter==='all' || item.category===categoryFilter;
+    const bySearch = !searchTerm || nameOf(item).toLowerCase().includes(searchTerm);
+    return byFilter && byCat && bySearch;
+  });
+}
+function renderProducts(){
+  const html = filteredItems().map(productRow).join('') || `<div class="info-strip"><span>i</span><p>${state.length ? esc(t('noBuy')) : 'Nessun prodotto inventato: fai l’inventario con foto per creare la tua lista reale.'}</p></div>`;
+  $('#productList').innerHTML=html;
+  bindProductControls($('#productList'));
+  renderStats(); renderSide();
+}
+function productRow(item){
+  const st=statusOf(item), pct=stockPercent(item), intel=consumptionIntel(item);
+  const days=intel.days!==null ? `${intel.days.toFixed(intel.days<10?1:0)} giorni` : 'in apprendimento';
+  const options=item.unitOptions.map(u=>`<option value="${u}" ${u===item.unit?'selected':''}>${esc(u)}</option>`).join('');
+  return `<article class="product-row" data-id="${esc(item.id)}">
+    <img class="product-img" src="${esc(item.image)}" alt="${esc(nameOf(item))}">
+    <div class="product-title">
+      <h4>${esc(nameOf(item))}</h4>
+      <p>${esc(catName(item.category))}</p>
+      <div class="qty-grid">
+        <div class="qty-box"><span class="mini-label">${t('qty')}</span><div class="qty-controls"><button data-step="-1">−</button><div class="qty-value">${item.qty}</div><button data-step="1">+</button></div></div>
+        <div class="unit-box"><span class="mini-label">${t('unit')}</span><select data-unit>${options}</select></div>
+      </div>
+    </div>
+    <div class="status-block">
+      <div class="bar-labels"><span>${t('inStock')}</span><span>${t('buyStock')}</span></div>
+      <div class="stock-bar"><span class="stock-knob" style="left:${pct}%"></span></div>
+      <div class="bar-meta"><span>${item.qty} ${esc(item.unit)}</span><span>${st==='buy'?t('lowStock'):t('goodStock')}</span></div>
+      <span class="availability ${st}">${st==='buy'?t('lowStock'):t('goodStock')}</span>
+      <small class="ai-mini-reason">AI: ${esc(days)} · min ${intel.th} · consiglio ${intel.rec}</small>
+    </div>
+  </article>`;
+}
+function bindProductControls(root){
+  root.querySelectorAll('[data-step]').forEach(btn => btn.addEventListener('click', () => {
+    const id=btn.closest('.product-row').dataset.id, step=Number(btn.dataset.step);
+    const item=state.find(x=>x.id===id); if(!item) return;
+    const oldQty = item.qty;
+    item.qty=Math.max(0, Math.min(recommendedQty(item), item.qty + step));
+    if(step<0) item.usage++;
+    if(item.qty < oldQty) rememberEvent('consume', item, oldQty-item.qty, 'manual decrease');
+    if(item.qty > oldQty) rememberEvent('restock', item, item.qty-oldQty, 'manual increase');
+    item.updatedAt=Date.now(); saveAll(); render();
+  }));
+  root.querySelectorAll('[data-unit]').forEach(sel => sel.addEventListener('change', () => {
+    const id=sel.closest('.product-row').dataset.id, item=state.find(x=>x.id===id); if(!item) return;
+    item.unit=sel.value; item.updatedAt=Date.now(); saveAll(); render();
+  }));
+}
+function renderSide(){
+  const list = buyItems();
+  $('#quickList').innerHTML = list.length ? list.slice(0,4).map(sideItem).join('') : `<div class="side-item"><strong>${t('noBuy')}</strong></div>`;
+  const sug = [...state].sort((a,b)=>suggestionScore(b)-suggestionScore(a)).slice(0,4);
+  $('#suggestedMini').innerHTML = sug.map(sideItem).join('');
+}
+function sideItem(item){
+  const intel=consumptionIntel(item);
+  const days=intel.days!==null ? ` · ${intel.days.toFixed(intel.days<10?1:0)}g` : '';
+  return `<div class="side-item"><img src="${esc(item.image)}" alt=""><div><strong>${esc(nameOf(item))}</strong><small>${item.qty} ${esc(item.unit)}${days} · ${esc(intel.label)}</small></div></div>`;
+}
+function renderAllProducts(){ $('#allProductsList').innerHTML = state.map(productRow).join(''); bindProductControls($('#allProductsList')); }
+function renderShoppingFull(){
+  const items=buyItems();
+  $('#shoppingListFull').innerHTML = items.length ? items.map(i=>{ const intel=consumptionIntel(i); return `<div class="shopping-card"><img src="${esc(i.image)}" alt=""><div><strong>${esc(nameOf(i))}</strong><p>${i.qty} ${esc(i.unit)} · ${esc(intel.label)} · compra circa ${intel.rec} ${esc(i.unit)}</p></div></div>`; }).join('') : `<div class="info-strip success"><span>✓</span><p>${t('noBuy')}</p></div>`;
+}
+function renderConsumptionPanel(){
+  const panel=$('#aiConsumptionPanel'); if(!panel) return;
+  if(!state.length){ panel.innerHTML='<div class="ai-consumption-empty">📷 Fai il primo inventario con foto: l’AI inizierà a calcolare consumi reali, giorni rimasti e quantità consigliate.</div>'; return; }
+  const h=householdInsight();
+  const next=h.next ? consumptionIntel(h.next) : null;
+  const nextName=h.next ? nameOf(h.next) : 'Tutto ok';
+  const urgentText=h.urgent.length ? `${h.urgent.length} prodotti sotto soglia` : 'nessuna urgenza';
+  panel.innerHTML=`<div class="ai-consumption-head"><div><small>AI CONSUMI V27</small><h3>Controllo intelligente della casa</h3><p>${esc(householdInsightText())}</p></div><strong>${h.score}/100</strong></div><div class="ai-consumption-grid"><article><b>${esc(urgentText)}</b><span>Priorità spesa</span></article><article><b>${esc(nextName)}</b><span>${next?esc(next.reason):'Scorte in equilibrio'}</span></article><article><b>${h.totalDaily.toFixed(1)}</b><span>Unità/giorno stimate</span></article></div>`;
+}
+function renderSuggestions(){
+  normalizeHouseholdSettings();
+  $('#smartPeople').textContent=settings.people; $('#smartAnimals').textContent=settings.animals; $('#smartMode').textContent=settings.autoSmart?'ON':'OFF';
+  renderConsumptionPanel();
+  const items=[...state].sort((a,b)=>suggestionScore(b)-suggestionScore(a)).slice(0,8);
+  $('#smartSuggestions').innerHTML=items.map(item=>{
+    const intel=consumptionIntel(item);
+    const pct=Math.min(100,Math.max(6,(Number(item.qty||0)/Math.max(intel.rec,1))*100));
+    const days=intel.days!==null ? `${intel.days.toFixed(intel.days<10?1:0)} giorni` : 'calcolo in apprendimento';
+    return `<article class="suggest-card ai-card ${esc(intel.level)}"><img src="${esc(item.image)}" alt=""><div><div class="ai-card-title"><h3>${esc(nameOf(item))}</h3><span>${esc(intel.label)}</span></div><p>${esc(catName(item.category))}</p><p class="alert">${esc(intel.reason)}</p><p><b>Hai:</b> ${item.qty} ${esc(item.unit)} · <b>Min:</b> ${intel.th} · <b>Durata:</b> ${esc(days)}</p><div class="progress"><span style="width:${pct}%"></span></div><p><b>Acquisto consigliato:</b> ${intel.rec} ${esc(item.unit)} ${intel.missing>0?`(+${intel.missing.toFixed(intel.missing%1?1:0)} da integrare)`:''}</p><button class="primary-btn" data-suggest="${esc(item.id)}">Metti in lista</button></div></article>`;
+  }).join('');
+  $('#smartSuggestions').querySelectorAll('[data-suggest]').forEach(b=>b.addEventListener('click',()=>{ const i=state.find(x=>x.id===b.dataset.suggest); if(i){ const old=i.qty; i.qty=0; i.updatedAt=Date.now(); if(old>0) rememberEvent('consume', i, old, 'smart suggestion added to shopping list'); saveAll(); render(); toast(t('saved')); }}));
+}
+function renderSettings(){
+  $('#settingsPeople').value=settings.people; $('#settingsAnimals').value=settings.animals; $('#autoSmartToggle').checked=!!settings.autoSmart; $('#cloudEnabled').checked=!!settings.cloudEnabled;
+  $('#apiEndpoint').value=settings.apiEndpoint; $('#householdId').value=settings.householdId; $('#apiToken').value=settings.token;
+  const p = settings.profile || {};
+  $('#profileFirstName').value = p.firstName || session.user?.firstName || '';
+  $('#profileLastName').value = p.lastName || session.user?.lastName || '';
+  $('#profileUsername').value = p.username || session.user?.username || '';
+  $('#profileEmail').value = p.email || session.user?.email || '';
+  $('#profilePeople').value = settings.people;
+  $('#profileAnimals').value = settings.animals;
+  const full = `${$('#profileFirstName').value} ${$('#profileLastName').value}`.trim() || $('#profileUsername').value || t('registerOrLogin');
+  $('#profileDisplayName').textContent = full;
+  $('#profileStatusText').textContent = session.user ? (session.user.email || p.email || t('registered')) : t('profileGuestText');
+  const initials = ((($('#profileFirstName').value||'')[0]||'') + ((($('#profileLastName').value||'')[0]||'') || (($('#profileUsername').value||'')[0]||''))).toUpperCase() || 'SP';
+  $('#profileAvatar').textContent = initials;
+  $('#goRegisterBtn').textContent = session.user ? t('navSettings') : t('registerOrLogin');
+}
+function saveSettingsFromForm(){
+  settings.people=clampNumber($('#settingsPeople').value,1,20,1);
+  settings.animals=clampNumber($('#settingsAnimals').value,0,30,0);
+  settings.autoSmart=$('#autoSmartToggle').checked;
+  settings.cloudEnabled=$('#cloudEnabled').checked; settings.apiEndpoint=$('#apiEndpoint').value.trim()||settings.apiEndpoint;
+  saveAll(); render(); toast(t('saved'));
+}
+
+
+function renderWelcome(){
+  const el=$('#welcomeName'); if(!el) return;
+  const p=settings.profile||{};
+  el.textContent=(p.firstName || session.user?.firstName || p.username || session.user?.username || 'amico');
+}
+function renderVerifyEmail(){
+  const el=$('#verifyEmailTarget'); if(!el) return;
+  el.textContent=session.pendingVerifyEmail || settings.profile?.email || 'la tua email';
+}
+
+async function verifyPhoneSubmit(e){
+  e.preventDefault();
+  const code=$('#verifyPhoneCode').value.trim();
+  const email=session.pendingVerifyEmail || settings.profile?.email || $('#regEmail')?.value.trim();
+  if(!code || code.replace(/\D+/g,'').length!==6){ toast('Inserisci il codice SMS a 6 cifre.'); return; }
+  try{
+    const res=await fetch(`${settings.apiEndpoint}/auth/verify-phone`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,code})});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.error||'phone verify fail');
+    toast(t('phoneVerified'));
+    if(data.requiresEmailVerification){ session.pendingVerifyPhone=false; session.pendingVerifyEmail=data.email||email; saveAll(); setPhoneVerificationVisible(false); return; }
+    applyAuthPayload(data,true); showView('welcome');
+  }catch(err){ toast('Codice SMS errato o scaduto.'); }
+}
+async function resendPhoneCode(){
+  const email=session.pendingVerifyEmail || settings.profile?.email || $('#regEmail')?.value.trim();
+  try{
+    const res=await fetch(`${settings.apiEndpoint}/auth/resend-phone`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.error||'sms fail');
+    toast(data.smsReady ? t('phoneSmsSent') : 'SMS non configurato: crea Twilio Verify Service SID su Render.');
+  }catch(err){ toast('Invio SMS non riuscito.'); }
+}
+function continueToInventory(){
+  session.welcomePending=false;
+  saveAll(); render(); showView('onboarding');
+}
+async function forgotPassword(){
+  const email=(prompt('Inserisci la tua email per recuperare la password')||'').trim();
+  if(!email) return;
+  try{
+    await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/auth/forgot`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+    toast(t('resetMailSent'));
+  }catch{ toast(t('resetMailSent')); }
+}
+async function resetPassword(e){
+  e.preventDefault();
+  const token=$('#resetToken').value.trim();
+  const password=$('#resetPassword').value;
+  if(!token || !password || password.length<8){ toast(t('required')); return; }
+  try{
+    const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/auth/reset`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,password})});
+    if(!res.ok) throw new Error('reset');
+    $('#resetDialog').close();
+    toast(t('passwordUpdated'));
+    showView('registration');
+  }catch{ toast('Token non valido o scaduto'); }
+}
+
+function applyAuthPayload(data, makeWelcome=false){
+  session={mode:'registered',user:data.user,welcomePending:!!makeWelcome};
+  settings={...settings,...(data.settings||{}),cloudEnabled:true,householdId:data.householdId,token:data.token,profile:{...(settings.profile||{}),firstName:data.user.firstName||'',lastName:data.user.lastName||'',username:data.user.username||'',email:data.user.email||''}};
+  state=Array.isArray(data.items)?migrateItems(data.items):[];
+  if(data.aiMemory) aiMemory=Object.assign(aiMemory,data.aiMemory);
+  if(!state.length && !settings.inventorySetupDone){ settings.inventorySetupDone=false; settings.inventoryStatus='required'; }
+  saveAiMemory(); saveAll(); render();
+}
+async function login(e){
+  e.preventDefault();
+  const email=$('#loginEmail').value.trim(), password=$('#loginPassword').value;
+  if(!email||!password){ toast(t('required')); return; }
+  try{
+    const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok){ const error=new Error('login fail'); error.data=data; throw error; }
+    applyAuthPayload(data, false); toast('Accesso effettuato ✅'); showView(initialView());
+  }catch(err){
+    try{
+      const data=err?.data || {};
+      if(data.error==='email_not_verified'){ session={mode:'pending-verification',user:null,pendingVerifyEmail:data.email||email,pendingVerifyPhone:!!data.requiresPhoneVerification,phoneMasked:data.phoneMasked||''}; saveAll(); render(); toast(t('emailNotVerified')); showView('verify-email'); return; }
+      if(data.error==='phone_not_verified'){ session={mode:'pending-verification',user:null,pendingVerifyEmail:data.email||email,pendingVerifyPhone:true,phoneMasked:data.phoneMasked||''}; saveAll(); render(); setPhoneVerificationVisible(true); toast(t('phoneNotVerified')); showView('verify-email'); return; }
+    }catch{}
+    toast('Accesso non riuscito: controlla email e password');
+  }
+}
+async function verifyEmailSubmit(e){
+  e.preventDefault();
+  const raw=$('#verifyToken').value.trim();
+  if(!raw){ toast(t('required')); return; }
+  await verifyEmailWithToken(raw);
+}
+async function verifyEmailWithToken(raw){
+  try{
+    const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/auth/verify-email`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:raw})});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.error||'verify');
+    if(data.requiresPhoneVerification){
+      session={mode:'pending-verification',user:null,pendingVerifyEmail:data.email||session.pendingVerifyEmail,pendingVerifyPhone:true,phoneMasked:data.phoneMasked||session.phoneMasked||''};
+      saveAll(); render(); setPhoneVerificationVisible(true); toast('Email verificata ✅ Ora inserisci il codice SMS.'); showView('verify-email'); return;
+    }
+    applyAuthPayload(data, true);
+    session.pendingVerifyEmail=null;
+    session.pendingVerifyPhone=false;
+    saveAll();
+    toast(t('emailVerified'));
+    try{ history.replaceState(null,'',location.pathname+'?v=25'); }catch{}
+    showView('welcome');
+  }catch{ toast('Token email non valido o scaduto. Prova a inviare di nuovo la verifica.'); showView('verify-email'); }
+}
+async function resendVerificationEmail(){
+  const email=session.pendingVerifyEmail || settings.profile?.email || (prompt('Inserisci la tua email da verificare')||'').trim();
+  if(!email){ toast(t('required')); return; }
+  try{
+    await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/auth/resend-verification`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+    session={mode:'pending-verification',user:null,pendingVerifyEmail:email}; saveAll(); render();
+    toast(t('verifyMailSent'));
+  }catch{ toast(t('verifyMailSent')); }
+}
+function continueLocalProfile(){
+  const firstName=$('#regFirstName').value.trim() || 'Utente';
+  const lastName=$('#regLastName').value.trim();
+  const username=$('#regUsername').value.trim() || 'profilo-locale';
+  const email=$('#regEmail').value.trim();
+  settings.people=Number($('#regPeople').value)||1;
+  settings.animals=Number($('#regAnimals').value)||0;
+  settings.profile={firstName,lastName,username,email};
+  settings.cloudEnabled=false; settings.inventorySetupDone=false; settings.inventoryStatus='required'; settings.inventoryUpdatedAt=null;
+  session={mode:'offline',user:{firstName,lastName,username,email}};
+  state=[];
+  saveAll(); render(); toast('Profilo locale creato. Ora fai l’inventario iniziale.'); showView('onboarding');
+}
+async function register(e){
+  e.preventDefault();
+  const answer=$('#regCaptcha').value;
+  if(answer!==captcha.target.id){ toast(t('wrongCaptcha')); captcha=newCaptcha(); renderCaptcha(); return; }
+  const firstName=$('#regFirstName').value.trim(), lastName=$('#regLastName').value.trim(), username=$('#regUsername').value.trim(), email=$('#regEmail').value.trim(), password=$('#regPassword').value;
+  ensureRegistrationPhoneFields();
+  const phoneCountry=$('#regPhoneCountry')?.value || '+39', phoneNumber=$('#regPhoneNumber')?.value.trim() || '';
+  if(!firstName||!lastName||!username||!email||!password||!phoneNumber){ toast(t('required')); return; }
+  if(firstName.length<2 || lastName.length<2){ toast('Nome e cognome devono avere almeno 2 lettere.'); return; }
+  if(!/^[a-zA-Z0-9_.-]{3,32}$/.test(username)){ toast('Nome utente: minimo 3 caratteri, solo lettere, numeri, punto, trattino o underscore.'); return; }
+  if(!emailLooksValid(email)){ toast('Email non valida.'); return; }
+  if(!passwordLooksStrong(password)){ toast('Password: minimo 8 caratteri con almeno una lettera e un numero.'); return; }
+  if(!phoneLooksValid(phoneCountry, phoneNumber)){ toast(t('phoneRequired')); return; }
+  settings.people=Number($('#regPeople').value)||1; settings.animals=Number($('#regAnimals').value)||0; settings.autoSmart=$('#regAutoSmart').checked; settings.apiEndpoint=$('#regEndpoint').value.trim()||settings.apiEndpoint;
+  if(settings.people<1 || settings.people>20 || settings.animals<0 || settings.animals>30){ toast('Controlla numero persone/animali.'); return; }
+  settings.profile = { firstName, lastName, username, email, phoneCountry, phoneNumber };
+  settings.inventorySetupDone=false; settings.inventoryStatus='required'; settings.inventoryUpdatedAt=null;
+  state=[];
+  try{
+    const res=await fetch(`${settings.apiEndpoint}/auth/register`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({firstName,lastName,username,email,password,phoneCountry,phoneNumber,people:settings.people,animals:settings.animals,autoSmart:settings.autoSmart,items:[],aiMemory})});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.error||'register fail');
+    if(data.requiresEmailVerification){
+      session={mode:'pending-verification',user:null,pendingVerifyEmail:data.email||email,pendingVerifyPhone:!!data.requiresPhoneVerification,phoneMasked:data.phoneMasked||''};
+      settings.cloudEnabled=false; settings.token=''; settings.householdId='';
+      saveAll(); render(); toast(t('verifyMailSent')); showView('verify-email'); return;
+    }
+    applyAuthPayload(data, true); toast(t('welcomeEmailSent')); showView('welcome');
+  }catch(err){
+    toast('Registrazione non riuscita: controlla connessione e riprova.');
+    showView('registration');
+  }
+}
+function openAdd(){ $('#productDialog').showModal(); }
+function addCustom(e){
+  e.preventDefault();
+  const names={it:$('#customNameIt').value.trim(),en:$('#customNameEn').value.trim(),es:$('#customNameEs').value.trim(),de:$('#customNameDe').value.trim()};
+  if(!names.it){ toast(t('required')); return; }
+  ['en','es','de'].forEach(k=>{ if(!names[k]) names[k]=names.it; });
+  state.unshift(createItem(cryptoId(),'assets/illustrations/generic-item.png',$('#customCategory').value,names,1,6,2,['pz','pc','lt','kg'],{custom:true}));
+  $('#productDialog').close(); $('#customProductForm').reset(); saveAll(); render(); toast(t('added'));
+}
+function shoppingDone(){ openGroceryScanner(true); }
+async function copyList(){ const txt=buyItems().map(i=>`- ${nameOf(i)} (${i.qty} ${i.unit})`).join('\n') || t('noBuy'); await navigator.clipboard.writeText(txt).catch(()=>{}); toast(t('copied')); }
+
+async function sendWhatsappList(){
+  if(!settings.cloudEnabled || !settings.householdId || !settings.token){ toast('Accedi e sincronizza il cloud prima di inviare WhatsApp.'); return; }
+  try{
+    await syncCloud(false);
+    const res=await fetch(`${settings.apiEndpoint}/assistant/whatsapp-list`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token}`},body:JSON.stringify({householdId:settings.householdId})});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.error||'whatsapp fail');
+    if(data.sent){ toast(t('whatsappListSent')); return; }
+    if(data.text) await navigator.clipboard.writeText(data.text).catch(()=>{});
+    if(data.reason==='phone_not_verified') toast('Numero non verificato: verifica SMS prima di usare WhatsApp.');
+    else toast(t('whatsappListReady'));
+  }catch(err){ toast('Invio WhatsApp non riuscito. Controlla configurazione Twilio/numero.'); }
+}
+function connectAlexa(){ settings.alexaConnected=true; saveAll(); render(); syncCloud(true); toast(t('alexaConnected')); }
+function voiceEndpoint(path){
+  const base=settings.apiEndpoint.replace(/\/$/,'');
+  const params=new URLSearchParams({ householdId:settings.householdId||'DEMO', token:settings.token||'TOKEN_DA_LOGIN' });
+  return `${base}/${path}?${params.toString()}`;
+}
+async function copyAlexaEndpoint(){ const url=voiceEndpoint('alexa'); await navigator.clipboard.writeText(url).catch(()=>{}); toast(t('copied')); }
+function connectGoogleAssistant(){ settings.googleAssistantConnected=true; saveAll(); render(); syncCloud(true); toast(t('googleConnected')); }
+async function copyGoogleEndpoint(){ const url=voiceEndpoint('google-assistant'); await navigator.clipboard.writeText(url).catch(()=>{}); toast(t('copied')); }
+function scheduleSync(){ clearTimeout(syncTimer); if(settings.cloudEnabled) syncTimer=setTimeout(()=>syncCloud(false), SYNC_WAIT); }
+async function syncCloud(show){
+  if(!settings.cloudEnabled || !settings.apiEndpoint || !settings.token || !settings.householdId){ if(show) toast(t('syncFail')); return; }
+  try{
+    const payload={items:state, settings:{people:settings.people,animals:settings.animals,autoSmart:settings.autoSmart,lang:settings.lang,alexaConnected:settings.alexaConnected,googleAssistantConnected:settings.googleAssistantConnected,profile:settings.profile}, aiMemory};
+    const res=await fetch(`${settings.apiEndpoint}/households/${settings.householdId}/state`,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token}`},body:JSON.stringify(payload)});
+    if(!res.ok) throw new Error('sync fail');
+    if(show) toast(t('synced'));
+  }catch(err){ if(show) toast(t('syncFail')); }
+}
+
+
+function userDisplayName(){
+  const p=settings.profile||{};
+  return [p.firstName,p.lastName].filter(Boolean).join(' ').trim() || p.username || session.user?.firstName || session.user?.username || 'amico';
+}
+function timeGreeting(){
+  const h=new Date().getHours();
+  if(h<12) return 'Buongiorno';
+  if(h<18) return 'Buon pomeriggio';
+  return 'Buonasera';
+}
+function aiGreetingText(){
+  const name=userDisplayName();
+  const pending=aiMemory.pendingVerification ? ' Hai anche una spesa segnata come “da verificare”: posso aiutarti con le foto.' : '';
+  const facts=(aiMemory.facts||[]).slice(-3).map(f=>f.text).join(' · ');
+  return `${timeGreeting()} ${name}! Sono Spesa Pronta AI: ricordo le nostre chat, imparo i tuoi consumi e posso modificare la lista. Puoi dirmi “hey spesa pronta” oppure fotografare la spesa articolo per articolo.${pending}${facts?` Ricordo anche: ${facts}.`:''}`;
+}
+function maybeDailyGreeting(){
+  const today=new Date().toISOString().slice(0,10);
+  if(aiMemory.lastGreetingDate!==today && (aiMemory.messages||[]).length){
+    aiMemory.lastGreetingDate=today;
+    aiMemory.messages.push({role:'assistant',text:aiGreetingText(),at:Date.now(),daily:true});
+    aiMemory.messages=aiMemory.messages.slice(-600);
+    saveAiMemory();
+  }
+}
+function learnFromUserText(text){
+  const q=normalizeText(text);
+  const patterns=['mi piace','non mi piace','di solito','compro sempre','consumo spesso','preferisco','ricorda','ricordati'];
+  if(patterns.some(p=>q.includes(p))){
+    aiMemory.facts=aiMemory.facts||[];
+    const fact={text:String(text).trim(), at:Date.now(), source:'chat'};
+    if(fact.text && !aiMemory.facts.some(f=>normalizeText(f.text)===normalizeText(fact.text))) aiMemory.facts.push(fact);
+    aiMemory.facts=aiMemory.facts.slice(-200);
+  }
+}
+function memorySummaryText(){
+  const facts=(aiMemory.facts||[]).slice(-8).map(f=>'• '+f.text).join('\n');
+  const msgs=(aiMemory.messages||[]).length;
+  const scans=(aiMemory.scanHistory||[]).length;
+  return `Ricordo ${msgs} messaggi, ${scans} foto spesa e queste preferenze:\n${facts||'Ancora nessuna preferenza salvata.'}`;
+}
+
+function openAiPanel(){
+  $('#aiPanel').classList.remove('hidden');
+  maybeDailyGreeting();
+  updateAiBackendStatus();
+  if(!aiMemory.messages?.length){
+    addAiMessage('assistant', aiGreetingText());
+  } else renderAiMessages();
+  setTimeout(()=>$('#aiInput')?.focus(),80);
+}
+async function updateAiBackendStatus(){
+  const el=$('#aiStatusText'); if(!el || !settings.apiEndpoint) return;
+  try{
+    const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/ai/status`);
+    if(!res.ok) throw new Error('status');
+    const data=await res.json();
+    el.textContent = data.connected ? `AI vera collegata: chat + vision + memoria cloud attive (${data.model}).` : 'AI locale attiva. Per Vision vera manca la chiave OpenAI nel backend.';
+  }catch{
+    el.textContent='AI locale attiva. Backend non raggiungibile o non ancora online.';
+  }
+}
+function closeAiPanel(){ $('#aiPanel').classList.add('hidden'); }
+function addAiMessage(role,text){
+  aiMemory.messages = aiMemory.messages || [];
+  aiMemory.messages.push({role,text,at:Date.now()});
+  aiMemory.messages = aiMemory.messages.slice(-600);
+  if(role==='user') learnFromUserText(text);
+  saveAiMemory(); renderAiMessages();
+}
+function renderAiMessages(){
+  const box=$('#aiMessages'); if(!box) return;
+  box.innerHTML=(aiMemory.messages||[]).map(m=>`<div class="ai-msg ${m.role}">${esc(m.text)}</div>`).join('');
+  box.scrollTop=box.scrollHeight;
+}
+async function submitAiForm(e){
+  e.preventDefault();
+  const input=$('#aiInput');
+  const txt=input.value.trim();
+  if(!txt) return;
+  input.value='';
+  await handleAiText(txt,false);
+}
+async function handleAiText(text, speak=false){
+  openAiPanel();
+  const cleaned=text.replace(/hey\s+spesa\s+pronta[:,]?/i,'').trim() || text;
+  addAiMessage('user', cleaned);
+  const answer=await aiAnswer(cleaned);
+  addAiMessage('assistant', answer);
+  if(speak && 'speechSynthesis' in window){
+    const u=new SpeechSynthesisUtterance(answer); u.lang='it-IT'; speechSynthesis.cancel(); speechSynthesis.speak(u);
+  }
+}
+function normalizeText(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+function findItemBySpeech(query){
+  const q=normalizeText(query);
+  let best=null, bestLen=0;
+  for(const item of state){
+    const names=[item.id,...Object.values(item.names||{})].map(normalizeText);
+    for(const n of names){
+      if(n && (q.includes(n) || n.includes(q)) && n.length>bestLen){ best=item; bestLen=n.length; }
+    }
+  }
+  return best;
+}
+function extractNumber(text){ const m=normalizeText(text).match(/(\d+(?:[\.,]\d+)?)/); return m ? Number(m[1].replace(',','.')) : null; }
+function listBuyText(){
+  const list=buyItems();
+  if(!list.length) return 'Non manca niente: la lista della spesa è vuota.';
+  return 'Devi comprare: '+list.map(i=>`${nameOf(i)} (${i.qty} ${i.unit})`).join(', ')+'.';
+}
+function aiExplainItem(item){
+  const intel=consumptionIntel(item);
+  return `${nameOf(item)}: hai ${item.qty} ${item.unit}. ${intel.reason} Velocità stimata: ${intel.velocity.toFixed(2)} ${item.unit}/giorno. ${statusOf(item)==='buy' ? 'Lo metto tra le priorità della spesa.' : 'Per ora non è urgente.'}`;
+}
+async function aiAnswer(text){
+  const raw=text.trim();
+  const q=normalizeText(raw);
+  let m;
+  if(q.includes('buongiorno') || q.includes('ciao') || q.includes('buonasera')) return aiGreetingText();
+  if(q.includes('cosa ricordi') || q.includes('che ricordi') || q.includes('memoria')) return memorySummaryText();
+  if(q.includes('dimentica tutto') || q.includes('cancella memoria')){ aiMemory=defaultAiMemory(); saveAiMemory(); return 'Ok, ho cancellato la memoria locale dell’assistente.'; }
+  if(q.includes('fotografa') || q.includes('foto spesa') || q.includes('scanner') || q.includes('modalita frigo')){ openGroceryScanner(false); return 'Perfetto, ho aperto la modalità foto spesa. Fotografa un articolo alla volta: se non vedo bene ti chiedo di rifarla.'; }
+  if(q.includes('cosa devo comprare') || q.includes('lista della spesa') || q.includes('che manca') || q.includes('cosa manca')) return listBuyText();
+  if(q.includes('ho fatto la spesa') || q.includes('spesa fatta')){ openGroceryScanner(true); return 'Perfetto. Prima di chiudere la spesa ti propongo il controllo con foto: scatta un articolo alla volta, oppure segna “fatta da verificare”.'; }
+  m=q.match(/siamo\s+(\d+)\s+persone|(?:metti|imposta|aggiorna).*?(\d+)\s+persone/);
+  if(m){ settings.people=Number(m[1]||m[2]); saveAll(); render(); return `Ok, ho aggiornato il profilo: ${settings.people} persone in casa. Ora ricalcolo acqua, alimenti e scorte.`; }
+  m=q.match(/(?:ho|abbiamo|siamo).*?(\d+)\s+(?:animali|cani|gatti)|(?:metti|imposta|aggiorna).*?(\d+)\s+(?:animali|cani|gatti)/);
+  if(m){ settings.animals=Number(m[1]||m[2]); saveAll(); render(); return `Ok, ho aggiornato il profilo: ${settings.animals} animali. Ora ricalcolo crocchette, sacchetti e prodotti animali.`; }
+  m=q.match(/(?:segna|imposta|metti|porta)\s+(.+?)\s+(?:a|ad)\s+(\d+(?:[\.,]\d+)?)\s*([a-z]*)/);
+  if(m){
+    const item=findItemBySpeech(m[1]);
+    if(!item) return `Non ho trovato “${m[1]}”. Posso aggiungerlo come nuovo articolo se mi dici la categoria.`;
+    const old=item.qty; item.qty=Number(m[2].replace(',','.')); if(m[3]) item.unit=m[3];
+    if(item.qty<old) rememberEvent('consume',item,old-item.qty,'AI set quantity'); else if(item.qty>old) rememberEvent('restock',item,item.qty-old,'AI set quantity');
+    item.updatedAt=Date.now(); saveAll(); render(); return `Fatto: ${nameOf(item)} ora è a ${item.qty} ${item.unit}. Ho aggiornato anche i consumi.`;
+  }
+  if(q.includes('aggiungi') || q.includes('metti in lista') || q.includes('comprare')){
+    const guess=raw.replace(/hey\s+spesa\s+pronta[:,]?/i,'').replace(/aggiungi|metti in lista|da comprare|comprare|alla lista/gi,'').trim();
+    const item=findItemBySpeech(guess||raw);
+    if(item){ const old=item.qty; item.qty=0; item.usage=(item.usage||0)+1; rememberEvent('consume',item,old,'AI add to list'); item.updatedAt=Date.now(); saveAll(); render(); return `Ok, ho messo ${nameOf(item)} nella lista della spesa.`; }
+    const names={it:guess||'Nuovo articolo', en:guess||'New item', es:guess||'Nuevo artículo', de:guess||'Neuer Artikel'};
+    const newItem=createItem(cryptoId(),'assets/illustrations/generic-item.png','food',names,0,6,2,['pz','pc','kg','lt'],{custom:true,usage:1});
+    state.unshift(newItem); rememberEvent('consume',newItem,1,'AI created item'); saveAll(); render(); return `Non era nel catalogo: ho creato “${names.it}” e l'ho messo nella lista.`;
+  }
+  if(q.includes('perche') || q.includes('spiega')){
+    const item=findItemBySpeech(raw) || [...state].sort((a,b)=>suggestionScore(b)-suggestionScore(a))[0];
+    return item ? aiExplainItem(item) : 'Uso persone, animali, storico consumi, soglia minima e giorni stimati per decidere cosa suggerire.';
+  }
+  if(q.includes('consumi') || q.includes('analisi')){
+    const urgent=[...state].sort((a,b)=>suggestionScore(b)-suggestionScore(a)).slice(0,4);
+    return householdInsightText()+'\n'+urgent.map(aiExplainItem).join('\n');
+  }
+  if(q.includes('ricorda') || q.includes('ricordati')){
+    aiMemory.facts=aiMemory.facts||[]; aiMemory.facts.push({text:raw,at:Date.now()}); aiMemory.facts=aiMemory.facts.slice(-80); saveAiMemory(); return 'Memorizzato. Userò questa informazione per adattare meglio i suggerimenti.';
+  }
+  const backend = await askBackendAi(raw).catch(()=>null);
+  if(backend) return backend;
+  return `Ho capito. Lo tengo a mente e continuo ad adattarmi a te. Posso leggere la lista, aggiungere articoli, modificare quantità, aggiornare persone/animali, ricordare preferenze e analizzare foto spesa. Prova: “hey spesa pronta, fotografa la spesa”.`;
+}
+async function askBackendAi(message){
+  if(!settings.apiEndpoint) return null;
+  const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/ai/chat`,{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token||''}`},
+    body:JSON.stringify({message,state,settings,memory:aiMemory,householdId:settings.householdId})
+  });
+  if(!res.ok) return null;
+  const data=await res.json();
+  if(data.memory){ aiMemory=Object.assign(aiMemory,data.memory); saveAiMemory(); }
+  return data.reply || null;
+}
+
+function openGroceryScanner(afterShopping=false){
+  const dlg=$('#groceryScannerDialog'); if(!dlg) return;
+  dlg.dataset.afterShopping = afterShopping ? '1' : '0';
+  $('#scannerStatus').textContent = !settings.inventorySetupDone ? 'Inventario iniziale: tira fuori i prodotti, fotografa un articolo alla volta e conferma nome/quantità prima di rimetterlo a posto.' : (afterShopping ? 'Hai premuto “Ho fatto la spesa”. Ora puoi fotografare ogni prodotto prima di metterlo in frigo/dispensa, oppure segnare la spesa come fatta ma da verificare.' : 'Fotografa un articolo alla volta. L’AI prova a riconoscerlo, ti fa modificare nome/quantità e poi aggiorna le scorte.');
+  try{ dlg.showModal(); }catch{ dlg.setAttribute('open',''); }
+  openAiPanel();
+}
+function closeGroceryScanner(){ const dlg=$('#groceryScannerDialog'); if(dlg?.open) dlg.close(); else dlg?.removeAttribute('open'); }
+function resetScannerResults(){ $('#scannerResults').innerHTML=''; $('#scannerPreview').innerHTML=''; $('#scannerStatus').textContent='Risultati svuotati. Puoi scattare nuove foto.'; }
+function completeShoppingDone(needsVerification=false){
+  if(state.length){
+    state=state.map(i=>{ const newQty=recommendedQty(i); if(newQty>i.qty) rememberEvent('restock', i, newQty-i.qty, needsVerification?'shopping done unverified':'shopping done verified'); return {...i,qty:newQty,updatedAt:Date.now()}; });
+  }
+  settings.inventorySetupDone=true;
+  settings.inventoryStatus=needsVerification?'to_verify':'verified';
+  settings.inventoryUpdatedAt=Date.now();
+  aiMemory.pendingVerification=!!needsVerification;
+  saveAiMemory(); saveAll(); render(); showView('dashboard');
+}
+function finishScanner(){
+  const confirmed=document.querySelectorAll('#scannerResults .scan-result.confirmed').length;
+  if(!settings.inventorySetupDone && confirmed===0){
+    $('#scannerStatus').textContent='Per completare il primo inventario devi confermare almeno un prodotto fotografato.';
+    toast('Conferma almeno un prodotto fotografato');
+    return;
+  }
+  completeShoppingDone(false); closeGroceryScanner();
+  addAiMessage('assistant','Inventario foto completato. Ora la lista parte dai prodotti reali che hai confermato.');
+  toast('Inventario completato ✅');
+}
+function markInitialInventoryToVerify(){
+  toast('Inventario iniziale obbligatorio: fotografa e conferma almeno un prodotto.');
+  openGroceryScanner(true);
+}
+function markShoppingDoneToVerify(){
+  completeShoppingDone(true); closeGroceryScanner();
+  addAiMessage('assistant','Ok, ho segnato la spesa come fatta ma da verificare. Quando puoi, riapri Foto spesa e controlliamo prodotto per prodotto.');
+}
+function startFridgeMode(){
+  $('#scannerStatus').textContent='Modalità frigo attiva: scatta una foto per ogni prodotto mentre lo appoggi davanti al frigo. Se la foto è chiara, lo aggiungo o aggiorno la quantità.';
+  $('#groceryPhotoInput')?.click();
+}
+async function handleGroceryFiles(files){
+  const arr=[...(files||[])]; if(!arr.length) return;
+  for(const file of arr) await analyzeGroceryPhoto(file);
+  $('#groceryPhotoInput').value=''; $('#groceryGalleryInput').value='';
+}
+function loadImageElement(dataUrl){
+  return new Promise((resolve,reject)=>{ const img=new Image(); img.onload=()=>resolve(img); img.onerror=reject; img.src=dataUrl; });
+}
+function fileToDataUrl(file){
+  return new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(file); });
+}
+async function compressImage(dataUrl,max=900,quality=.78){
+  const img=await loadImageElement(dataUrl); const scale=Math.min(1,max/Math.max(img.width,img.height));
+  const c=document.createElement('canvas'); c.width=Math.max(1,Math.round(img.width*scale)); c.height=Math.max(1,Math.round(img.height*scale));
+  const ctx=c.getContext('2d'); ctx.drawImage(img,0,0,c.width,c.height);
+  return c.toDataURL('image/jpeg',quality);
+}
+async function imageQuality(dataUrl){
+  const img=await loadImageElement(dataUrl); const c=document.createElement('canvas'); const w=96,h=96; c.width=w;c.height=h;
+  const ctx=c.getContext('2d'); ctx.drawImage(img,0,0,w,h);
+  const d=ctx.getImageData(0,0,w,h).data; let lum=[],sum=0;
+  for(let i=0;i<d.length;i+=4){ const l=.2126*d[i]+.7152*d[i+1]+.0722*d[i+2]; lum.push(l); sum+=l; }
+  const avg=sum/lum.length; const contrast=Math.sqrt(lum.reduce((s,l)=>s+(l-avg)**2,0)/lum.length);
+  let edge=0; for(let y=1;y<h;y++){ for(let x=1;x<w;x++){ const a=lum[y*w+x], b=lum[y*w+x-1], c2=lum[(y-1)*w+x]; edge+=Math.abs(a-b)+Math.abs(a-c2); }}
+  edge=edge/(w*h);
+  const ok=img.width>=480 && img.height>=480 && avg>35 && avg<230 && contrast>14 && edge>5;
+  const reason = !ok ? (img.width<480||img.height<480?'foto troppo piccola':avg<=35?'foto troppo scura':avg>=230?'foto troppo chiara':contrast<=14?'poco contrasto / prodotto poco visibile':'foto un po’ sfocata') : 'foto leggibile';
+  return {ok,reason,width:img.width,height:img.height,avg,contrast,edge};
+}
+async function analyzeGroceryPhoto(file){
+  const original=await fileToDataUrl(file);
+  const dataUrl=await compressImage(original);
+  $('#scannerPreview').innerHTML=`<img src="${dataUrl}" alt="Foto articolo"><p>Analizzo la foto...</p>`;
+  const quality=await imageQuality(dataUrl).catch(()=>({ok:false,reason:'non riesco a leggere la foto'}));
+  if(!quality.ok){
+    $('#scannerStatus').textContent=`Non vedo bene: ${quality.reason}. Rifai la foto più vicino, con luce buona e prodotto centrato.`;
+    addScannerResult({needsRetake:true, reason:quality.reason, dataUrl});
+    return;
+  }
+  let result=await askVisionAi(dataUrl).catch(()=>null);
+  if(!result || result.needsManual){ result=guessScanFallback(file.name,dataUrl); }
+  if(result.needsRetake){ $('#scannerStatus').textContent=result.reason || 'Non vedo bene, rifai la foto.'; addScannerResult({...result,dataUrl}); return; }
+  result.dataUrl=dataUrl; result.quality=quality;
+  addScannerResult(result);
+  $('#scannerStatus').textContent='Foto letta. Controlla nome e quantità, poi conferma.';
+}
+function guessScanFallback(fileName='',dataUrl=''){
+  const base=String(fileName).replace(/\.[a-z0-9]+$/i,'').replace(/[_-]+/g,' ').trim();
+  const name=base && !/^image|img|photo|screenshot|camera/i.test(base) ? base : '';
+  return {needsManual:true, productName:name, quantity:1, unit:'pz', category:'food', confidence:.35, reason:'Vision AI esterna non collegata: conferma manualmente nome e quantità.'};
+}
+async function askVisionAi(dataUrl){
+  if(!settings.apiEndpoint) return null;
+  const catalog=state.map(i=>({id:i.id,names:i.names,unit:i.unit,unitOptions:i.unitOptions,category:i.category,qty:i.qty}));
+  const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/ai/vision`,{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token||''}`},
+    body:JSON.stringify({image:dataUrl,catalog,settings,memory:aiMemory,householdId:settings.householdId})
+  });
+  if(!res.ok) return null;
+  const data=await res.json();
+  if(data.memory){ aiMemory=Object.assign(aiMemory,data.memory); saveAiMemory(); }
+  return data.result || data;
+}
+function addScannerResult(result){
+  const id='scan_'+Math.random().toString(36).slice(2,9);
+  const html=`<article class="scan-result ${result.needsRetake?'bad':''}" id="${id}">
+    <img src="${esc(result.dataUrl||'assets/illustrations/generic-item.png')}" alt="Foto prodotto">
+    <div class="scan-fields">
+      <strong>${result.needsRetake?'Foto da rifare':'Prodotto riconosciuto'}</strong>
+      <p>${esc(result.reason || (result.confidence?`Confidenza AI ${Math.round(result.confidence*100)}%`:'Controlla e conferma.'))}</p>
+      ${result.needsRetake?'<button class="outline-btn" data-retake>Rifai foto</button>':`
+      <label>Nome prodotto<input data-scan-name value="${esc(result.productName||'')}"></label>
+      <div class="scan-grid"><label>Quantità<input data-scan-qty type="number" min="0" step="0.1" value="${esc(result.quantity||1)}"></label><label>Unità<input data-scan-unit value="${esc(result.unit||'pz')}"></label></div>
+      <label>Categoria<select data-scan-cat>${categoryOptions(result.category||'food')}</select></label>
+      <button class="primary-btn" data-confirm-scan>Conferma e aggiungi in casa</button>`}
+    </div>
+  </article>`;
+  $('#scannerResults').insertAdjacentHTML('afterbegin',html);
+  const el=$('#'+id);
+  el.querySelector('[data-retake]')?.addEventListener('click',()=>$('#groceryPhotoInput')?.click());
+  el.querySelector('[data-confirm-scan]')?.addEventListener('click',()=>confirmScanResult(el,result));
+}
+function categoryOptions(selected){
+  return ['food','drinks','pets','house','pharmacy','aquarium','fruit','veg'].map(c=>`<option value="${c}" ${c===selected?'selected':''}>${esc(catName(c))}</option>`).join('');
+}
+function confirmScanResult(el,result){
+  const productName=el.querySelector('[data-scan-name]').value.trim();
+  const qty=Number(el.querySelector('[data-scan-qty]').value)||1;
+  const unit=el.querySelector('[data-scan-unit]').value.trim()||'pz';
+  const category=el.querySelector('[data-scan-cat]').value||'food';
+  if(!productName){ toast('Inserisci il nome prodotto'); return; }
+  const item=findItemBySpeech(productName);
+  if(item){
+    const old=item.qty; item.qty=qty; item.unit=unit; item.updatedAt=Date.now(); item.usage=Number(item.usage||0)+1;
+    rememberEvent('photo_restock',item,Math.max(0,qty-old),'Foto spesa confermata');
+    el.classList.add('confirmed'); el.querySelector('.scan-fields strong').textContent='Aggiornato: '+nameOf(item);
+  }else{
+    const names={it:productName,en:productName,es:productName,de:productName};
+    const img=result.dataUrl || 'assets/illustrations/generic-item.png';
+    const newItem=createItem(cryptoId(),img,category,names,qty,Math.max(6,Math.ceil(qty*2)),Math.max(1,Math.ceil(qty*.35)),['pz','kg','lt','gr','cf','bt'],{custom:true,usage:1});
+    newItem.unit=unit; state.unshift(newItem); rememberEvent('photo_new_item',newItem,qty,'Foto spesa nuovo articolo');
+    el.classList.add('confirmed'); el.querySelector('.scan-fields strong').textContent='Aggiunto: '+productName;
+  }
+  aiMemory.scanHistory=aiMemory.scanHistory||[];
+  aiMemory.scanHistory.push({name:productName,qty,unit,category,at:Date.now(),confidence:result.confidence||null});
+  aiMemory.scanHistory=aiMemory.scanHistory.slice(-300); aiMemory.pendingVerification=false;
+  saveAiMemory(); saveAll(); render(); toast('Articolo aggiornato in casa ✅');
+}
+
+function startAiVoiceOnce(){
+  const SR=window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ toast('Microfono vocale non supportato da questo browser'); return; }
+  const r=new SR(); r.lang='it-IT'; r.interimResults=false; r.continuous=false;
+  r.onstart=()=>{ $('#aiStatusText').textContent='Ti ascolto...'; };
+  r.onresult=e=>{ const txt=e.results[0][0].transcript; handleAiText(txt,true); };
+  r.onerror=()=>toast('Non ho capito, riprova');
+  r.onend=()=>{ $('#aiStatusText').textContent='Dimmi cosa comprare, modificare o imparare.'; };
+  r.start();
+}
+function toggleWakeWord(on){
+  const SR=window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ $('#aiWakeToggle').checked=false; toast('Wake word non supportato da questo browser'); return; }
+  if(aiRecognition){ aiRecognition.stop(); aiRecognition=null; }
+  aiListening=on;
+  if(!on) return;
+  aiRecognition=new SR(); aiRecognition.lang='it-IT'; aiRecognition.continuous=true; aiRecognition.interimResults=false;
+  aiRecognition.onresult=e=>{
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const txt=e.results[i][0].transcript;
+      if(normalizeText(txt).includes('hey spesa pronta')) handleAiText(txt,true);
+    }
+  };
+  aiRecognition.onend=()=>{ if(aiListening) { try{ aiRecognition.start(); }catch{} } };
+  try{ aiRecognition.start(); toast('Wake word attivo: dì “Hey Spesa Pronta”'); }catch{}
+}
+
+init();

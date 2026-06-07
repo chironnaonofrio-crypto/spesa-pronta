@@ -1,33 +1,23 @@
-window.SPESA_PRONTA_VERSION='v27.9-hard-reset';
-// V27.9 HARD RESET: unregister old service workers and delete old browser caches without deleting user data
-try {
-  if('serviceWorker' in navigator){
-    navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(reg => reg.unregister().catch(()=>{}))).catch(()=>{});
-  }
-  if(window.caches){ caches.keys().then(keys => keys.forEach(k => caches.delete(k).catch(()=>{}))).catch(()=>{}); }
-} catch(_) {}
-
-
+window.SPESA_PRONTA_VERSION='v27.10-stable-no-loop';
+// V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
-  const build='v27.6-cache-killer';
   try{
-    const previous=sessionStorage.getItem('spesaProntaBuild');
-    sessionStorage.setItem('spesaProntaBuild', build);
-    if('caches' in window){
-      caches.keys().then(keys=>Promise.all(keys.filter(k=>!k.includes('v27-6-cache-killer')).map(k=>caches.delete(k)))).catch(()=>{});
+    const flag='spesaProntaNoLoopCleanedV2710';
+    if(!sessionStorage.getItem(flag)){
+      sessionStorage.setItem(flag,'1');
+      if('serviceWorker' in navigator){
+        navigator.serviceWorker.getRegistrations()
+          .then(regs=>regs.forEach(reg=>reg.unregister().catch(()=>{})))
+          .catch(()=>{});
+      }
+      if('caches' in window){
+        caches.keys()
+          .then(keys=>Promise.all(keys.map(k=>caches.delete(k))))
+          .catch(()=>{});
+      }
     }
-    if('serviceWorker' in navigator){
-      navigator.serviceWorker.getRegistrations().then(regs=>regs.forEach(reg=>reg.update().catch(()=>{}))).catch(()=>{});
-      navigator.serviceWorker.addEventListener('controllerchange',()=>{
-        if(previous && previous!==build && !sessionStorage.getItem('spesaProntaReloaded')){
-          sessionStorage.setItem('spesaProntaReloaded','1');
-          location.reload();
-        }
-      });
-    }
-  }catch(e){}
+  }catch(_){}
 })();
-
 
 const STORAGE_KEY = 'spesa-pronta-final:v19';
 const SETTINGS_KEY = 'spesa-pronta-final:settings:v19';
@@ -414,7 +404,8 @@ function init(){
     'Hey Google, imposta crocchette cane a 10 kg'
   ].join('\n');
   if(new URLSearchParams(location.search).get('openMenu') === '1') setTimeout(() => toggleMobileMenu(true), 120);
-  if('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
+  // V27.10: service worker disabled to prevent auto-refresh loop.
+  // if('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
 }
 function bind(){
   $all('.nav-item').forEach(b => b.addEventListener('click', () => showView(b.dataset.view)));

@@ -8,25 +8,16 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <!-- spesa-pronta-cache-killer-v27-6 -->
+  <!-- spesa-pronta-v27-10-stable-no-loop -->
   <meta name="description" content="Spesa Pronta: gestione spesa intelligente con cloud, Alexa, Google Assistant e suggerimenti automatici.">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="assets/styles.v27-9-hard-reset.css?v=279999">
-
-  <script id="v27-9-hard-reset-inline">
-    try {
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function(regs){ regs.forEach(function(reg){ reg.unregister(); }); });
-      }
-      if (window.caches) { caches.keys().then(function(keys){ keys.forEach(function(k){ caches.delete(k); }); }); }
-    } catch(e) {}
-  </script>
+  <link rel="stylesheet" href="assets/styles.v27-10-stable.css?v=2710">
   <title>Spesa Pronta</title>
 </head>
 <body>
-  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.9-HARD-RESET -->
+  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.10-STABLE-NO-LOOP -->
   <div class="app-frame">
     <aside class="sidebar">
       <div class="side-brand">
@@ -483,6 +474,6 @@
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/app.v27-9-hard-reset.js?v=279999" defer></script>
+  <script src="assets/app.v27-10-stable.js?v=2710" defer></script>
 </body>
 </html>
