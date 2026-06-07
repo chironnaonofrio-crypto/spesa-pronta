@@ -4,7 +4,7 @@
   <!-- spesa-pronta-v26-phone-fields -->
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#071b34">
+  <meta name="theme-color" content="#ffffff">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -13,11 +13,11 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="assets/styles.v27-48-premium-mega-vision.css?v=2748">
+  <link rel="stylesheet" href="assets/styles.css?v=2751">
   <title>Spesa Pronta</title>
 </head>
 <body>
-  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.48-PREMIUM-MEGA-VISION -->
+  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.51-WHITE-LAYOUT-REFINED -->
   <div class="app-frame">
     <aside class="sidebar">
       <div class="side-brand">
@@ -261,30 +261,40 @@
       </section>
 
       <section class="view" id="view-onboarding">
-        <section class="panel onboarding-panel">
-          <div class="vision-hero-art" aria-hidden="true"><img src="assets/hero-premium-vision.svg" alt=""></div>
-          <h2>INVENTARIO INIZIALE</h2>
-          <p class="onboarding-lead">SCANSIONA SOLO PRODOTTI REALI. LA TUA AI RICONOSCE, CONFRONTA E IMPARA SENZA INVENTARE NULLA.</p>
+        <section class="panel onboarding-panel onboarding-premium">
+          <div class="premium-hero">
+            <div class="premium-hero-copy">
+              <small class="premium-kicker">VISION AI PRE-ADDESTRATA</small>
+              <h2>INVENTARIO INIZIALE</h2>
+              <p class="onboarding-lead">SCANSIONA SOLO PRODOTTI REALI: LA TUA AI LI RICONOSCE, CONTROLLA ETICHETTA E SCADENZA E TI DÀ UNA RISPOSTA CHIARA, SENZA INVENTARE NULLA.</p>
+              <div class="seed-inline-stats" aria-label="Dati Vision AI">
+                <span><b>1.000.000</b> PROFILI VIRTUALI</span>
+                <span><b>11.200</b> SCHEDE ATTIVE</span>
+                <span><b>OCR</b> ETICHETTA • FORMATO • SCADENZA</span>
+              </div>
+            </div>
+            <div class="premium-hero-image"><img src="assets/illustrations/ui-ref-hero.png" alt="Cestino con prodotti e assistente Vision AI"></div>
+          </div>
           <div class="seed-brain-proof" id="seedBrainProof">
             <div class="seed-proof-head">
               <span class="seed-proof-icon" aria-hidden="true"></span>
               <div>
                 <h3>CERVELLO VISION GIÀ PRONTO</h3>
-                <p>RICONOSCE PRODOTTI, MARCHE, FORMATI E PAROLE IN ETICHETTA. PARTE FORTE, TI CHIEDE CONFERMA SOLO QUANDO SERVE E DIVENTA SEMPRE PIÙ PRECISO.</p>
+                <p>PARTE CON UNA BASE FORTE SU PRODOTTI, MARCHE, FORMATI ED ETICHETTE. TI CHIEDE CONFERMA SOLO QUANDO SERVE E MIGLIORA AD OGNI SCANSIONE.</p>
               </div>
             </div>
             <div class="seed-proof-stats" aria-label="Memoria seed integrata">
-              <span><b>1.000.000</b>profili virtuali</span>
-              <span><b>11.200</b>schede attive</span>
-              <span><b>OCR</b>pattern etichetta</span>
+              <span><b>SEED</b> BASE INTELLIGENTE</span>
+              <span><b>BRAND</b> MARCHE COMUNI</span>
+              <span><b>EXP</b> SCADENZE RAPIDE</span>
             </div>
-            <div class="seed-proof-note">NON PARTE DA ZERO: CONFRONTA, TI GUIDA E IMPARA DA OGNI TUA CONFERMA.</div>
+            <div class="seed-proof-note">UNA SCHERMATA CHIARA, UN PRODOTTO ALLA VOLTA, UNA RISPOSTA PRECISA.</div>
           </div>
           <div class="onboarding-steps pro-steps">
-            <article><strong><img class="step-visual" src="assets/feature-exp.svg" alt="Frigo e dispensa pronti"></strong><span><b>PREPARA FRIGO E DISPENSA</b><em>Metti i prodotti davanti a te e tienili pronti da mostrare alla camera.</em></span></article>
-            <article><strong><img class="step-visual" src="assets/feature-inquadra.svg" alt="Inquadra il prodotto"></strong><span><b>INQUADRA UN PRODOTTO</b><em>Mostra un articolo alla volta: Vision lo centra e lo riconosce più facilmente.</em></span></article>
-            <article><strong><img class="step-visual" src="assets/feature-legge.svg" alt="Lettura etichetta"></strong><span><b>LEGGE ETICHETTA E SCADENZA</b><em>Nome, formato e data vengono letti prima del salvataggio.</em></span></article>
-            <article><strong><img class="step-visual" src="assets/feature-dialoga.svg" alt="Correzione guidata"></strong><span><b>CONFERMI O CORREGGI</b><em>Se manca qualcosa, la tua AI te lo chiede e impara dalla tua risposta.</em></span></article>
+            <article><strong><img class="step-visual" src="assets/illustrations/ui-ref-inquadra.png" alt="Inquadra la spesa"></strong><span><b>INQUADRA</b><em>FOTOGRAFA UN PRODOTTO ALLA VOLTA PER FARLO RICONOSCERE SUBITO.</em></span></article>
+            <article><strong><img class="step-visual" src="assets/illustrations/ui-ref-legge.png" alt="Legge etichetta"></strong><span><b>LEGGE</b><em>LEGGE NOME, FORMATO ED EVENTUALE SCADENZA PRIMA DI SALVARE.</em></span></article>
+            <article><strong><img class="step-visual" src="assets/illustrations/ui-ref-dialoga.png" alt="Dialoga con te"></strong><span><b>PARLA CON TE</b><em>SE MANCA UN DATO, TI CHIEDE SOLO QUELLO CHE SERVE.</em></span></article>
+            <article><strong><img class="step-visual" src="assets/illustrations/ui-ref-exp.png" alt="Modalità exp"></strong><span><b>MODALITÀ EXP</b><em>CONTROLLA AL VOLO LE SCADENZE DEL FRIGO E DEI PRODOTTI PIÙ DELICATI.</em></span></article>
           </div>
           <div class="onboarding-actions">
             <button class="primary-btn" id="initialScanBtn" type="button">INIZIA INVENTARIO CON FOTO</button>
@@ -466,17 +476,17 @@
 
 
   <dialog id="groceryScannerDialog" class="scanner-dialog">
-    <section class="scanner-card">
+    <section class="scanner-card scanner-card-premium">
       <header class="scanner-head pro-scanner-head">
         <div class="scanner-title-block">
           <small>SPESA PRONTA VISION AI</small>
           <h3>SCANSIONE PRO</h3>
-          <p>INQUADRA UN PRODOTTO ALLA VOLTA. VISION RICONOSCE IL PRODOTTO, LEGGE ETICHETTA E SCADENZA E TI CHIEDE CONFERMA SOLO SE SERVE.</p>
+          <p>SCEGLI COME SCANSIONARE: FAI UNA FOTO, CARICA UN'IMMAGINE O USA LA DIRETTA. VISION RICONOSCE IL PRODOTTO E TI GUIDA PASSO DOPO PASSO.</p>
           <div class="scanner-quick-cards" aria-label="Funzioni Vision AI">
-            <span><img class="quick-card-art" src="assets/feature-inquadra.svg" alt="Inquadra la spesa"><span class="quick-copy"><b>INQUADRA</b><em>RICONOSCE IL PRODOTTO</em></span></span>
-            <span><img class="quick-card-art" src="assets/feature-legge.svg" alt="Legge etichetta"><span class="quick-copy"><b>LEGGE</b><em>LEGGE ETICHETTA E SCADENZA</em></span></span>
-            <span><img class="quick-card-art" src="assets/feature-dialoga.svg" alt="Dialoga con te"><span class="quick-copy"><b>DIALOGA</b><em>TI CHIEDE SOLO CIÒ CHE MANCA</em></span></span>
-            <span><img class="quick-card-art" src="assets/feature-exp.svg" alt="Modalità exp"><span class="quick-copy"><b>MODALITÀ EXP</b><em>CONTROLLO SCADENZE RAPIDE</em></span></span>
+            <span><img class="quick-card-art" src="assets/illustrations/ui-ref-inquadra.png" alt="Inquadra la spesa"><span class="quick-copy"><b>INQUADRA</b><em>RICONOSCE IL PRODOTTO</em></span></span>
+            <span><img class="quick-card-art" src="assets/illustrations/ui-ref-legge.png" alt="Legge etichetta"><span class="quick-copy"><b>LEGGE</b><em>ETICHETTA E SCADENZA</em></span></span>
+            <span><img class="quick-card-art" src="assets/illustrations/ui-ref-dialoga.png" alt="Parla con te"><span class="quick-copy"><b>PARLA CON TE</b><em>CHIEDE SOLO CIÒ CHE MANCA</em></span></span>
+            <span><img class="quick-card-art" src="assets/illustrations/ui-ref-exp.png" alt="Modalità EXP"><span class="quick-copy"><b>MODALITÀ EXP</b><em>SCADENZE RAPIDE</em></span></span>
           </div>
         </div>
         <button class="ai-close" id="scannerCloseBtn" type="button" aria-label="Chiudi">×</button>
@@ -495,24 +505,23 @@
         <button class="outline-btn fridge-btn" id="fridgeModeBtn" type="button"><span class="action-symbol fridge"></span><span>SCANSIONE FRIGO</span></button>
         <button class="outline-btn warning" id="markVerifyBtn" type="button">FATTA DA VERIFICARE</button>
       </div>
-
       <div class="seed-brain-proof scanner-seed-proof" id="scannerSeedBrainProof">
         <div class="seed-proof-head">
           <span class="seed-proof-icon" aria-hidden="true"></span>
           <div>
             <h3>VISION PRONTA SUBITO</h3>
-            <p>RICONOSCE PRODOTTI, MARCA, FORMATO E SCADENZA. IMPARA DALLE TUE CONFERME E DIVENTA SEMPRE PIÙ PRECISA.</p>
+            <p>RICONOSCE PRODOTTO, MARCA, FORMATO E SCADENZA. SE MANCA QUALCOSA TE LO CHIEDE, IMPARA DALLE TUE CONFERME E DIVENTA SEMPRE PIÙ PRECISA.</p>
           </div>
         </div>
         <div class="seed-proof-stats">
-          <span><b>1M</b>profili virtuali</span>
-          <span><b>11.200</b>schede attive</span>
-          <span><b>OCR</b>pattern etichetta</span>
-          <span><b>VOCE</b>dialogo guidato</span>
+          <span><b>1M</b> PROFILI VIRTUALI</span>
+          <span><b>11.200</b> SCHEDE ATTIVE</span>
+          <span><b>OCR</b> PATTERN ETICHETTA</span>
+          <span><b>VOCE</b> DIALOGO GUIDATO</span>
         </div>
       </div>
       <div class="vision-brain-panel hidden" id="visionBrainPanel"><strong>AI AUTONOMA MASTER</strong><small><span class="autonomy-badge seed-ok">CORE 1.000.000</span> Visione locale + voce + server learning: OpenAI resta docente temporaneo.</small></div>
-      <div class="scanner-status" id="scannerStatus">SCANSIONA OGNI PRODOTTO REALE PRIMA DI METTERLO A POSTO.</div>
+      <div class="scanner-status" id="scannerStatus">SCANSIONA UN PRODOTTO ALLA VOLTA E CONFERMA SOLO ALLA FINE.</div>
       <div class="scanner-preview" id="scannerPreview"></div>
       <div class="scanner-results" id="scannerResults"></div>
       <footer class="scanner-footer">
