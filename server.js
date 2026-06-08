@@ -8,26 +8,52 @@ const crypto = require('crypto');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '.data');
+// Database persistente:
+    // - Render/Railway/VPS: imposta DATA_DIR=/var/data oppure monta un disco persistente su /var/data
+    // - Locale: usa .data nella cartella progetto
+const DEFAULT_DATA_DIR = fs.existsSync('/var/data') ? '/var/data' : path.join(__dirname, '.data');
+const DATA_DIR = process.env.DATA_DIR || DEFAULT_DATA_DIR;
 const DB_FILE = process.env.DB_FILE || path.join(DATA_DIR, 'cloud-db.json');
 
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+function emptyDb(){
+  return { users:{}, households:{}, tokens:{}, meta:{ createdAt:Date.now(), version:'V27.87 DB PERSISTENT' } };
+}
 function ensureDb(){
   fs.mkdirSync(DATA_DIR, { recursive: true });
   if(!fs.existsSync(DB_FILE)){
-    fs.writeFileSync(DB_FILE, JSON.stringify({ users:{}, households:{}, tokens:{} }, null, 2));
+    fs.writeFileSync(DB_FILE, JSON.stringify(emptyDb(), null, 2));
   }
 }
 function readDb(){
   ensureDb();
-  try { return JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); }
-  catch { return { users:{}, households:{}, tokens:{} }; }
+  try {
+    const db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+    db.users = db.users || {};
+    db.households = db.households || {};
+    db.tokens = db.tokens || {};
+    db.meta = db.meta || {};
+    return db;
+  } catch(err) {
+    try {
+      const backup = path.join(DATA_DIR, `cloud-db-corrupt-${Date.now()}.json`);
+      if(fs.existsSync(DB_FILE)) fs.copyFileSync(DB_FILE, backup);
+    } catch {}
+    const db = emptyDb();
+    writeDb(db);
+    return db;
+  }
 }
 function writeDb(db){
   ensureDb();
-  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+  db.meta = db.meta || {};
+  db.meta.updatedAt = Date.now();
+  db.meta.version = 'V27.87 DB PERSISTENT';
+  const tmp = `${DB_FILE}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
+  fs.renameSync(tmp, DB_FILE);
 }
 function id(prefix='id'){
   return `${prefix}_${crypto.randomBytes(8).toString('hex')}`;
@@ -69,7 +95,19 @@ function authPayload(db, user, householdId, rawToken){
 }
 
 app.get('/api/health', (req,res) => {
-  res.json({ ok:true, app:'Spesa Pronta', version:'V27.73 ALEXA SKILL READY', time:new Date().toISOString() });
+  const db = readDb();
+  res.json({
+    ok:true,
+    app:'Spesa Pronta',
+    version:'V27.87 DB PERSISTENT',
+    time:new Date().toISOString(),
+    db:{
+      persistent: DATA_DIR.includes('/var/data') || !!process.env.DATA_DIR || !!process.env.DB_FILE,
+      dataDir: DATA_DIR,
+      users:Object.keys(db.users||{}).length,
+      households:Object.keys(db.households||{}).length
+    }
+  });
 });
 
 app.post('/api/auth/register', (req,res) => {
@@ -126,6 +164,38 @@ app.post('/api/auth/login', (req,res) => {
   db.tokens[rawToken] = { email, householdId: user.householdId };
   writeDb(db);
   res.json(authPayload(db, user, user.householdId, rawToken));
+});
+
+
+
+app.post('/api/auth/delete-account', (req,res) => {
+  const db = readDb();
+  const authData = auth(req, db);
+  if(!authData) return res.status(401).json({ error:'unauthorized' });
+  if(String(req.body?.confirm || '').toUpperCase() !== 'ELIMINA'){
+    return res.status(400).json({ error:'missing_confirm_text' });
+  }
+  const email = authData.email;
+  const householdId = authData.householdId;
+  if(email) delete db.users[email];
+  if(householdId) delete db.households[householdId];
+  Object.keys(db.tokens || {}).forEach(t => {
+    if(db.tokens[t]?.email === email || db.tokens[t]?.householdId === householdId) delete db.tokens[t];
+  });
+  writeDb(db);
+  res.json({ ok:true, deleted:true });
+});
+
+app.post('/api/auth/logout', (req,res) => {
+  const db = readDb();
+  const raw = String(req.headers.authorization || '').replace(/^Bearer\s+/i,'').trim()
+    || String(req.body?.token || '').trim();
+  if(raw && db.tokens && db.tokens[raw]){
+    delete db.tokens[raw];
+    writeDb(db);
+  }
+  // Logout NON cancella mai utenti, household, lista, AI memory o impostazioni.
+  res.json({ ok:true, message:'logout_only_token_removed_profile_kept' });
 });
 
 // Compatibilità con il flusso verifica: in questo backend demo la verifica è già completata.
@@ -298,6 +368,15 @@ app.post('/api/alexa', (req,res) => {
   return res.json(alexaSpeech('Non ho capito. Puoi dire cosa devo comprare, oppure aggiungi acqua.'));
 });
 
+
+
+app.get('/api/export-db', (req,res) => {
+  const db = readDb();
+  const authData = auth(req, db);
+  if(!authData) return res.status(401).json({ error:'unauthorized' });
+  // Backup utile prima dei deploy: contiene utenti, household e dati cloud.
+  res.json({ ok:true, exportedAt:new Date().toISOString(), db });
+});
 
 app.use(express.static(PUBLIC_DIR, { maxAge: '0' }));
 app.get('*', (req,res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));

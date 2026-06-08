@@ -1001,6 +1001,7 @@ function bind(){
   $('#customProductForm').addEventListener('submit', addCustom);
   $('#loginForm')?.addEventListener('submit', login);
   $('#forgotPasswordBtn')?.addEventListener('click', forgotPassword);
+  $('#recoverLocalAccountBtn')?.addEventListener('click', () => recoverLastLocalAccount('button'));
   $('#resetCloseBtn')?.addEventListener('click', () => $('#resetDialog').close());
   $('#resetForm')?.addEventListener('submit', resetPassword);
   $('#verifyEmailForm')?.addEventListener('submit', verifyEmailSubmit);
@@ -1268,6 +1269,57 @@ function applyLastAccountToLogin(){
   if($('#regEmail') && !$('#regEmail').value) $('#regEmail').value=snap.email||'';
 }
 
+
+function recoverLastLocalAccount(reason='manual'){
+  const snap=loadLastAccountSnapshot();
+  if(!snap || !(snap.email || snap.username)){
+    toast('Nessun profilo locale da recuperare.');
+    return false;
+  }
+  const localUser={
+    id:snap.householdId || `local_${Date.now()}`,
+    firstName:snap.firstName||'',
+    lastName:snap.lastName||'',
+    username:snap.username || snap.email || 'utente',
+    email:snap.email || '',
+    householdId:snap.householdId || settings.householdId || `home_local_${Date.now()}`
+  };
+  session={mode:'registered', user:localUser, recoveryMode:true, recoveryReason:reason};
+  settings.profile={...(settings.profile||{}),firstName:localUser.firstName,lastName:localUser.lastName,username:localUser.username,email:localUser.email};
+  settings.apiEndpoint=snap.apiEndpoint || settings.apiEndpoint || '/api';
+  settings.householdId=snap.householdId || settings.householdId || localUser.householdId;
+  settings.cloudEnabled=!!settings.householdId;
+  if(!settings.token) settings.token=`local_recovery_${Math.random().toString(36).slice(2,18)}`;
+  try{
+    const cloudKeyPrefix='spesa-pronta-local-cloud:';
+    let newest=null;
+    for(let i=0;i<localStorage.length;i++){
+      const k=localStorage.key(i);
+      if(k && k.startsWith(cloudKeyPrefix)){
+        const data=JSON.parse(localStorage.getItem(k)||'null');
+        if(data && (!newest || Number(data.savedAt||0)>Number(newest.savedAt||0))) newest=data;
+      }
+    }
+    if(newest?.payload?.items?.length) state=migrateItems(newest.payload.items);
+    if(newest?.payload?.aiMemory) aiMemory=Object.assign(aiMemory,newest.payload.aiMemory);
+  }catch{}
+  saveAiMemory(); saveAll(); render(); showView(initialView());
+  toast('Profilo locale recuperato ✅');
+  return true;
+}
+
+function logoutOnlyAccountState(){
+  const snap=saveLastAccountSnapshot();
+  session={mode:'guest', user:null, lastLogoutAt:Date.now()};
+  settings.profile={...(settings.profile||{}),firstName:snap.firstName||'',lastName:snap.lastName||'',username:snap.username||'',email:snap.email||''};
+  settings.apiEndpoint=settings.apiEndpoint || snap.apiEndpoint || '/api';
+  // NON svuotare state/aiMemory: disconnessione non significa cancellazione dati.
+  saveAll();
+  render();
+  applyLastAccountToLogin();
+  showView('registration');
+}
+
 function resetLocalAccountState(){
   const snap=saveLastAccountSnapshot();
   const lang=settings.lang || 'it';
@@ -1295,9 +1347,19 @@ function resetLocalAccountState(){
   applyLastAccountToLogin();
   showView('registration');
 }
-function performLogoutAccount(){
-  resetLocalAccountState();
-  showAccountNotice('Disconnessione completata', 'Account salvato: inserisci la password per rientrare. Non hai eliminato il profilo.', 'success');
+async function performLogoutAccount(){
+  try{
+    if(settings.token){
+      await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/auth/logout`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token}`},
+        body:JSON.stringify({token:settings.token})
+      });
+    }
+  }catch{}
+  // IMPORTANTE: logout locale, non cancellazione DB.
+  logoutOnlyAccountState();
+  showAccountNotice('Disconnessione completata', 'Profilo e database restano salvati. Hai solo scollegato questo dispositivo.', 'success');
 }
 function requestDeleteAccount(){
   if(!session.user){ showAccountNotice('Nessun account da eliminare', 'Non risulta un account cloud attivo su questo dispositivo.', 'info'); showView('registration'); return; }
@@ -1321,7 +1383,7 @@ async function performDeleteAccount(){
     const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/auth/delete-account`,{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token}`},
-      body:JSON.stringify({householdId:settings.householdId, token:settings.token, email:session.user?.email || settings.profile?.email || ''})
+      body:JSON.stringify({householdId:settings.householdId, token:settings.token, email:session.user?.email || settings.profile?.email || '', confirm:'ELIMINA'})
     });
     const data=await res.json().catch(()=>({}));
     if(!res.ok || !data.ok) throw new Error(data.error||'delete_failed');
@@ -1573,6 +1635,11 @@ async function login(e){
       if(data.error==='email_not_verified'){ session={mode:'pending-verification',user:null,pendingVerifyEmail:data.email||email,pendingVerifyPhone:!!data.requiresPhoneVerification,phoneMasked:data.phoneMasked||''}; saveAll(); render(); toast(t('emailNotVerified')); showView('verify-email'); return; }
       if(data.error==='phone_not_verified'){ session={mode:'pending-verification',user:null,pendingVerifyEmail:data.email||email,pendingVerifyPhone:true,phoneMasked:data.phoneMasked||''}; saveAll(); render(); setPhoneVerificationVisible(true); toast(t('phoneNotVerified')); showView('verify-email'); return; }
     }catch{}
+    if(loadLastAccountSnapshot()?.email && loadLastAccountSnapshot().email.toLowerCase()===String(email).toLowerCase()){
+      showAccountNotice('Accesso cloud non riuscito', 'Il server non ha riconosciuto le credenziali. Puoi recuperare il profilo locale salvato su questo dispositivo.', 'warning');
+      applyLastAccountToLogin();
+      return;
+    }
     toast(err?.data?.error==='invalid_credentials' ? 'Accesso non riuscito: controlla email e password.' : 'Accesso non riuscito: riprova tra poco.');
   }
 }
