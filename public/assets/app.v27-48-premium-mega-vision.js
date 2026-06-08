@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v27.47-blank-page-fixed';
+window.SPESA_PRONTA_VERSION='v27.67-product-memory-brain';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -177,8 +177,8 @@ let accountPendingAction = null;
 function loadState(){ try { const x=JSON.parse(localStorage.getItem(STORAGE_KEY)); return Array.isArray(x) ? migrateItems(x) : []; } catch { return []; } }
 function loadSettings(){ try { return Object.assign(defaultSettings(), JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}')); } catch { return defaultSettings(); } }
 function loadSession(){ try { return Object.assign({mode:'guest', user:null}, JSON.parse(localStorage.getItem(SESSION_KEY)||'{}')); } catch { return {mode:'guest', user:null}; } }
-function defaultAiMemory(){ return {messages:[], facts:[], events:[], scanHistory:[], learnedProducts:[], visionBrain:{version:48,coreVersion:48,samples:[],candidateSamples:[],productStats:{},productModels:{},corrections:0,totalScans:0,autonomousHits:0,localFirstDecisions:0,cloudTeacherCalls:0,autonomyLevel:0,lastTrainedAt:0,serverSyncs:0,serverLastSyncAt:0}, voiceProfile:{version:48,heard:[],corrections:[],intentPhrases:{},fieldPhrases:{},productAliases:{},speakerStyle:{shortCommands:0,corrections:0,italianSlang:0},updatedAt:0,serverSyncs:0}, pendingVerification:false, lastGreetingDate:'', summary:'', lastInsights:{}, consumptionProfile:{version:27, learnedItems:{}, lastAnalysisAt:0}, seedMemory:{version:'',loaded:false,products:0,categories:0,lastLoadedAt:0}, personality:{warmth:1}}; }
-function loadAiMemory(){ try { const mem=Object.assign(defaultAiMemory(), JSON.parse(localStorage.getItem(AI_MEMORY_KEY)||'{}')); mem.visionBrain=Object.assign(defaultAiMemory().visionBrain, mem.visionBrain||{}); mem.visionBrain.samples=Array.isArray(mem.visionBrain.samples)?mem.visionBrain.samples:[]; mem.visionBrain.productStats=mem.visionBrain.productStats||{}; mem.visionBrain.productModels=mem.visionBrain.productModels||{}; mem.visionBrain.candidateSamples=Array.isArray(mem.visionBrain.candidateSamples)?mem.visionBrain.candidateSamples:[]; mem.voiceProfile=Object.assign(defaultAiMemory().voiceProfile, mem.voiceProfile||{}); mem.voiceProfile.heard=Array.isArray(mem.voiceProfile.heard)?mem.voiceProfile.heard:[]; mem.voiceProfile.corrections=Array.isArray(mem.voiceProfile.corrections)?mem.voiceProfile.corrections:[]; mem.voiceProfile.intentPhrases=mem.voiceProfile.intentPhrases||{}; mem.voiceProfile.fieldPhrases=mem.voiceProfile.fieldPhrases||{}; mem.voiceProfile.productAliases=mem.voiceProfile.productAliases||{}; mem.voiceProfile.speakerStyle=Object.assign(defaultAiMemory().voiceProfile.speakerStyle, mem.voiceProfile.speakerStyle||{}); return mem; } catch { return defaultAiMemory(); } }
+function defaultAiMemory(){ return {messages:[], facts:[], events:[], scanHistory:[], learnedProducts:[], productDeepMemory:[], productMemoryIndex:{}, visionBrain:{version:48,coreVersion:48,samples:[],candidateSamples:[],productStats:{},productModels:{},corrections:0,totalScans:0,autonomousHits:0,localFirstDecisions:0,cloudTeacherCalls:0,autonomyLevel:0,lastTrainedAt:0,serverSyncs:0,serverLastSyncAt:0}, voiceProfile:{version:48,heard:[],corrections:[],intentPhrases:{},fieldPhrases:{},productAliases:{},speakerStyle:{shortCommands:0,corrections:0,italianSlang:0},updatedAt:0,serverSyncs:0}, pendingVerification:false, lastGreetingDate:'', summary:'', lastInsights:{}, consumptionProfile:{version:27, learnedItems:{}, lastAnalysisAt:0}, seedMemory:{version:'',loaded:false,products:0,categories:0,lastLoadedAt:0}, personality:{warmth:1}}; }
+function loadAiMemory(){ try { const mem=Object.assign(defaultAiMemory(), JSON.parse(localStorage.getItem(AI_MEMORY_KEY)||'{}')); mem.productDeepMemory=Array.isArray(mem.productDeepMemory)?mem.productDeepMemory:[]; mem.productMemoryIndex=mem.productMemoryIndex||{}; mem.visionBrain=Object.assign(defaultAiMemory().visionBrain, mem.visionBrain||{}); mem.visionBrain.samples=Array.isArray(mem.visionBrain.samples)?mem.visionBrain.samples:[]; mem.visionBrain.productStats=mem.visionBrain.productStats||{}; mem.visionBrain.productModels=mem.visionBrain.productModels||{}; mem.visionBrain.candidateSamples=Array.isArray(mem.visionBrain.candidateSamples)?mem.visionBrain.candidateSamples:[]; mem.voiceProfile=Object.assign(defaultAiMemory().voiceProfile, mem.voiceProfile||{}); mem.voiceProfile.heard=Array.isArray(mem.voiceProfile.heard)?mem.voiceProfile.heard:[]; mem.voiceProfile.corrections=Array.isArray(mem.voiceProfile.corrections)?mem.voiceProfile.corrections:[]; mem.voiceProfile.intentPhrases=mem.voiceProfile.intentPhrases||{}; mem.voiceProfile.fieldPhrases=mem.voiceProfile.fieldPhrases||{}; mem.voiceProfile.productAliases=mem.voiceProfile.productAliases||{}; mem.voiceProfile.speakerStyle=Object.assign(defaultAiMemory().voiceProfile.speakerStyle, mem.voiceProfile.speakerStyle||{}); return mem; } catch { return defaultAiMemory(); } }
 function saveAiMemory(){ localStorage.setItem(AI_MEMORY_KEY, JSON.stringify(aiMemory)); }
 function defaultSettings(){ return {lang:'it', cloudEnabled:false, apiEndpoint:'/api', token:'', householdId:'', people:2, animals:0, autoSmart:true, alexaConnected:false, googleAssistantConnected:false, inventorySetupDone:false, inventoryStatus:'required', inventoryUpdatedAt:null, profile:{firstName:'',lastName:'',username:'',email:''}}; }
 function migrateItems(items){ return items.map(x => ({...createItem(x.id||cryptoId(), x.image||'assets/illustrations/generic-item.png', x.category||'food', x.names||{it:x.name||x.id,en:x.name||x.id,es:x.name||x.id,de:x.name||x.id}, x.qty??1, x.maxQty??6, x.baseThreshold??2, x.unitOptions||['pz','pc','lt','kg'], {custom:x.custom, usage:x.usage||0, kind:x.kind, perPersonMin:x.perPersonMin, perAnimalMin:x.perAnimalMin, recommendedBuy:x.recommendedBuy}), ...x})); }
@@ -1719,6 +1719,7 @@ function speakCurrentScanSummary(el,result={}){
 function getNextScanMicStep(el, result={}){
   const state=getScanFormState(el,result);
   if(!state.name || /^nome prodotto$/i.test(state.name) || /^es\./i.test(state.name) || (!el.dataset.voiceNameDone && Number(result.confidence||0)<0.45)) return 'name';
+  if((!state.brand && !el.dataset.voiceBrandDone && Number(result.confidence||0)<0.92) || (result.labelScanMerged && !state.brand && !el.dataset.voiceBrandDone)) return 'brand';
   if(isBottleLike(result,state) && !state.size && !el.dataset.voiceSizeDone) return 'size';
   if(!(state.qty>0)) return 'qty';
   if(result.isDamaged && !el.dataset.voiceDamageDone) return 'damage';
@@ -1987,7 +1988,7 @@ async function askBackendAi(message){
   });
   if(!res.ok) return null;
   const data=await res.json();
-  if(data.memory){ const localBrain=aiMemory.visionBrain; aiMemory=Object.assign(aiMemory,data.memory); aiMemory.learnedProducts=Array.isArray(aiMemory.learnedProducts)?aiMemory.learnedProducts:[]; aiMemory.visionBrain=Object.assign(defaultAiMemory().visionBrain, aiMemory.visionBrain||{}, localBrain||{}); saveAiMemory(); }
+  if(data.memory){ const localBrain=aiMemory.visionBrain; aiMemory=Object.assign(aiMemory,data.memory); aiMemory.learnedProducts=Array.isArray(aiMemory.learnedProducts)?aiMemory.learnedProducts:[]; aiMemory.productDeepMemory=Array.isArray(aiMemory.productDeepMemory)?aiMemory.productDeepMemory:[]; aiMemory.productMemoryIndex=aiMemory.productMemoryIndex||{}; aiMemory.visionBrain=Object.assign(defaultAiMemory().visionBrain, aiMemory.visionBrain||{}, localBrain||{}); saveAiMemory(); }
   return data.reply || null;
 }
 
@@ -2014,29 +2015,54 @@ function getLiveLabelTarget(){
   const el=getActiveScannerResult?.();
   return el && !el.classList.contains('confirmed') && !el.classList.contains('bad') && el.dataset.liveLabelTarget==='1' ? el : null;
 }
+function getLiveFollowupStep(el){
+  const step=String(el?.dataset?.liveFollowupStep||'').trim().toLowerCase();
+  return step==='expiry' ? 'expiry' : 'label';
+}
+function liveFollowupNeedsExpiry(el,result={}){
+  if(!el) return false;
+  const s=getScanFormState(el,result||el._scanResult||{});
+  return !s.expiry && el.dataset.voiceExpiryDone!=='1';
+}
+function setLiveFollowupHud(step='label'){
+  const main=$('#liveScanMainPill'), auto=$('#liveScanAutoPill'), guides=$('#liveScanGuides');
+  const isExpiry=step==='expiry';
+  if(main){ main.textContent=isExpiry?'Ora cerca la scadenza':'Prima inquadra l’etichetta'; main.className='live-scan-pill next'; }
+  if(auto){ auto.textContent=isExpiry?'Quando la trovi premi SCATTA ORA':'Hai tempo: premi SCATTA ORA quando è leggibile'; auto.className='live-scan-pill next'; }
+  if(guides) guides.className='live-scan-guides ready';
+}
+function liveFollowupInstruction(step='label'){
+  return step==='expiry'
+    ? 'Etichetta acquisita. Ora cerca con calma la data di scadenza: quando la vedi bene, premi SCATTA ORA.'
+    : 'Prodotto riconosciuto. Prima mostrami bene l’etichetta frontale con nome, marca e formato. Prenditi tempo: premi SCATTA ORA solo quando è leggibile.';
+}
 function shouldAskLiveLabelFrame(el,result={}){
   if(!liveScanActive || !el || result.needsRetake) return false;
   const s=getScanFormState(el,result);
   const needExpiry = !s.expiry && !el.dataset.voiceExpiryDone;
   const needSize = isBottleLike(result,s) && (!s.size || /da confermare|capienza da confermare|1,5 l \/ 2 l/i.test(String(s.size||''))) && !el.dataset.voiceSizeDone;
   const needBrand = !s.brand && !result.brand && Number(result.confidence||0)<0.88;
-  return !!(needExpiry || needSize || needBrand);
+  const needReadableLabel = needBrand || needSize || !result.labelScanMerged;
+  return !!(needReadableLabel || needExpiry);
 }
 function enterLiveLabelFollowup(el,result={}){
   if(!el) return;
   el.dataset.liveLabelTarget='1';
+  el.dataset.liveFollowupStep='label';
   liveScanPendingResult=true;
   liveScanAwaitNextOk=false;
   liveScanReadySince=0;
   liveScanStableCount=0;
-  liveScanCooldownUntil=Date.now()+900;
+  // Più tempo: non faccio countdown automatico su etichetta/scadenza, aspetto lo scatto manuale dell’utente.
+  liveScanCooldownUntil=Date.now()+2600;
   setActiveScannerResult(el);
-  setScanVoiceHelper(el,'Prodotto riconosciuto. Ora inquadra bene l’etichetta o la zona scadenza e premi SCATTA ORA. La aggiorno nella stessa scheda, non creo un nuovo prodotto.','live');
-  setScannerStatus('Prodotto riconosciuto: ora inquadra l’etichetta/scadenza e premi SCATTA ORA. Non ti richiedo di rifare il prodotto.', voiceLine('label_followup',['Prodotto riconosciuto. Ora fammi vedere l etichetta o la scadenza e premi scatta ora.','Perfetto. Adesso inquadra bene etichetta e scadenza, poi premi scatta ora.']), true);
-  const main=$('#liveScanMainPill'), auto=$('#liveScanAutoPill'), guides=$('#liveScanGuides');
-  if(main){ main.textContent='Inquadra etichetta'; main.className='live-scan-pill next'; }
-  if(auto){ auto.textContent='Premi SCATTA ORA'; auto.className='live-scan-pill next'; }
-  if(guides) guides.className='live-scan-guides ready';
+  const instruction=liveFollowupInstruction('label');
+  setScanVoiceHelper(el,instruction,'live');
+  setScannerStatus(instruction, voiceLine('label_followup',[
+    'Prodotto riconosciuto. Prima fammi vedere bene l etichetta frontale. Prenditi tempo e premi scatta ora solo quando è leggibile.',
+    'Perfetto. Ora cerca l etichetta con nome marca e formato. Non scatto da solo: premi scatta ora quando la vedi bene.'
+  ]), true);
+  setLiveFollowupHud('label');
 }
 function mergeLabelVisionIntoResultCard(el,base={},extra={},dataUrl=''){
   if(!el) return;
@@ -2064,18 +2090,24 @@ function mergeLabelVisionIntoResultCard(el,base={},extra={},dataUrl=''){
   base.expiryDate = el.querySelector('[data-scan-expiry]')?.value?.trim() || base.expiryDate || expiry || '';
   base.detectedText=[...(base.detectedText||[]), ...(extra.detectedText||[])].filter(Boolean).slice(-18);
   base.visibleEvidence=[...(base.visibleEvidence||[]), ...(extra.visibleEvidence||[])].filter(Boolean).slice(-18);
+  base.ingredients=mergeUniqueList(base.ingredients||[], extra.ingredients||[], 50);
+  base.allergens=mergeUniqueList(base.allergens||[], extra.allergens||[], 35);
+  base.possibleAllergens=mergeUniqueList(base.possibleAllergens||[], extra.possibleAllergens||[], 25);
+  base.colors=mergeUniqueList(base.colors||base.dominantColors||[], extra.colors||extra.dominantColors||[], 14);
+  base.nutrition=Object.assign({}, base.nutrition||{}, extra.nutrition||{});
+  base.ingredientsVerified=!!(base.ingredientsVerified || extra.ingredientsVerified || (extra.ingredients||[]).length);
   base.labelDataUrl=dataUrl || base.labelDataUrl || '';
   base.labelScanMerged=true;
   el._scanResult=base;
-  el.dataset.liveLabelTarget='0';
   refreshScanResultCard(el,base);
 }
 async function analyzeLabelFrameForActiveResult(dataUrl, el, visualSignature=''){
   if(!el) return false;
   const base=el._scanResult || {};
+  const step=getLiveFollowupStep(el);
   const liveStage=$('#scannerPreview')?.querySelector('.live-scan-stage');
-  if(liveStage) liveStage.insertAdjacentHTML('beforeend', `<div class="live-scan-pill scanning-preview" style="position:absolute;top:18px;right:18px;z-index:3">Lettura etichetta…</div>`);
-  setScannerStatus('Sto leggendo etichetta, formato e scadenza sulla stessa scheda prodotto...', voiceLine('label_scan',['Ok, leggo l etichetta e aggiorno la stessa scheda.','Perfetto, controllo etichetta, formato e scadenza senza creare un altro prodotto.']), true);
+  if(liveStage) liveStage.insertAdjacentHTML('beforeend', `<div class="live-scan-pill scanning-preview" style="position:absolute;top:18px;right:18px;z-index:3">${step==='expiry'?'Lettura scadenza…':'Lettura etichetta…'}</div>`);
+  setScannerStatus(step==='expiry' ? 'Sto leggendo solo la scadenza sulla stessa scheda prodotto...' : 'Sto leggendo prima etichetta, marca e formato sulla stessa scheda prodotto...', step==='expiry' ? voiceLine('expiry_scan',['Ok, controllo la data di scadenza e aggiorno la stessa scheda.','Perfetto, provo a leggere la scadenza senza creare un altro prodotto.']) : voiceLine('label_scan',['Ok, leggo l etichetta e aggiorno la stessa scheda.','Perfetto, controllo etichetta marca e formato senza creare un altro prodotto.']), true);
   let extra=null, err=null;
   try{ extra=await askVisionAi(dataUrl); }
   catch(e){ err=e; extra=null; }
@@ -2087,19 +2119,39 @@ async function analyzeLabelFrameForActiveResult(dataUrl, el, visualSignature='')
   document.querySelector('.scanning-preview')?.remove();
   if(!extra || extra.needsRetake){
     el.dataset.liveLabelTarget='1';
+    el.dataset.liveFollowupStep=step;
     liveScanPendingResult=true;
-    liveScanCooldownUntil=Date.now()+1000;
-    setScanVoiceHelper(el,'Non ho letto bene l’etichetta. Avvicina solo la zona scadenza/formato e premi di nuovo SCATTA ORA, oppure compila a voce/manuale.','warn');
-    setScannerStatus('Etichetta non abbastanza leggibile: avvicina la zona scadenza/formato e premi SCATTA ORA, oppure compila a voce/manuale.', voiceLine('label_retry',['Non ho letto bene l etichetta. Avvicinala e premi scatta ora, oppure dimmela a voce.']), true);
+    liveScanCooldownUntil=Date.now()+3200;
+    const msg=step==='expiry'
+      ? 'Non ho letto bene la scadenza. Prenditi tempo, avvicina solo la data e premi di nuovo SCATTA ORA, oppure dimmela a voce/manuale.'
+      : 'Non ho letto bene l’etichetta. Prenditi tempo, mostra frontale nome/marca/formato e premi di nuovo SCATTA ORA, oppure compila a voce/manuale.';
+    setScanVoiceHelper(el,msg,'warn');
+    setScannerStatus(msg, step==='expiry' ? voiceLine('expiry_retry',['Non ho letto bene la scadenza. Avvicina la data e premi scatta ora quando è chiara, oppure dimmela a voce.']) : voiceLine('label_retry',['Non ho letto bene l etichetta. Avvicinala con calma e premi scatta ora quando è leggibile, oppure dimmela a voce.']), true);
+    setLiveFollowupHud(step);
     return true;
   }
   mergeLabelVisionIntoResultCard(el,base,extra,dataUrl);
   liveScanPendingResult=true;
   liveScanAwaitNextOk=false;
-  liveScanCooldownUntil=Date.now()+1200;
-  setScanVoiceHelper(el,'Etichetta letta e scheda aggiornata. Controlla i dati e conferma, oppure correggi a voce/manuale.','live');
-  setScannerStatus('Etichetta acquisita: ho aggiornato la stessa scheda. Ora controlla e conferma il prodotto.', voiceLine('label_done',['Etichetta acquisita. Ho aggiornato la scheda, ora puoi controllare e confermare.']), true);
-  setTimeout(()=>promptScannerConversation(el, el._scanResult||base, true), 450);
+  liveScanCooldownUntil=Date.now()+2600;
+  const updated=el._scanResult||base;
+  if(step==='label' && liveFollowupNeedsExpiry(el,updated)){
+    el.dataset.liveLabelTarget='1';
+    el.dataset.liveFollowupStep='expiry';
+    const msg=liveFollowupInstruction('expiry');
+    setScanVoiceHelper(el,msg,'live');
+    setScannerStatus(msg, voiceLine('expiry_followup',[
+      'Etichetta acquisita. Ora cerca con calma la scadenza e premi scatta ora quando la vedi bene.',
+      'Perfetto, prima etichetta fatta. Adesso mostrami la data di scadenza: hai tempo, premi scatta ora quando è leggibile.'
+    ]), true);
+    setLiveFollowupHud('expiry');
+    return true;
+  }
+  el.dataset.liveLabelTarget='0';
+  el.dataset.liveFollowupStep='done';
+  setScanVoiceHelper(el, step==='expiry' ? 'Scadenza letta e scheda aggiornata. Controlla i dati e conferma, oppure correggi a voce/manuale.' : 'Etichetta letta e scheda aggiornata. Controlla i dati e conferma, oppure correggi a voce/manuale.','live');
+  setScannerStatus(step==='expiry' ? 'Scadenza acquisita: ho aggiornato la stessa scheda. Ora controlla e conferma il prodotto.' : 'Etichetta acquisita: ho aggiornato la stessa scheda. Ora controlla e conferma il prodotto.', step==='expiry' ? voiceLine('expiry_done',['Scadenza acquisita. Ho aggiornato la scheda, ora puoi controllare e confermare.']) : voiceLine('label_done',['Etichetta acquisita. Ho aggiornato la scheda, ora puoi controllare e confermare.']), true);
+  setTimeout(()=>promptScannerConversation(el, el._scanResult||base, true), 650);
   return true;
 }
 
@@ -2397,9 +2449,9 @@ async function runLiveScanLoop(){
     liveScanPendingResult=true;
     liveScanReadySince=0; liveScanStableCount=0;
     if(labelTarget){
-      if(main){ main.textContent='Inquadra etichetta'; main.className='live-scan-pill next'; }
-      if(auto){ auto.textContent='Premi SCATTA ORA'; auto.className='live-scan-pill next'; }
-      if(liveScanLastHint!=='wait_label'){ liveScanLastHint='wait_label'; }
+      const step=getLiveFollowupStep(labelTarget);
+      setLiveFollowupHud(step);
+      if(liveScanLastHint!==(step==='expiry'?'wait_expiry':'wait_label')){ liveScanLastHint=step==='expiry'?'wait_expiry':'wait_label'; }
     }else{
       if(main){ main.textContent='Scansione completata'; main.className='live-scan-pill pause'; }
       if(auto){ auto.textContent='Conferma la scheda per continuare'; auto.className='live-scan-pill pause'; }
@@ -2546,9 +2598,10 @@ async function captureLiveFrame(manual=false){
     return;
   }
   const raw=c.toDataURL('image/jpeg',0.92);
-  setScannerStatus(manual ? 'Sto analizzando lo scatto manuale...' : 'Prodotto centrato: scatto automatico in corso, sto leggendo marca, scadenza, quantità e stato.', manual ? voiceLine('manual_scan',['Sto analizzando la foto.','Perfetto, controllo subito lo scatto.']) : voiceLine('auto_scan',['Perfetto. Ho scattato. Ora analizzo il prodotto.','Scatto eseguito. Sto leggendo etichetta, marca e dettagli del prodotto.']), true);
   const compressed=await compressImage(raw,1280,0.9).catch(()=>raw);
   const labelTarget = manual && liveScanActive ? getLiveLabelTarget() : null;
+  const followStep = labelTarget ? getLiveFollowupStep(labelTarget) : '';
+  setScannerStatus(labelTarget ? (followStep==='expiry' ? 'Sto analizzando lo scatto della scadenza...' : 'Sto analizzando lo scatto dell’etichetta...') : (manual ? 'Sto analizzando lo scatto manuale...' : 'Prodotto centrato: scatto automatico in corso, sto leggendo marca, quantità e stato.'), labelTarget ? (followStep==='expiry' ? voiceLine('manual_expiry_scan',['Perfetto, controllo la data di scadenza.','Ok, provo a leggere la scadenza.']) : voiceLine('manual_label_scan',['Perfetto, controllo l etichetta.','Ok, provo a leggere nome, marca e formato.'])) : (manual ? voiceLine('manual_scan',['Sto analizzando la foto.','Perfetto, controllo subito lo scatto.']) : voiceLine('auto_scan',['Perfetto. Ho scattato. Ora analizzo il prodotto.','Scatto eseguito. Sto leggendo etichetta, marca e dettagli del prodotto.'])), true);
   if(!labelTarget && liveScanActive){
     const gate=await classifyConsumableCandidateDataUrl(compressed, null, true).catch(()=>({eligible:true}));
     if(!gate.eligible){
@@ -2562,7 +2615,7 @@ async function captureLiveFrame(manual=false){
   if(labelTarget) await analyzeLabelFrameForActiveResult(compressed, labelTarget, scanSig);
   else await analyzeGroceryDataUrl(compressed, manual?'manual-live.jpg':'auto-live.jpg', scanSig);
   liveScanBusy=false; liveScanStableCount=0; liveScanReadySince=0;
-  liveScanCooldownUntil = Date.now() + (manual ? 2800 : 3600);
+  liveScanCooldownUntil = Date.now() + (labelTarget ? 4200 : (manual ? 3200 : 4200));
   if(liveScanActive && !liveScanPendingResult) queueLiveScanLoop();
 }
 
@@ -2981,6 +3034,114 @@ function getStatsForProduct(name='',brand='',variant=''){
   return b.productStats[k];
 }
 function topKey(obj={}){ return Object.entries(obj||{}).sort((a,b)=>Number(b[1])-Number(a[1]))[0]?.[0]||''; }
+
+function mergeUniqueList(a=[], b=[], limit=20){
+  const out=[]; const seen=new Set();
+  [...(Array.isArray(a)?a:[]), ...(Array.isArray(b)?b:[])].forEach(v=>{
+    const s=String(v||'').trim(); if(!s) return; const k=normalizeLearnText(s); if(!k || seen.has(k)) return; seen.add(k); out.push(s.slice(0,90));
+  });
+  return out.slice(0,limit);
+}
+function normalizeMemoryList(v){
+  if(Array.isArray(v)) return v.map(x=>String(x||'').trim()).filter(Boolean);
+  return String(v||'').split(/[;,\n·]+/).map(x=>x.trim()).filter(Boolean);
+}
+function dominantColorsFromFeatures(features={}){
+  const a=features.all||features.center||{}; const l=features.label||{}; const found=[];
+  if(Number(a.green||0)>.055 || Number(l.green||0)>.055) found.push('verde');
+  if(Number(a.red||0)>.055 || Number(l.red||0)>.055) found.push('rosso');
+  if(Number(a.blue||0)>.055 || Number(l.blue||0)>.055) found.push('blu');
+  if(Number(a.white||0)>.18 || Number(l.white||0)>.18) found.push('bianco/chiaro');
+  if(Number(a.dark||0)>.22 || Number(l.dark||0)>.20) found.push('nero/scuro');
+  if(Number(a.clear||0)>.20) found.push('trasparente/chiaro');
+  return found.slice(0,6);
+}
+function inferIngredientsFromName(name='', category=''){
+  const n=normalizeLearnText(name); const out=[]; const allergens=[]; const notes=[];
+  if(/pesto/.test(n)){ out.push('olio','sale'); notes.push('ingredienti da verificare su etichetta/web'); }
+  if(/pistacch/.test(n)){ out.push('pistacchio'); allergens.push('frutta a guscio'); }
+  if(/nocciol/.test(n)){ out.push('nocciola'); allergens.push('frutta a guscio'); }
+  if(/mandorl/.test(n)){ out.push('mandorla'); allergens.push('frutta a guscio'); }
+  if(/latte|formagg|parmigian|pecorin|yogurt|mozzarella/.test(n)){ allergens.push('latte'); }
+  if(/pasta|pane|biscott|farina/.test(n)){ allergens.push('glutine'); }
+  if(/uov/.test(n)){ allergens.push('uova'); }
+  if(/soia/.test(n)){ allergens.push('soia'); }
+  return {ingredients:out, allergens, notes};
+}
+function productMemoryKey(name='', brand='', size=''){
+  return [normalizeLearnText(name), normalizeLearnText(brand), normalizeLearnText(size)].filter(Boolean).join('|') || normalizeLearnText(name);
+}
+function buildInternalProductMemory(result={}, confirmed={}){
+  const name=String(confirmed.productName||result.productName||'').trim();
+  const brand=String(confirmed.brand||result.brand||'').trim();
+  const size=String(confirmed.size||result.estimatedSize||'').trim();
+  const category=String(confirmed.category||result.category||'food').trim();
+  const inferred=inferIngredientsFromName(name+' '+(result.variant||''), category);
+  const ingredients=mergeUniqueList(normalizeMemoryList(result.ingredients), inferred.ingredients, 50);
+  const allergens=mergeUniqueList(normalizeMemoryList(result.allergens), inferred.allergens, 35);
+  const colors=mergeUniqueList(normalizeMemoryList(result.colors||result.dominantColors), dominantColorsFromFeatures(result.visualFeatures||{}), 14);
+  const sources=[];
+  if(result.detectedText?.length) sources.push('etichetta/OCR');
+  if(result.cloudVision) sources.push('OpenAI docente');
+  if(result.localVision || result.autonomousVision || result.memoryVision) sources.push('visione locale/memoria');
+  if(confirmed.confirmedAt || confirmed.userConfirmed) sources.push('conferma utente');
+  if(inferred.notes.length) sources.push('inferenza prudente da nome prodotto');
+  const confidence = result.cloudVision && result.detectedText?.length ? 'alta' : (result.cloudVision || result.memoryVision || result.autonomousVision ? 'media' : 'bassa');
+  return {
+    version:1,
+    key:productMemoryKey(name,brand,size),
+    productName:name,
+    brand,
+    variant:String(result.variant||'').trim(),
+    category,
+    ingredients,
+    allergens,
+    possibleAllergens: mergeUniqueList(normalizeMemoryList(result.possibleAllergens), [], 20),
+    nutrition: Object.assign({}, result.nutrition||{}),
+    packageType:String(result.packageType||'').trim(),
+    productType:String(result.productType||'').trim(),
+    visualAppearance:{
+      packageType:String(result.packageType||'').trim(),
+      colors,
+      visualHints:mergeUniqueList(result.visibleEvidence||[], [], 18),
+      signature:result.visualSignature||'',
+      features:result.visualFeatures||null
+    },
+    format:size,
+    unit:String(confirmed.unit||result.unit||'pz').trim(),
+    expiryDate:String(confirmed.expiryDate||result.expiryDate||'').trim(),
+    source:mergeUniqueList(result.memorySources||result.sources||[], sources, 16),
+    confidence,
+    confidenceRaw:result.confidence||null,
+    needsIngredientVerification: ingredients.length===0 || !result.ingredientsVerified,
+    needsWebVerification: ingredients.length===0 || allergens.length===0,
+    internalOnly:true,
+    userConfirmed:!!(confirmed.userConfirmed||confirmed.confirmedAt),
+    updatedAt:Date.now()
+  };
+}
+function rememberInternalProductMemory(record={}){
+  if(!record.productName || isBadScanName(record.productName)) return null;
+  aiMemory.productDeepMemory=Array.isArray(aiMemory.productDeepMemory)?aiMemory.productDeepMemory:[];
+  aiMemory.productMemoryIndex=aiMemory.productMemoryIndex||{};
+  const key=record.key||productMemoryKey(record.productName,record.brand,record.format);
+  const idx=aiMemory.productDeepMemory.findIndex(x=>x.key===key);
+  const old=idx>=0?aiMemory.productDeepMemory[idx]:{};
+  const merged=Object.assign({}, old, record, {
+    key,
+    ingredients:mergeUniqueList(old.ingredients||[], record.ingredients||[], 60),
+    allergens:mergeUniqueList(old.allergens||[], record.allergens||[], 40),
+    possibleAllergens:mergeUniqueList(old.possibleAllergens||[], record.possibleAllergens||[], 30),
+    source:mergeUniqueList(old.source||[], record.source||[], 20),
+    visualAppearance:Object.assign({}, old.visualAppearance||{}, record.visualAppearance||{}, {colors:mergeUniqueList(old.visualAppearance?.colors||[], record.visualAppearance?.colors||[], 16), visualHints:mergeUniqueList(old.visualAppearance?.visualHints||[], record.visualAppearance?.visualHints||[], 24)}),
+    seenCount:Number(old.seenCount||0)+1,
+    updatedAt:Date.now()
+  });
+  if(idx>=0) aiMemory.productDeepMemory[idx]=merged; else aiMemory.productDeepMemory.unshift(merged);
+  aiMemory.productDeepMemory=aiMemory.productDeepMemory.slice(0,1200);
+  aiMemory.productMemoryIndex[key]={productName:merged.productName,brand:merged.brand,format:merged.format,category:merged.category,updatedAt:merged.updatedAt,allergens:merged.allergens||[],needsWebVerification:!!merged.needsWebVerification};
+  return merged;
+}
 function learnVisionStat(stats, field, value){ if(!value) return; stats[field]=stats[field]||{}; const v=String(value).trim(); stats[field][v]=Number(stats[field][v]||0)+1; }
 async function rememberVisionSampleFromScan(dataUrl='', result={}, confirmed={}){
   const b=ensureVisionBrain();
@@ -3132,7 +3293,7 @@ async function askVisionAi(dataUrl){
     e.userSilent=true;
     throw e;
   }
-  if(data.memory){ const localBrain=aiMemory.visionBrain; aiMemory=Object.assign(aiMemory,data.memory); aiMemory.learnedProducts=Array.isArray(aiMemory.learnedProducts)?aiMemory.learnedProducts:[]; aiMemory.visionBrain=Object.assign(defaultAiMemory().visionBrain, aiMemory.visionBrain||{}, localBrain||{}); saveAiMemory(); }
+  if(data.memory){ const localBrain=aiMemory.visionBrain; aiMemory=Object.assign(aiMemory,data.memory); aiMemory.learnedProducts=Array.isArray(aiMemory.learnedProducts)?aiMemory.learnedProducts:[]; aiMemory.productDeepMemory=Array.isArray(aiMemory.productDeepMemory)?aiMemory.productDeepMemory:[]; aiMemory.productMemoryIndex=aiMemory.productMemoryIndex||{}; aiMemory.visionBrain=Object.assign(defaultAiMemory().visionBrain, aiMemory.visionBrain||{}, localBrain||{}); saveAiMemory(); }
   const r=data.result || data;
   if(r) {
     r.cloudVision=!!r.cloudVision && !r.cloudOffline && !r.cloudError;
@@ -3251,12 +3412,12 @@ function rememberLearnedProduct(payload={}){
   let row=aiMemory.learnedProducts.find(x=>x.key===key || (normalizeLearnText(x.productName)===normalizeLearnText(name) && normalizeLearnText(x.brand||'')===normalizeLearnText(brand||'')));
   const aliasList=[name, payload.baseName, payload.spokenName, brand ? `${brand} ${name}` : '', variant ? `${name} ${variant}` : ''].map(x=>String(x||'').trim()).filter(Boolean);
   if(!row){
-    row={ key, productName:name, brand, variant, category, unit, productType:String(payload.productType||''), packageType:String(payload.packageType||''), estimatedSize:String(payload.estimatedSize||''), isLiquid:!!payload.isLiquid, seenCount:0, lastConfirmedAt:0, aliases:[], visualHints:[] };
+    row={ key, productName:name, brand, variant, category, unit, productType:String(payload.productType||''), packageType:String(payload.packageType||''), estimatedSize:String(payload.estimatedSize||''), isLiquid:!!payload.isLiquid, seenCount:0, lastConfirmedAt:0, aliases:[], visualHints:[], ingredients:[], allergens:[], colors:[], nutrition:{}, memorySources:[] };
     aiMemory.learnedProducts.unshift(row);
   }
   row.productName=name; row.brand=brand||row.brand||''; row.variant=variant||row.variant||''; row.category=category||row.category||'food'; row.unit=unit||row.unit||'pz';
   row.productType=String(payload.productType||row.productType||''); row.packageType=String(payload.packageType||row.packageType||''); row.estimatedSize=String(payload.estimatedSize||row.estimatedSize||''); row.isLiquid=payload.isLiquid!==undefined ? !!payload.isLiquid : !!row.isLiquid;
-  const hints=new Set((row.visualHints||[]).map(x=>String(x).trim()).filter(Boolean)); (payload.visibleEvidence||[]).forEach(v=>hints.add(String(v).trim())); row.visualHints=[...hints].slice(0,10);
+  const hints=new Set((row.visualHints||[]).map(x=>String(x).trim()).filter(Boolean)); (payload.visibleEvidence||[]).forEach(v=>hints.add(String(v).trim())); row.visualHints=[...hints].slice(0,10); row.ingredients=mergeUniqueList(row.ingredients, payload.ingredients||[], 30); row.allergens=mergeUniqueList(row.allergens, payload.allergens||[], 20); row.colors=mergeUniqueList(row.colors, payload.colors||payload.dominantColors||[], 12); row.nutrition=Object.assign({}, row.nutrition||{}, payload.nutrition||{}); row.memorySources=mergeUniqueList(row.memorySources, payload.memorySources||payload.sources||[], 12);
   row.seenCount=Number(row.seenCount||0)+1; row.lastConfirmedAt=Date.now();
   const currentAliases=new Set((row.aliases||[]).map(x=>String(x).trim()).filter(Boolean));
   aliasList.forEach(a=>currentAliases.add(a));
@@ -3283,7 +3444,7 @@ function confirmScanResult(el,result,silent=false){
   }
   const item=findItemBySpeech(productName);
   result.brand = brand; result.estimatedSize=size;
-  const aiMeta={brand,variant:result.variant||'',productType:result.productType||'',packageType:result.packageType||'',estimatedSize:size,sizeConfirmed:!!size,isLiquid:!!result.isLiquid,damageNote,expiryDate,confidence:result.confidence||null};
+  const aiMeta={brand,variant:result.variant||'',productType:result.productType||'',packageType:result.packageType||'',estimatedSize:size,sizeConfirmed:!!size,isLiquid:!!result.isLiquid,damageNote,expiryDate,confidence:result.confidence||null,internalMemoryKey:productMemoryKey(productName,brand,size)};
   if(item){
     const old=item.qty; item.qty=qty; item.unit=unit; item.updatedAt=Date.now(); item.usage=Number(item.usage||0)+1; item.category=category; item.expiryDate=expiryDate||item.expiryDate||''; item.aiMeta=Object.assign({}, item.aiMeta||{}, aiMeta);
     rememberEvent('photo_restock',item,Math.max(0,qty-old),'Vision AI confermata');
@@ -3296,10 +3457,12 @@ function confirmScanResult(el,result,silent=false){
     el.classList.add('confirmed'); el.querySelector('.scan-fields strong').textContent='Aggiunto: '+productName;
   }
   aiMemory.scanHistory=aiMemory.scanHistory||[];
-  aiMemory.scanHistory.push({name:productName,brand,size,qty,unit,category,expiryDate,damageNote,at:Date.now(),confidence:result.confidence||null});
+  aiMemory.scanHistory.push({name:productName,brand,size,qty,unit,category,expiryDate,damageNote,at:Date.now(),confidence:result.confidence||null,internalMemoryKey:productMemoryKey(productName,brand,size)});
   aiMemory.scanHistory=aiMemory.scanHistory.slice(-300);
-  rememberLearnedProduct({productName,brand,variant:result.variant||'',category,unit,productType:result.productType||'',packageType:result.packageType||'',estimatedSize:size,isLiquid:!!result.isLiquid,visibleEvidence:result.visibleEvidence||[],baseName:result.productName||''});
-  const confirmedLearning={productName,brand,size,qty,unit,category,expiryDate,damageNote,confirmedAt:Date.now(),visualFeatures:result.visualFeatures||null,visualSignature:result.visualSignature||'',visibleEvidence:result.visibleEvidence||[],detectedText:result.detectedText||[],confidence:result.confidence||null,cloudVision:!!result.cloudVision,autonomousVision:!!result.autonomousVision};
+  const internalProductMemory=buildInternalProductMemory(result,{productName,brand,size,qty,unit,category,expiryDate,damageNote,userConfirmed:true,confirmedAt:Date.now()});
+  const savedProductMemory=rememberInternalProductMemory(internalProductMemory);
+  rememberLearnedProduct({productName,brand,variant:result.variant||'',category,unit,productType:result.productType||'',packageType:result.packageType||'',estimatedSize:size,isLiquid:!!result.isLiquid,visibleEvidence:result.visibleEvidence||[],baseName:result.productName||'',ingredients:internalProductMemory.ingredients,allergens:internalProductMemory.allergens,colors:internalProductMemory.visualAppearance.colors,nutrition:internalProductMemory.nutrition,memorySources:internalProductMemory.source});
+  const confirmedLearning={productName,brand,size,qty,unit,category,expiryDate,damageNote,productMemory:savedProductMemory||internalProductMemory,confirmedAt:Date.now(),visualFeatures:result.visualFeatures||null,visualSignature:result.visualSignature||'',visibleEvidence:result.visibleEvidence||[],detectedText:result.detectedText||[],confidence:result.confidence||null,cloudVision:!!result.cloudVision,autonomousVision:!!result.autonomousVision};
   rememberVisionSampleFromScan(result.dataUrl||'', result, {productName,brand,size,qty,unit,category,expiryDate,damageNote}).then(()=>syncAutonomyLearningToServer({type:'vision-confirmation', confirmed:confirmedLearning, voiceProfile:ensureVoiceProfile(), visionStatus:visionBrainStatus()}, true)).catch(()=>syncAutonomyLearningToServer({type:'vision-confirmation', confirmed:confirmedLearning, voiceProfile:ensureVoiceProfile(), visionStatus:visionBrainStatus()}, true));
   aiMemory.pendingVerification=false;
   liveScanLastAcceptedSig = result.visualSignature || liveScanLastMetrics?.signature || liveScanLastAcceptedSig; liveScanLastAcceptedName=productName; liveScanSameObjectWarnings=0;

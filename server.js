@@ -172,24 +172,28 @@ function ensureDbShape(){
   db.assistantBrain.autonomousVision.voice = db.assistantBrain.autonomousVision.voice || {};
   db.assistantBrain.seedMemory = {version:VISION_SEED_MEMORY.version||'', products:(VISION_SEED_MEMORY.products||[]).length, totalProfiles:Number(VISION_MEGA_INDEX.totalProfiles||1000000), megaVersion:VISION_MEGA_INDEX.version||'', categories:(VISION_SEED_MEMORY.categories||[]).length, loaded:(VISION_SEED_MEMORY.products||[]).length>0};
   Object.values(db.households||{}).forEach(h=>{
-    h.aiMemory = h.aiMemory || {messages:[],facts:[],events:[],scanHistory:[],learnedProducts:[],summary:'',preferences:{},updatedAt:0};
+    h.aiMemory = h.aiMemory || {messages:[],facts:[],events:[],scanHistory:[],learnedProducts:[],productDeepMemory:[],productMemoryIndex:{},summary:'',preferences:{},updatedAt:0};
     h.aiMemory.messages = h.aiMemory.messages || [];
     h.aiMemory.facts = h.aiMemory.facts || [];
     h.aiMemory.events = h.aiMemory.events || [];
     h.aiMemory.scanHistory = h.aiMemory.scanHistory || [];
-  h.aiMemory.learnedProducts = h.aiMemory.learnedProducts || [];
+    h.aiMemory.learnedProducts = h.aiMemory.learnedProducts || [];
+    h.aiMemory.productDeepMemory = Array.isArray(h.aiMemory.productDeepMemory) ? h.aiMemory.productDeepMemory : [];
+    h.aiMemory.productMemoryIndex = h.aiMemory.productMemoryIndex || {};
     h.aiMemory.visionBrain = h.aiMemory.visionBrain || {version:41,serverSamples:[],productModels:{},productStats:{},serverSyncs:0};
     h.aiMemory.voiceProfile = h.aiMemory.voiceProfile || {version:41,heard:[],corrections:[],intentPhrases:{},fieldPhrases:{},productAliases:{},speakerStyle:{},serverSyncs:0};
     h.aiMemory.preferences = h.aiMemory.preferences || {};
   });
 }
 function ensureHouseholdMemory(h){
-  h.aiMemory = h.aiMemory || {messages:[],facts:[],events:[],scanHistory:[],learnedProducts:[],summary:'',preferences:{},updatedAt:0};
+  h.aiMemory = h.aiMemory || {messages:[],facts:[],events:[],scanHistory:[],learnedProducts:[],productDeepMemory:[],productMemoryIndex:{},summary:'',preferences:{},updatedAt:0};
   h.aiMemory.messages = h.aiMemory.messages || [];
   h.aiMemory.facts = h.aiMemory.facts || [];
   h.aiMemory.events = h.aiMemory.events || [];
   h.aiMemory.scanHistory = h.aiMemory.scanHistory || [];
   h.aiMemory.learnedProducts = h.aiMemory.learnedProducts || [];
+  h.aiMemory.productDeepMemory = Array.isArray(h.aiMemory.productDeepMemory) ? h.aiMemory.productDeepMemory : [];
+  h.aiMemory.productMemoryIndex = h.aiMemory.productMemoryIndex || {};
   h.aiMemory.visionBrain = h.aiMemory.visionBrain || {version:41,serverSamples:[],productModels:{},productStats:{},serverSyncs:0};
   h.aiMemory.voiceProfile = h.aiMemory.voiceProfile || {version:41,heard:[],corrections:[],intentPhrases:{},fieldPhrases:{},productAliases:{},speakerStyle:{},serverSyncs:0};
   h.aiMemory.preferences = h.aiMemory.preferences || {};
@@ -262,8 +266,18 @@ function learnAutonomyOnServer(h, payload={}){
     const key=normalizeText([confirmed.productName,confirmed.brand,confirmed.size].filter(Boolean).join(' ')).slice(0,120);
     mem.visionBrain.serverSamples = Array.isArray(mem.visionBrain.serverSamples) ? mem.visionBrain.serverSamples : [];
     mem.visionBrain.serverSamples.unshift({
-      key, productName:confirmed.productName, brand:confirmed.brand||'', size:confirmed.size||'', category:confirmed.category||'', unit:confirmed.unit||'', expiryDate:confirmed.expiryDate||'', damageNote:confirmed.damageNote||'', confidence:confirmed.confidence||null, visualFeatures:confirmed.visualFeatures||null, visibleEvidence:(confirmed.visibleEvidence||[]).slice(0,10), detectedText:(confirmed.detectedText||[]).slice(0,10), cloudVision:!!confirmed.cloudVision, autonomousVision:!!confirmed.autonomousVision, at:Date.now()
+      key, productName:confirmed.productName, brand:confirmed.brand||'', size:confirmed.size||'', category:confirmed.category||'', unit:confirmed.unit||'', expiryDate:confirmed.expiryDate||'', damageNote:confirmed.damageNote||'', productMemory:confirmed.productMemory||null, confidence:confirmed.confidence||null, visualFeatures:confirmed.visualFeatures||null, visibleEvidence:(confirmed.visibleEvidence||[]).slice(0,10), detectedText:(confirmed.detectedText||[]).slice(0,10), cloudVision:!!confirmed.cloudVision, autonomousVision:!!confirmed.autonomousVision, at:Date.now()
     });
+    if(confirmed.productMemory && confirmed.productMemory.productName){
+      mem.productDeepMemory = Array.isArray(mem.productDeepMemory) ? mem.productDeepMemory : [];
+      mem.productMemoryIndex = mem.productMemoryIndex || {};
+      const pm=Object.assign({}, confirmed.productMemory, {serverSavedAt:Date.now()});
+      const pmKey=pm.key || key;
+      const oldIdx=mem.productDeepMemory.findIndex(x=>x.key===pmKey);
+      if(oldIdx>=0) mem.productDeepMemory[oldIdx]=Object.assign({}, mem.productDeepMemory[oldIdx], pm); else mem.productDeepMemory.unshift(pm);
+      mem.productDeepMemory=mem.productDeepMemory.slice(0,1200);
+      mem.productMemoryIndex[pmKey]={productName:pm.productName,brand:pm.brand||'',format:pm.format||confirmed.size||'',category:pm.category||confirmed.category||'',allergens:pm.allergens||[],updatedAt:Date.now(),needsWebVerification:!!pm.needsWebVerification};
+    }
     mem.visionBrain.serverSamples=mem.visionBrain.serverSamples.slice(0,900);
     const prod=db.assistantBrain.autonomousVision.products[key]||{key,productName:confirmed.productName,brand:confirmed.brand||'',sizes:{},categories:{},units:{},count:0,lastSeenAt:0};
     prod.count++; prod.lastSeenAt=Date.now();
@@ -959,6 +973,10 @@ function extractJsonObject(text=''){
 function cleanVisionString(value, fallback=''){
   return String(value||fallback||'').replace(/[\u0000-\u001f<>]/g,'').trim().slice(0,80);
 }
+function cleanVisionArray(value, limit=12){
+  if(Array.isArray(value)) return value.map(x=>cleanVisionString(x)).filter(Boolean).slice(0,limit);
+  return String(value||'').split(/[;,\n·]+/).map(x=>cleanVisionString(x)).filter(Boolean).slice(0,limit);
+}
 
 function summarizeLearnedProducts(memory){
   const list=Array.isArray(memory?.learnedProducts) ? memory.learnedProducts : [];
@@ -974,7 +992,10 @@ function summarizeLearnedProducts(memory){
     isLiquid: !!x.isLiquid,
     seenCount: Number(x.seenCount||0),
     aliases: Array.isArray(x.aliases)?x.aliases.map(a=>cleanVisionString(a)).filter(Boolean).slice(0,6):[],
-    visualHints: Array.isArray(x.visualHints)?x.visualHints.map(a=>cleanVisionString(a)).filter(Boolean).slice(0,6):[]
+    visualHints: Array.isArray(x.visualHints)?x.visualHints.map(a=>cleanVisionString(a)).filter(Boolean).slice(0,6):[],
+    ingredients: cleanVisionArray(x.ingredients||[], 8),
+    allergens: cleanVisionArray(x.allergens||[], 8),
+    colors: cleanVisionArray(x.colors||[], 6)
   })).filter(x=>x.productName);
 }
 
@@ -1100,6 +1121,12 @@ function mergeVisionOutputs(primaryRaw, ocrRaw){
   if((!merged.unit || merged.unit==='pz') && ocr.unit) merged.unit=ocr.unit;
   merged.detectedText = uniqueStrings([...(primary.detectedText||[]), ...(ocr.detectedText||[]), ...(primary.visibleEvidence||[]), ...(ocr.visibleEvidence||[])], 10);
   merged.visibleEvidence = uniqueStrings([...(primary.visibleEvidence||[]), ...(ocr.visibleEvidence||[])], 8);
+  merged.ingredients = uniqueStrings([...(primary.ingredients||[]), ...(ocr.ingredients||[])], 18);
+  merged.allergens = uniqueStrings([...(primary.allergens||[]), ...(ocr.allergens||[])], 12);
+  merged.possibleAllergens = uniqueStrings([...(primary.possibleAllergens||[]), ...(ocr.possibleAllergens||[])], 12);
+  merged.colors = uniqueStrings([...(primary.colors||[]), ...(primary.dominantColors||[]), ...(ocr.colors||[]), ...(ocr.dominantColors||[])], 8);
+  merged.nutrition = Object.assign({}, primary.nutrition||{}, ocr.nutrition||{});
+  merged.ingredientsVerified = !!(primary.ingredientsVerified || ocr.ingredientsVerified || merged.ingredients.length);
   const agreeName = normalizeVisionText(primary.productName) && normalizeVisionText(primary.productName)===normalizeVisionText(ocr.productName);
   merged.confidence = Math.min(0.99, Math.max(primary.confidence||0, ocr.confidence||0, agreeName ? ((Math.max(primary.confidence||0,ocr.confidence||0))+0.06) : 0));
   if(merged.detectedText.length && merged.confidence<0.74) merged.confidence=Math.min(0.9, merged.confidence+0.05);
@@ -1213,6 +1240,12 @@ function normalizeVisionResult(obj={}){
     isDamaged: !!obj.isDamaged,
     damageType: cleanVisionString(obj.damageType || ''),
     detectedText: Array.isArray(obj.detectedText) ? obj.detectedText.map(x=>cleanVisionString(x)).filter(Boolean).slice(0,8) : [],
+    ingredients: cleanVisionArray(obj.ingredients || obj.ingredienti || [], 24),
+    allergens: cleanVisionArray(obj.allergens || obj.allergeni || [], 18),
+    possibleAllergens: cleanVisionArray(obj.possibleAllergens || obj.traces || obj.possibiliTracce || [], 18),
+    colors: cleanVisionArray(obj.colors || obj.dominantColors || obj.coloriDominanti || [], 10),
+    nutrition: (obj.nutrition && typeof obj.nutrition==='object') ? obj.nutrition : {},
+    ingredientsVerified: !!obj.ingredientsVerified,
     bestMatchName: cleanVisionString(obj.bestMatchName || ''),
     bestMatchSource: cleanVisionString(obj.bestMatchSource || ''),
     bestMatchScore: Number(obj.bestMatchScore || 0),
@@ -1260,22 +1293,25 @@ Regole severe anti-errore:
 - Per bottiglie/bevande devi distinguere capienza: 500 ml, 750 ml, 1 L, 1,5 L, 2 L, 2000 ml. Non mettere 500 ml se non lo leggi o se non sei certo che sia una bottiglia piccola.
 - Se la bottiglia occupa gran parte dell'inquadratura ed è larga/alta, NON classificarla 500 ml: scegli '2 L da confermare' o '1,5 L / 2 L da confermare' e chiedi conferma.
 - Cerca scadenze/TMC/EXP su etichetta, tappo, collo bottiglia, retro e base confezione. Se non leggibile, expiryDate vuota e detailQuestion chiara.
+- Leggi anche ingredienti, allergeni, possibili tracce e valori nutrizionali se visibili. Se non sono leggibili non inventare: lascia array vuoti e metti needsManual true.
+- Rileva colori dominanti e aspetto confezione per aiutare la memoria locale futura.
 - Rileva danni veri: aperto, rotto, bucato, perdita, tappo rotto, etichetta illeggibile. Per bottiglie in plastica schiacciate dalla mano o naturalmente deformate, NON segnarle danneggiate: chiedi conferma.
 - Non chiamare Coca-Cola se il rosso è solo sfondo: serve testo Coca-Cola o etichetta/prodotto centrale rosso.
 - Scegli categoria fra: food, drinks, pets, house, pharmacy, aquarium, fruit, veg.
-Schema JSON: {"needsRetake":boolean,"needsManual":boolean,"multipleItems":boolean,"shouldAskConfirmation":boolean,"reason":"breve in italiano","productName":"nome prodotto","brand":"marca","variant":"variante/gusto/formato","productType":"tipo prodotto","packageType":"tipo confezione","estimatedSize":"formato/capienza","sizeDetectedRaw":"testo volume letto","sizeConfidence":number,"expiryDate":"data visibile o vuota","expiryDetectedRaw":"testo data letto","expiryConfidence":number,"detailQuestion":"domanda se mancano capienza/scadenza","isLiquid":boolean,"isDamaged":boolean,"damageType":"tipo danno o vuota","quantity":number,"unit":"pz|bt|lattina|conf|kg|g|lt|ml|busta|scatola","category":"food|drinks|pets|house|pharmacy|aquarium|fruit|veg","confidence":number,"detectedText":["testi letti"],"visibleEvidence":["prove visive"],"items":[]}
+Schema JSON: {"needsRetake":boolean,"needsManual":boolean,"multipleItems":boolean,"shouldAskConfirmation":boolean,"reason":"breve in italiano","productName":"nome prodotto","brand":"marca","variant":"variante/gusto/formato","productType":"tipo prodotto","packageType":"tipo confezione","estimatedSize":"formato/capienza","sizeDetectedRaw":"testo volume letto","sizeConfidence":number,"expiryDate":"data visibile o vuota","expiryDetectedRaw":"testo data letto","expiryConfidence":number,"detailQuestion":"domanda se mancano capienza/scadenza/ingredienti","isLiquid":boolean,"isDamaged":boolean,"damageType":"tipo danno o vuota","quantity":number,"unit":"pz|bt|lattina|conf|kg|g|lt|ml|busta|scatola","category":"food|drinks|pets|house|pharmacy|aquarium|fruit|veg","confidence":number,"ingredients":["ingredienti letti o chiaramente dedotti dall etichetta"],"allergens":["allergeni evidenti o obbligatori letti"],"possibleAllergens":["possibili tracce lette"],"colors":["colori dominanti confezione"],"nutrition":{"kcal":"","proteine":"","carboidrati":"","grassi":""},"ingredientsVerified":boolean,"detectedText":["testi letti"],"visibleEvidence":["prove visive"],"items":[]}
 Contesto utile, ma non deve sovrascrivere ciò che vedi nella foto:
 Catalogo ridotto: ${JSON.stringify(compact).slice(0,12000)}
 Prodotti imparati: ${JSON.stringify(learned).slice(0,9000)}
 Candidati memoria: ${JSON.stringify(candidates).slice(0,9000)}`;
   const detailPrompt=`Sei OCR specialist di Spesa Pronta. Ignora lo sfondo e concentrati su etichetta, collo, tappo, retro e base del prodotto.
 Leggi piccoli testi con attenzione: capienza/formato, scadenza/TMC/EXP, lotto, marca, variante. Se la data è sul tappo/collo e non leggibile, non inventare: chiedi scan ravvicinato della data.
-Output SOLO JSON con gli stessi campi. Regole:
+Output SOLO JSON con gli stessi campi, includendo anche ingredients, allergens, possibleAllergens, colors e nutrition quando visibili. Regole:
 - Per capienza cerca: 500 ml, 750 ml, 1 L, 1,5 L, 2 L, 2000 ml, cl, litri.
 - Per scadenza cerca: dd/mm/yyyy, dd-mm-yyyy, dd/mm/yy, mm/yyyy, EXP, SCAD, TMC, da consumarsi entro/preferibilmente entro.
 - Se un dato non è leggibile con sicurezza, non inventarlo e scrivi detailQuestion con istruzione pratica: avvicina, gira, inclina o mostra zona scadenza.
 - detectedText deve contenere tutti i frammenti letti, anche incompleti.
-JSON: {"productName":"","brand":"","variant":"","estimatedSize":"","sizeDetectedRaw":"","sizeConfidence":0,"expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"detectedText":[],"visibleEvidence":[],"detailQuestion":"","needsManual":true,"shouldAskConfirmation":true,"confidence":0.1}`;
+- Se leggi una lista ingredienti o allergeni, copiala in forma sintetica negli array dedicati. Non inventare allergeni non visibili, salvo quelli evidenti dal nome del prodotto e marcali come possibili se non certi.
+JSON: {"productName":"","brand":"","variant":"","estimatedSize":"","sizeDetectedRaw":"","sizeConfidence":0,"expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"ingredients":[],"allergens":[],"possibleAllergens":[],"colors":[],"nutrition":{},"ingredientsVerified":false,"detectedText":[],"visibleEvidence":[],"detailQuestion":"","needsManual":true,"shouldAskConfirmation":true,"confidence":0.1}`;
   try{
     let primaryRaw=null, detailRaw=null;
     try{
