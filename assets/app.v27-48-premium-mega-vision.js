@@ -2012,7 +2012,10 @@ function setScannerLiveUi(active){
 }
 
 function getLiveLabelTarget(){
-  const el=getActiveScannerResult?.();
+  let el=getActiveScannerResult?.();
+  if(!(el && !el.classList.contains('confirmed') && !el.classList.contains('bad') && el.dataset.liveLabelTarget==='1')){
+    el=document.querySelector('#scannerResults .scan-result[data-live-label-target="1"]:not(.confirmed):not(.bad)');
+  }
   return el && !el.classList.contains('confirmed') && !el.classList.contains('bad') && el.dataset.liveLabelTarget==='1' ? el : null;
 }
 function getLiveFollowupStep(el){
@@ -2043,7 +2046,21 @@ function shouldAskLiveLabelFrame(el,result={}){
   const needSize = isBottleLike(result,s) && (!s.size || /da confermare|capienza da confermare|1,5 l \/ 2 l/i.test(String(s.size||''))) && !el.dataset.voiceSizeDone;
   const needBrand = !s.brand && !result.brand && Number(result.confidence||0)<0.88;
   const needReadableLabel = needBrand || needSize || !result.labelScanMerged;
-  return !!(needReadableLabel || needExpiry);
+  return !!(result.liveProductCapture || needReadableLabel || needExpiry);
+}
+function normalizeLiveProductCaptureResult(result={}, fileName=''){
+  const r=Object.assign({}, result||{});
+  r.liveProductCapture=true;
+  r.shouldAskConfirmation=true;
+  r.needsRetake=false;
+  r.needsManual=true;
+  if(!String(r.productName||'').trim() || isBadScanName(r.productName)){
+    r.productName='Prodotto da identificare';
+    r.productPlaceholder='Nome prodotto da leggere sull’etichetta';
+  }
+  r.confidence=Math.max(Number(r.confidence||0), .46);
+  r.reason='Prodotto acquisito. Ora passo allo step successivo: prima etichetta frontale, poi scadenza. Non ricomincio da capo.';
+  return r;
 }
 function enterLiveLabelFollowup(el,result={}){
   if(!el) return;
@@ -2616,7 +2633,7 @@ async function captureLiveFrame(manual=false){
   else await analyzeGroceryDataUrl(compressed, manual?'manual-live.jpg':'auto-live.jpg', scanSig);
   liveScanBusy=false; liveScanStableCount=0; liveScanReadySince=0;
   liveScanCooldownUntil = Date.now() + (labelTarget ? 4200 : (manual ? 3200 : 4200));
-  if(liveScanActive && !liveScanPendingResult) queueLiveScanLoop();
+  if(liveScanActive && !liveScanPendingResult && !hasPendingUnconfirmedScan()) queueLiveScanLoop();
 }
 
 async function handleGroceryFiles(files){
@@ -2744,10 +2761,15 @@ async function analyzeGroceryDataUrl(dataUrl,fileName='photo.jpg', visualSignatu
     }
   }
   result=await improveVisionWithLocalLearning(dataUrl,result);
+  if(liveCapture && result?.needsRetake){
+    // In diretta, se il gate ha già stabilito che l'oggetto è idoneo, non ricomincio da capo: creo una scheda prudente e passo a etichetta/scadenza.
+    result=normalizeLiveProductCaptureResult(result,fileName);
+  }
   if(result.needsRetake){ setScannerStatus(result.reason || 'Non vedo bene, rifai la foto.', voiceLine('retake',['La foto non è abbastanza chiara. Riproviamo con il prodotto più fermo e ben visibile.','Non riesco a riconoscerlo bene. Prova a centrarlo meglio e rifare la scansione.']), true); addScannerResult({...result,dataUrl}); document.querySelector('.scanning-preview')?.remove(); return; }
   if(liveCapture){
+    result.liveProductCapture=true;
     result.shouldAskConfirmation=true;
-    if(Array.isArray(result.items)) result.items.forEach(it=>{ it.shouldAskConfirmation=true; });
+    if(Array.isArray(result.items)) result.items.forEach(it=>{ it.liveProductCapture=true; it.shouldAskConfirmation=true; });
   }
   result.dataUrl=dataUrl; result.quality=quality; result.visualSignature=visualSignature || liveScanLastMetrics?.signature || ''; ensureVisionBrain().totalScans=Number(ensureVisionBrain().totalScans||0)+1; if(result.autonomousVision) ensureVisionBrain().autonomousHits=Number(ensureVisionBrain().autonomousHits||0)+1;
   const summary=presentVisionResults(result,dataUrl);
@@ -3388,6 +3410,10 @@ function addScannerResult(result){
   refreshScanResultCard(el,result);
   if(!result.needsRetake){
     liveScanPendingResult=true; liveScanAwaitNextOk=false; setActiveScannerResult(el);
+    if(result.liveProductCapture){
+      el.dataset.liveLabelTarget='1';
+      el.dataset.liveFollowupStep='label';
+    }
     if(scannerMicEnabled && !scannerMicListening) startScannerMic(false);
     if(shouldAskLiveLabelFrame(el,result)) setTimeout(()=>enterLiveLabelFollowup(el,result), 250);
     else setTimeout(()=>promptScannerConversation(el,result,true), 450);
