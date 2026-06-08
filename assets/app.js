@@ -2471,24 +2471,8 @@ function refreshVisionBrainPanel(){
 function enhanceScannerQuickCards(){ const wrap=document.querySelector('#groceryScannerDialog .scanner-quick-cards'); if(wrap) wrap.style.display='none'; }
 
 
-function rebuildScannerMergedPills(){
-  const bar=document.querySelector('#groceryScannerDialog .scanner-actions');
-  if(!bar || bar.dataset.mergedPills==='1') return;
-  bar.dataset.mergedPills='1';
-  bar.classList.add('scanner-actions-merged');
-}
+function ensureScannerLiveButtons(){ return; }
 
-function ensureScannerLiveButtons(){
-  const bar=document.querySelector('#groceryScannerDialog .scanner-actions');
-  if(!bar || $('#liveVisionBtn')) return;
-  const fridge=bar.querySelector('#fridgeModeBtn');
-  const wrap=document.createElement('div');
-  wrap.innerHTML='<button class="primary-btn" id="liveVisionBtn" type="button"><span class="action-symbol live"></span><span>Diretta AI</span></button><button class="outline-btn" id="scannerCaptureNowBtn" type="button"><span class="action-symbol zap"></span><span>Scatta ora</span></button>';
-  bar.insertBefore(wrap.firstChild, fridge);
-  bar.insertBefore(wrap.firstChild, fridge);
-  $('#liveVisionBtn')?.addEventListener('click', ()=>startLiveVisionMode('smart'));
-  $('#scannerCaptureNowBtn')?.addEventListener('click', ()=>captureLiveFrame(true));
-}
 function openGroceryScanner(afterShopping=false){
   const dlg=$('#groceryScannerDialog'); if(!dlg) return;
   enhanceScannerQuickCards();
