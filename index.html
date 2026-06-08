@@ -1362,8 +1362,8 @@ body::after{content:'V27.84 FLAG STYLE ACTION PILLS'!important}
 
 
 <style id="v2788-action-image-pills-final">
-/* V27.93 REOPEN BUTTON FIX */
-body::after{content:'V27.93 REOPEN BUTTON FIX'!important}
+/* V27.94 DIRECT REOPEN */
+body::after{content:'V27.94 DIRECT REOPEN'!important}
 
 /* quick cards più leggibili e con immagine meno tagliata */
 #groceryScannerDialog .scanner-quick-cards{
@@ -1525,8 +1525,8 @@ body::after{content:'V27.93 REOPEN BUTTON FIX'!important}
 
 
 <style id="v2788-login-recovery">
-/* V27.93 REOPEN BUTTON FIX */
-body::after{content:'V27.93 REOPEN BUTTON FIX'!important}
+/* V27.94 DIRECT REOPEN */
+body::after{content:'V27.94 DIRECT REOPEN'!important}
 .returning-account-box .recovery-actions{display:grid;gap:8px;margin-top:12px}
 .returning-account-box .recovery-btn{
   min-height:48px;border:1px solid rgba(18,102,241,.16);border-radius:16px;
@@ -1538,8 +1538,8 @@ body::after{content:'V27.93 REOPEN BUTTON FIX'!important}
 
 
 <style id="v2788-scanner-top-cards-final">
-/* V27.93 REOPEN BUTTON FIX - final hard override */
-body::after{content:'V27.93 REOPEN BUTTON FIX'!important}
+/* V27.94 DIRECT REOPEN - final hard override */
+body::after{content:'V27.94 DIRECT REOPEN'!important}
 
 /* finestra scanner stabile */
 #groceryScannerDialog .scanner-card-premium{
@@ -1678,7 +1678,7 @@ body::after{content:'V27.93 REOPEN BUTTON FIX'!important}
 
 
 <style id="v2789-scanner-merged-pills-final">
-body::after{content:'V27.93 REOPEN BUTTON FIX'!important}
+body::after{content:'V27.94 DIRECT REOPEN'!important}
 #groceryScannerDialog .scanner-quick-cards{display:none!important}
 #groceryScannerDialog .scanner-actions-merged{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:14px!important;width:100%!important;max-width:680px!important;margin:18px auto 10px!important}
 #groceryScannerDialog .scanner-actions-merged > *{min-width:0!important;width:100%!important;margin:0!important}
@@ -1699,8 +1699,8 @@ body::after{content:'V27.93 REOPEN BUTTON FIX'!important}
 
 
 <style id="v2790-scanner-pills-fixed">
-/* V27.93 REOPEN BUTTON FIX - kills old white overlays and makes text visible */
-body::after{content:'V27.93 REOPEN BUTTON FIX'!important}
+/* V27.94 DIRECT REOPEN - kills old white overlays and makes text visible */
+body::after{content:'V27.94 DIRECT REOPEN'!important}
 
 /* Remove the old pseudo overlays that were whitening the cards and hiding text */
 #groceryScannerDialog .scanner-actions-merged .scanner-pill-action::before,
@@ -1881,8 +1881,8 @@ body::after{content:'V27.93 REOPEN BUTTON FIX'!important}
 
 
 <style id="v2791-scanner-final-layer">
-/* V27.93 REOPEN BUTTON FIX - nuovo layer separato da scanner-actions, quindi niente CSS vecchio */
-body::after{content:'V27.93 REOPEN BUTTON FIX'!important}
+/* V27.94 DIRECT REOPEN - nuovo layer separato da scanner-actions, quindi niente CSS vecchio */
+body::after{content:'V27.94 DIRECT REOPEN'!important}
 
 /* elimina visivamente i blocchi vecchi */
 #groceryScannerDialog .scanner-quick-cards,
@@ -2031,8 +2031,8 @@ body::after{content:'V27.93 REOPEN BUTTON FIX'!important}
 
 
 <style id="v2792-reopen-vision-check">
-/* V27.93 REOPEN BUTTON FIX */
-body::after{content:'V27.93 REOPEN BUTTON FIX'!important}
+/* V27.94 DIRECT REOPEN */
+body::after{content:'V27.94 DIRECT REOPEN'!important}
 .vision-verify-btn{
   border:0;
   min-height:58px;
@@ -2137,9 +2137,18 @@ body::after{content:'V27.93 REOPEN BUTTON FIX'!important}
 }
 </style>
 
+
+<style id="v2794-direct-reopen-css">
+body::after{content:'V27.94 DIRECT REOPEN'!important}
+.vision-verify-btn[data-open-scanner-direct="1"]{
+  outline:2px solid rgba(19,200,166,.22);
+  outline-offset:2px;
+}
+</style>
+
 </head>
 <body>
-  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.93-ACTION-IMAGE-PILLS-FINAL -->
+  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.94-ACTION-IMAGE-PILLS-FINAL -->
   <div class="app-frame">
     <aside class="sidebar">
       <div class="side-brand">
@@ -2219,7 +2228,7 @@ body::after{content:'V27.93 REOPEN BUTTON FIX'!important}
             <h3>Riprendi verifica Vision AI</h3>
             <p>Hai saltato o rimandato la verifica? Puoi riaprire subito il menu Scansione Pro e completare il controllo.</p>
           </div>
-          <button class="vision-verify-btn large" id="reopenVisionCheckBtn2" type="button">
+          <button class="vision-verify-btn large" id="reopenVisionCheckBtn2" type="button" data-open-scanner-direct="1" onclick="return window.reopenVisionCheckDirect ? window.reopenVisionCheckDirect() : false;">
             <span class="vision-verify-icon">✨</span>
             <span><b>RIAPRI VERIFICA</b><small>Scansione Pro</small></span>
           </button>
@@ -2235,7 +2244,7 @@ body::after{content:'V27.93 REOPEN BUTTON FIX'!important}
               <div class="cta-row">
                 <button class="outline-btn" id="addProductBtn" type="button">＋ <span data-i18n="addArticle">Aggiungi articolo</span></button>
                 <button class="done-btn" id="shoppingDoneBtn" type="button">✓ <span data-i18n="shoppingDone">Ho fatto la spesa</span> ✨</button>
-                <button class="vision-verify-btn" id="reopenVisionCheckBtn" type="button">
+                <button class="vision-verify-btn" id="reopenVisionCheckBtn" type="button" data-open-scanner-direct="1" onclick="return window.reopenVisionCheckDirect ? window.reopenVisionCheckDirect() : false;">
                   <span class="vision-verify-icon">📷</span>
                   <span><b>VERIFICA VISION AI</b><small>Riapri controllo prodotti</small></span>
                 </button>
@@ -2927,5 +2936,57 @@ body::after{content:'V27.93 REOPEN BUTTON FIX'!important}
   <script src="assets/vision-seed-memory.js?v=2773" defer></script>
   <script src="assets/vision-mega-index.js?v=2773" defer></script>
   <script src="assets/app.v27-48-premium-mega-vision.js?v=2773" defer></script>
+
+<script id="v2794-direct-reopen-script">
+(function(){
+  function directOpenScanner(){
+    try{
+      if(window.settings){
+        window.settings.inventorySetupDone = true;
+        window.settings.inventoryStatus = window.settings.inventoryStatus || 'to_verify';
+        window.settings.inventoryUpdatedAt = Date.now();
+      }
+      if(typeof window.saveAll === 'function') window.saveAll();
+      if(typeof window.render === 'function') window.render();
+      if(typeof window.toast === 'function') window.toast('Apro Scansione Pro ✅');
+      if(typeof window.openGroceryScanner === 'function'){
+        setTimeout(function(){ window.openGroceryScanner(true); }, 40);
+        return true;
+      }
+      var dlg = document.getElementById('groceryScannerDialog');
+      if(dlg){
+        try{ dlg.showModal(); }catch(e){ dlg.setAttribute('open',''); }
+        return true;
+      }
+      alert('Scanner non trovato: ricarica la pagina.');
+    }catch(err){
+      console.error('V27.94 direct reopen error', err);
+      alert('Errore apertura scanner: ricarica la pagina.');
+    }
+    return false;
+  }
+  window.reopenVisionCheckDirect = directOpenScanner;
+
+  document.addEventListener('click', function(e){
+    var btn = e.target && e.target.closest && e.target.closest('#reopenVisionCheckBtn,#reopenVisionCheckBtn2,.vision-verify-btn,[data-open-scanner-direct]');
+    if(!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if(e.stopImmediatePropagation) e.stopImmediatePropagation();
+    directOpenScanner();
+  }, true);
+
+  document.addEventListener('DOMContentLoaded', function(){
+    ['reopenVisionCheckBtn','reopenVisionCheckBtn2'].forEach(function(id){
+      var b = document.getElementById(id);
+      if(b){
+        b.setAttribute('data-open-scanner-direct','1');
+        b.setAttribute('onclick','return window.reopenVisionCheckDirect ? window.reopenVisionCheckDirect() : false;');
+      }
+    });
+  });
+})();
+</script>
+
 </body>
 </html>

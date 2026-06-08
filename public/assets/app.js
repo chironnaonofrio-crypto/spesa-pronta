@@ -182,6 +182,7 @@ function loadAiMemory(){ try { const mem=Object.assign(defaultAiMemory(), JSON.p
 function saveAiMemory(){ localStorage.setItem(AI_MEMORY_KEY, JSON.stringify(aiMemory)); }
 function defaultSettings(){ return {lang:'it', cloudEnabled:false, apiEndpoint:'/api', token:'', householdId:'', people:2, animals:0, autoSmart:true, alexaConnected:false, googleAssistantConnected:false, inventorySetupDone:false, inventoryStatus:'required', inventoryUpdatedAt:null, lastCloudSyncAt:null, cloudLastStatus:'unknown', cloudMode:'server', cloudLastError:'', profile:{firstName:'',lastName:'',username:'',email:''}}; }
 function migrateItems(items){ return items.map(x => ({...createItem(x.id||cryptoId(), x.image||'assets/illustrations/generic-item.png', x.category||'food', x.names||{it:x.name||x.id,en:x.name||x.id,es:x.name||x.id,de:x.name||x.id}, x.qty??1, x.maxQty??6, x.baseThreshold??2, x.unitOptions||['pz','pc','lt','kg'], {custom:x.custom, usage:x.usage||0, kind:x.kind, perPersonMin:x.perPersonMin, perAnimalMin:x.perAnimalMin, recommendedBuy:x.recommendedBuy}), ...x})); }
+window.saveAll = saveAll;
 function saveAll(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); localStorage.setItem(SESSION_KEY, JSON.stringify(session)); scheduleSync(); }
 
 function seedCategoryToApp(cat=''){
@@ -379,6 +380,7 @@ function $all(s){ return [...document.querySelectorAll(s)]; }
 function esc(s=''){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
 let toastTimer=null;
+window.toast = toast;
 function toast(msg){
   const el=$('#toast');
   if(!el){ console.log('Toast:', msg); return; }
@@ -1133,6 +1135,7 @@ function showView(v){
   if(v==='suggestions') renderSuggestions();
   if(v==='settings') renderSettings();
 }
+window.render = render;
 function render(){
   setPhoneVerificationVisible(!!session.pendingVerifyPhone);
   updateFlowClasses();
@@ -2523,6 +2526,7 @@ function stopLiveVisionMode(keepMessage=false){
   if(pv) pv.dataset.live='0';
   if(!keepMessage && pv && pv.innerHTML && pv.querySelector('.live-scan-stage')) pv.innerHTML='';
 }
+window.openGroceryScanner = openGroceryScanner;
 function closeGroceryScanner(){ stopLiveVisionMode(); const dlg=$('#groceryScannerDialog'); if(dlg?.open) dlg.close(); else dlg?.removeAttribute('open'); }
 function resetScannerResults(){ stopLiveVisionMode(true); scannerMicCurrentResultId=''; scannerMicStep=''; scannerMicLastPrompt=''; liveScanPendingResult=false; liveScanCooldownUntil=0; liveScanAwaitNextOk=false; $('#scannerResults').innerHTML=''; $('#scannerPreview').innerHTML=''; setScannerStatus('Risultati svuotati. Puoi riaprire la diretta AI o scattare nuove foto.', '', false); }
 function completeShoppingDone(needsVerification=false){
