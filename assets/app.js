@@ -4997,17 +4997,17 @@ try{ document.dispatchEvent(new CustomEvent('spesa-pronta:v2799-sync-ready')); }
 
 
 // =============================================================
-// V28.00 Final Test Tools
+// V28.01 Sync Hash Fix
 // Diagnosi più pulita, test sync manuale, contatore memoria server,
 // avviso cache/build e report copiabile per debug rapido.
 // =============================================================
 window.SPESA_PRONTA_VERSION='v28.00-final-test-tools';
-window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.00', brain:'Ultra Error Reduction Core + Final Test Tools', finalTestTools:'v28_00'});
+window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.01', brain:'Ultra Error Reduction Core + Sync Hash Fix', finalTestTools:'v28_00'});
 function v2800BuildAgeWarning(){
   try{
     const key='spesaProntaLastBuildVersion';
     const prev=localStorage.getItem(key)||'';
-    localStorage.setItem(key, window.SPESA_PRONTA_BUILD.version||'V28.00');
+    localStorage.setItem(key, window.SPESA_PRONTA_BUILD.version||'V28.01');
     if(prev && prev!==window.SPESA_PRONTA_BUILD.version){
       logAiDiagnosticV98?.('build-updated',{from:prev,to:window.SPESA_PRONTA_BUILD.version,note:'Se vedi grafica vecchia apri clear-cache.html'});
     }
@@ -5025,7 +5025,7 @@ function v2800AiReportCompact(){
   }).join('\n');
   return [
     'SPESA PRONTA - DIAGNOSI AI',
-    `Versione: ${window.SPESA_PRONTA_BUILD?.version||'V28.00'}`,
+    `Versione: ${window.SPESA_PRONTA_BUILD?.version||'V28.01'}`,
     `Brain: ${window.SPESA_PRONTA_BUILD?.brain||''}`,
     `Queue sync: ${pendingLearningQueueCount?.()||0}`,
     `Docente OpenAI: ${pf.teacherActive===false?'non attivo':(pf.teacherActive?'attivo':'non verificato')}`,
@@ -5055,7 +5055,7 @@ async function v2800TestSync(){
     const url=(typeof v2799Endpoint==='function'?v2799Endpoint(base,'/ai/test-sync'):(String(base).replace(/\/$/,'')+'/ai/test-sync'));
     try{
       const out=await (typeof v2799FetchJson==='function'
-        ? v2799FetchJson(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token}`},body:JSON.stringify({householdId:settings.householdId,clientVersion:window.SPESA_PRONTA_BUILD?.version||'V28.00'})},7500)
+        ? v2799FetchJson(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token}`},body:JSON.stringify({householdId:settings.householdId,clientVersion:window.SPESA_PRONTA_BUILD?.version||'V28.01'})},7500)
         : fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token}`},body:JSON.stringify({householdId:settings.householdId})}).then(async r=>({ok:r.ok,status:r.status,data:await r.json().catch(()=>null),url})) );
       last=out;
       if(out.ok && out.data?.ok){
@@ -5096,7 +5096,7 @@ function v2800UpgradePreflightPanel(){
     pill.innerHTML='<b>Prodotti server</b><span data-pf-global>—</span>';
     body.appendChild(pill);
   }
-  const version=panel.querySelector('[data-pf-version]'); if(version) version.textContent='V28.00';
+  const version=panel.querySelector('[data-pf-version]'); if(version) version.textContent='V28.01';
   return panel;
 }
 const ensurePreflightPanelV98_v2800 = typeof ensurePreflightPanelV98==='function' ? ensurePreflightPanelV98 : null;

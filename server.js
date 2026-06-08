@@ -156,6 +156,7 @@ async function saveDb(){
 function id(prefix){ return prefix + '_' + crypto.randomBytes(8).toString('hex'); }
 function token(){ return crypto.randomBytes(24).toString('hex'); }
 function tokenHash(raw){ return crypto.createHash('sha256').update(String(raw)).digest('hex'); }
+function hashStable(raw){ return crypto.createHash('sha256').update(String(raw||'')).digest('hex'); }
 
 function nowIso(){ return new Date().toISOString(); }
 function ensureDbShape(){
@@ -480,7 +481,7 @@ function upsertGlobalProductMemory(confirmed={}){
   old.unitVotes=voteMapAdd(old.unitVotes||{}, confirmed.unit||''); old.unit=voteMapTop(old.unitVotes)||old.unit||'';
   // V27.89: conserva esempi confermati minimali per audit/apprendimento senza salvare foto pesanti.
   old.confirmedExamples=Array.isArray(old.confirmedExamples)?old.confirmedExamples:[];
-  old.confirmedExamples.unshift({at:Date.now(), productName:name, brand, size, category:confirmed.category||'', unit:confirmed.unit||'', source:confirmed.cloudVision?'openai_teacher':(confirmed.memoryVision||confirmed.localFirst?'server_memory':'user_confirmed'), confidence:confirmed.confidence||null, householdHash:confirmed.householdId?hash(String(confirmed.householdId)).slice(0,12):''});
+  old.confirmedExamples.unshift({at:Date.now(), productName:name, brand, size, category:confirmed.category||'', unit:confirmed.unit||'', source:confirmed.cloudVision?'openai_teacher':(confirmed.memoryVision||confirmed.localFirst?'server_memory':'user_confirmed'), confidence:confirmed.confidence||null, householdHash:confirmed.householdId?hashStable(String(confirmed.householdId)).slice(0,12):''});
   old.confirmedExamples=old.confirmedExamples.slice(0,40);
   old.confirmations=Number(old.confirmations||0)+1;
   old.teacherHelp=Number(old.teacherHelp||0)+(confirmed.cloudVision?1:0);
@@ -2568,7 +2569,7 @@ function preflightSnapshotV98(){
   const gpm = publicGlobalProductMemory ? publicGlobalProductMemory(12) : {count:0,confirmations:0,products:[]};
   const queueInfo={serverQueue:false};
   const kCache=db.assistantBrain?.knowledgeCache||{};
-  const brain={version:'V28.00',name:'Final Test Tools',base:'Ultra Error Reduction Core V27.97 + Sync Handshake V27.99',categoryEngine:'ultra_error_reduction_core_v27_97',barcodePriority:'barcode > label > user correction > server memory > teacher',syncPolicy:'single item confirm + retry queue',testTools:'diagnostics_copy + server_sync_test'};
+  const brain={version:'V28.01',name:'Final Test Tools',base:'Ultra Error Reduction Core V27.97 + Sync Handshake V27.99',categoryEngine:'ultra_error_reduction_core_v27_97',barcodePriority:'barcode > label > user correction > server memory > teacher',syncPolicy:'single item confirm + retry queue',testTools:'diagnostics_copy + server_sync_test'};
   const checks=[
     {id:'openai_teacher',label:'Docente OpenAI',ok:aiConnected(),message:aiConnected()?'Docente OpenAI attivo':'OPENAI_API_KEY mancante o non valida'},
     {id:'vision_backend',label:'Vision backend',ok:aiConnected(),message:aiConnected()?'Vision pronta dal backend':'Vision docente non disponibile'},
@@ -2580,7 +2581,7 @@ function preflightSnapshotV98(){
   ];
   const ok=checks.filter(c=>c.ok).length;
   const status= ok===checks.length ? 'ready' : (ok>=4?'warn':'bad');
-  return {ok:true,version:'V28.00',status,ready:status==='ready',brain,checks,teacherActive:aiConnected(),teacherMessage:aiConnected()?'Docente OpenAI attivo':'Docente OpenAI non attivo',dbMode,databaseConnected:dbMode!=='file',memoryReady:dbMode!=='file',globalProductMemory:gpm,knowledgeCache:{entries:Object.keys(kCache.entries||{}).length,hits:kCache.hits||0,barcodeHits:kCache.barcodeHits||0,updatedAt:kCache.updatedAt||0},barcodeBrain:db.assistantBrain?.barcodeBrain||null,errorLearning:{corrections:(db.assistantBrain?.errorLearning?.corrections||[]).length,patterns:Object.keys(db.assistantBrain?.errorLearning?.patterns||{}).length,updatedAt:db.assistantBrain?.errorLearning?.updatedAt||0},learningAudit:(db.assistantBrain.learningAudit||[]).slice(0,15),generatedAt:Date.now()};
+  return {ok:true,version:'V28.01',status,ready:status==='ready',brain,checks,teacherActive:aiConnected(),teacherMessage:aiConnected()?'Docente OpenAI attivo':'Docente OpenAI non attivo',dbMode,databaseConnected:dbMode!=='file',memoryReady:dbMode!=='file',globalProductMemory:gpm,knowledgeCache:{entries:Object.keys(kCache.entries||{}).length,hits:kCache.hits||0,barcodeHits:kCache.barcodeHits||0,updatedAt:kCache.updatedAt||0},barcodeBrain:db.assistantBrain?.barcodeBrain||null,errorLearning:{corrections:(db.assistantBrain?.errorLearning?.corrections||[]).length,patterns:Object.keys(db.assistantBrain?.errorLearning?.patterns||{}).length,updatedAt:db.assistantBrain?.errorLearning?.updatedAt||0},learningAudit:(db.assistantBrain.learningAudit||[]).slice(0,15),generatedAt:Date.now()};
 }
 
 const server = http.createServer(async (req,res)=>{
@@ -2608,7 +2609,7 @@ const server = http.createServer(async (req,res)=>{
       if(!h) return send(res,401,{ok:false,error:'unauthorized_household',message:'Account cloud non autorizzato'});
       const before=publicGlobalProductMemory(3);
       db.assistantBrain.diagnosticsTestSync=db.assistantBrain.diagnosticsTestSync||[];
-      db.assistantBrain.diagnosticsTestSync.unshift({at:Date.now(),householdId,dbMode,globalCount:before.count||0,app:'v28.00-final-test-tools'});
+      db.assistantBrain.diagnosticsTestSync.unshift({at:Date.now(),householdId,dbMode,globalCount:before.count||0,app:'v28.01-sync-hash-fix'});
       db.assistantBrain.diagnosticsTestSync=db.assistantBrain.diagnosticsTestSync.slice(0,40);
       await saveDb();
       return send(res,200,{ok:true,type:'test-sync',message:'Test sync riuscito: server, auth e database scrivono correttamente',dbMode,databaseConnected:dbMode!=='file',memoryReady:dbMode!=='file',globalProductMemory:before,generatedAt:Date.now()});
@@ -2637,7 +2638,7 @@ const server = http.createServer(async (req,res)=>{
         dbMode,
         databaseConnected: dbMode !== 'file',
         memoryReady: dbMode !== 'file',
-        globalLearning: 'server_global_product_memory', globalProductMemory: publicGlobalProductMemory(10), knowledgeFeeder: db.assistantBrain.knowledgeFeeder||null, knowledgeCache:{entries:Object.keys(db.assistantBrain?.knowledgeCache?.entries||{}).length,hits:db.assistantBrain?.knowledgeCache?.hits||0,barcodeHits:db.assistantBrain?.knowledgeCache?.barcodeHits||0,updatedAt:db.assistantBrain?.knowledgeCache?.updatedAt||0}, barcodeBrain:db.assistantBrain?.barcodeBrain||null, categoryBrainV95:db.assistantBrain?.categoryBrainV95||null, monsterBrainV96:db.assistantBrain?.monsterBrainV96||null, ultraBrainV97:db.assistantBrain?.ultraBrainV97||null, errorLearning:{corrections:(db.assistantBrain?.errorLearning?.corrections||[]).length,patterns:Object.keys(db.assistantBrain?.errorLearning?.patterns||{}).length,updatedAt:db.assistantBrain?.errorLearning?.updatedAt||0}, learningQuality:{dedupe:'canonical_key_plus_barcode_conflict_guard', teacherBypass:'after_confirmations_barcode_and_field_confidence', knowledgeFeeder:'open_facts_family_with_barcode_and_cache_after_user_confirmation', storesPhotos:false, storesVisualSignature:true, categoryEngine:'ultra_error_reduction_core_v27_97', ultraErrorReduction:'active', preflightStability:'v28_00_final_test_tools', barcodePriority:'barcode > label > memory > teacher', fieldConfidence:'per_field_v97'},
+        globalLearning: 'server_global_product_memory', globalProductMemory: publicGlobalProductMemory(10), knowledgeFeeder: db.assistantBrain.knowledgeFeeder||null, knowledgeCache:{entries:Object.keys(db.assistantBrain?.knowledgeCache?.entries||{}).length,hits:db.assistantBrain?.knowledgeCache?.hits||0,barcodeHits:db.assistantBrain?.knowledgeCache?.barcodeHits||0,updatedAt:db.assistantBrain?.knowledgeCache?.updatedAt||0}, barcodeBrain:db.assistantBrain?.barcodeBrain||null, categoryBrainV95:db.assistantBrain?.categoryBrainV95||null, monsterBrainV96:db.assistantBrain?.monsterBrainV96||null, ultraBrainV97:db.assistantBrain?.ultraBrainV97||null, errorLearning:{corrections:(db.assistantBrain?.errorLearning?.corrections||[]).length,patterns:Object.keys(db.assistantBrain?.errorLearning?.patterns||{}).length,updatedAt:db.assistantBrain?.errorLearning?.updatedAt||0}, learningQuality:{dedupe:'canonical_key_plus_barcode_conflict_guard', teacherBypass:'after_confirmations_barcode_and_field_confidence', knowledgeFeeder:'open_facts_family_with_barcode_and_cache_after_user_confirmation', storesPhotos:false, storesVisualSignature:true, categoryEngine:'ultra_error_reduction_core_v27_97', ultraErrorReduction:'active', preflightStability:'v28_01_sync_hash_fix', barcodePriority:'barcode > label > memory > teacher', fieldConfidence:'per_field_v97'},
         smsReady: PHONE_VERIFY_READY,
         seedMemory:{version:VISION_SEED_MEMORY.version||'', products:(VISION_SEED_MEMORY.products||[]).length, totalProfiles:Number(VISION_MEGA_INDEX.totalProfiles||1000000), megaVersion:VISION_MEGA_INDEX.version||'', categories:(VISION_SEED_MEMORY.categories||[]).length, loaded:(VISION_SEED_MEMORY.products||[]).length>0},
         twilioVerifyReady: TWILIO_VERIFY_ENABLED,
@@ -2947,9 +2948,15 @@ const server = http.createServer(async (req,res)=>{
       const bearer=(req.headers.authorization||'').replace(/^Bearer\s+/,'').trim();
       const h=(householdId && db.households[householdId] && db.households[householdId].token===bearer) ? db.households[householdId] : null;
       if(!h) return send(res, 401, {ok:false,error:'unauthorized_household'});
-      const mem=await learnAutonomyOnServer(h, body.payload||{});
-      await saveDb();
-      return send(res, 200, {ok:true, memory:mem, status:autonomyStatusFor(h), audit:(body.payload||{}).learningAudit||null, knowledgeFeeder:(body.payload||{}).confirmed?.knowledgeFeeder||null, globalProductMemory:publicGlobalProductMemory(10), persistent:true});
+      try{
+        const mem=await learnAutonomyOnServer(h, body.payload||{});
+        await saveDb();
+        return send(res, 200, {ok:true, saved:true, syncConfirmed:true, memory:mem, status:autonomyStatusFor(h), audit:(body.payload||{}).learningAudit||null, knowledgeFeeder:(body.payload||{}).confirmed?.knowledgeFeeder||null, globalProductMemory:publicGlobalProductMemory(10), persistent:true});
+      }catch(syncErr){
+        console.error('learn/autonomy failed', syncErr);
+        updateGlobalLearningAudit({type:'learn-autonomy-server-error', productName:body.payload?.confirmed?.productName||'', brand:body.payload?.confirmed?.brand||'', reason:String(syncErr?.message||syncErr).slice(0,180)});
+        return send(res, 500, {ok:false,error:'learn_autonomy_failed', reason:String(syncErr?.message||syncErr).slice(0,180)});
+      }
     }
 
     if(req.method === 'GET' && pathName === '/api/ai/learning-status'){
