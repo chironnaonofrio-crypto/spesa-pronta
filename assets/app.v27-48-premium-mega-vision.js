@@ -2263,7 +2263,9 @@ function getLiveLabelTarget(){
 }
 function getLiveFollowupStep(el){
   const step=String(el?.dataset?.liveFollowupStep||'').trim().toLowerCase();
-  return step==='expiry' ? 'expiry' : 'label';
+  if(step==='done') return 'done';
+  if(step==='expiry') return 'expiry';
+  return 'label';
 }
 function liveFollowupNeedsExpiry(el,result={}){
   if(!el) return false;
@@ -2329,8 +2331,9 @@ function enterLiveLabelFollowup(el,result={}){
   ]), true);
   setLiveFollowupHud('label');
 }
-function mergeLabelVisionIntoResultCard(el,base={},extra={},dataUrl=''){
+function mergeLabelVisionIntoResultCard(el,base={},extra={},dataUrl='', stepArg=''){
   if(!el) return;
+  const step = stepArg || getLiveFollowupStep(el);
   extra=purgeContradictoryMemoryAndFormat(extra||{});
   base=purgeContradictoryMemoryAndFormat(base||{});
   const setField=(sel,val,force=false)=>{
@@ -2413,7 +2416,36 @@ async function analyzeLabelFrameForActiveResult(dataUrl, el, visualSignature='')
     setLiveFollowupHud(step);
     return true;
   }
-  mergeLabelVisionIntoResultCard(el,base,extra,dataUrl);
+  // V27.80: se siamo nello step scadenza, una nuova foto del prodotto/etichetta non deve
+  // sovrascrivere o riavviare la scheda. Accetto solo una foto dove leggo davvero una data.
+  if(step==='expiry'){
+    const expiryCandidate = explicitExpiryFromEvidence(extra) || parseExpiryLoose([
+      extra.expiryDate, extra.expiry, extra.expirationDate, extra.expiration, extra.expiryText,
+      extra.expiryDetectedRaw, extra.bestBefore, extra.bestBeforeText,
+      ...(extra.detectedText||[]), ...(extra.visibleEvidence||[])
+    ].filter(Boolean).join(' '));
+    if(!expiryCandidate){
+      el.dataset.liveLabelTarget='1';
+      el.dataset.liveFollowupStep='expiry';
+      liveScanPendingResult=true;
+      liveScanAwaitNextOk=false;
+      liveScanCooldownUntil=Date.now()+3300;
+      const msg='Questa foto non sembra contenere una scadenza leggibile: non cambio la scheda. Inquadra solo la data di scadenza oppure dimmela a voce.';
+      setScanVoiceHelper(el,msg,'warn');
+      setScannerStatus(msg, liveScanActive ? voiceLine('expiry_not_found_keep_card',[
+        'Non trovo una data in questa foto. La scheda resta uguale. Cerca solo la scadenza e premi scatta ora.',
+        'Questa sembra ancora una foto del prodotto o dell etichetta, non della scadenza. Non cambio i dati: mostrami solo la data.'
+      ]) : voiceLine('expiry_not_found_keep_card_photo',[
+        'Non trovo una data in questa foto. Carica o scatta una foto solo della scadenza, oppure dimmela a voce.',
+        'La scheda resta invariata. Mi serve la foto della data di scadenza o la scadenza detta a voce.'
+      ]), true);
+      setLiveFollowupHud('expiry');
+      document.querySelector('.scanning-preview')?.remove();
+      return true;
+    }
+    extra.expiryDate=expiryCandidate;
+  }
+  mergeLabelVisionIntoResultCard(el,base,extra,dataUrl,step);
   liveScanPendingResult=true;
   liveScanAwaitNextOk=false;
   liveScanCooldownUntil=Date.now()+2600;
@@ -4189,3 +4221,5 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 console.log('[Spesa Pronta] V27.64 premium-mega-vision loaded: cloud fallback pulito + no errori tecnici in scheda');
+
+/* V27.80_EXPIRY_RESCAN_GUARD: follow-up scadenza protetto da riscan prodotto/etichetta. */
