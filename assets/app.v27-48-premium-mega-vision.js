@@ -1706,9 +1706,10 @@ function parseItalianYearFromTokens(tokens=[], idx=0){
 }
 function parseExpiryMonthYear(raw=''){
   const text=String(raw||'').trim();
-  let m=text.match(/(?:scad(?:e|enza)?|entro|exp|tmc|bb)?\s*(\d{1,2})\s*[\/\-.]\s*(\d{2,4})(?!\s*[\/\-.]\s*\d)/i);
+  const ocrText=text.replace(/[Oo](?=\d)|(?<=\d)[Oo]/g,'0').replace(/[Il](?=\d)|(?<=\d)[Il]/g,'1');
+  let m=ocrText.match(/(?:scad(?:e|enza)?|entro|exp|tmc|bb|da consumarsi preferibilmente entro)?\s*(\d{1,2})\s*[\/\-.]\s*(\d{2,4})(?!\s*[\/\-.]\s*\d)/i);
   if(m){ const mo=Number(m[1]); const y=normalizeExpiryYearPart(m[2]); if(mo>=1 && mo<=12 && y) return `${String(mo).padStart(2,'0')}/${y}`; }
-  m=text.match(/(?:scad(?:e|enza)?|entro|exp|tmc|bb)?\s*(\d{1,2})\s+(\d{4}|\d{2})\b/i);
+  m=ocrText.match(/(?:scad(?:e|enza)?|entro|exp|tmc|bb|da consumarsi preferibilmente entro)?\s*(\d{1,2})\s+(\d{4}|\d{2})\b/i);
   if(m){ const mo=Number(m[1]); const y=normalizeExpiryYearPart(m[2]); if(mo>=1 && mo<=12 && y) return `${String(mo).padStart(2,'0')}/${y}`; }
   const n=normalizeText(text).replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
   const months={gennaio:'01',febbraio:'02',marzo:'03',aprile:'04',maggio:'05',giugno:'06',luglio:'07',agosto:'08',settembre:'09',ottobre:'10',novembre:'11',dicembre:'12'};
@@ -1961,9 +1962,15 @@ function syncScanResultFromFields(el, result={}){
   const expiry=read('[data-scan-expiry]');
   const cat=read('[data-scan-cat]');
   const damage=read('[data-scan-damage]');
+  const trustedFromEvidence = result.labelScanMerged ? deriveTrustedLabelFields(result) : {};
   if(name && !/^es\./i.test(name)) result.productName=name;
   if(brand) result.brand=brand;
   if(size) result.estimatedSize=size;
+  if(result.labelScanMerged && hasStrongCurrentLabelEvidence(result)){
+    if(trustedFromEvidence.productName && trustedFieldConflict(name, trustedFromEvidence.productName)) result.productName=trustedFromEvidence.productName;
+    if(trustedFromEvidence.brand && trustedFieldConflict(brand, trustedFromEvidence.brand)) result.brand=trustedFromEvidence.brand;
+    if(trustedFromEvidence.estimatedSize && (!size || /da confermare|capienza da confermare|1,5 l \/ 2 l|^0?5\s*l$/i.test(size))) result.estimatedSize=trustedFromEvidence.estimatedSize;
+  }
   if(qty && Number(qty)>0) result.quantity=Number(qty);
   if(unit) result.unit=unit;
   if(expiry) result.expiryDate=expiry;
@@ -1980,6 +1987,7 @@ function syncScanResultFromFields(el, result={}){
 }
 function refreshScanResultCard(el, result={}){
   result=syncScanResultFromFields(el,result||{});
+  result=repairStaleScanFieldsFromLabelEvidence(el,result||{});
   renderScanCompletionStatus(el, result);
   if(!el?.classList.contains('confirmed')){
     const info=getScanCompletionStatus(el,result);
@@ -2405,14 +2413,15 @@ function mergeLabelVisionIntoResultCard(el,base={},extra={},dataUrl='', stepArg=
   const step = stepArg || getLiveFollowupStep(el);
   extra=purgeContradictoryMemoryAndFormat(extra||{});
   base=purgeContradictoryMemoryAndFormat(base||{});
+  const trustedPack=applyTrustedLabelFieldsToExtra(base,extra);
+  extra=trustedPack.extra;
+  const trustedLabel=trustedPack.trusted||{};
   const setField=(sel,val,force=false)=>{
     const node=el.querySelector(sel); const v=String(val||'').trim();
     if(!node || !v) return;
     const cur=String(node.value||'').trim();
     if(force || !cur || /^es\./i.test(cur) || /da confermare|capienza da confermare|1,5 l \/ 2 l/i.test(cur)){
-      node.value=v;
-      node.dispatchEvent(new Event('input',{bubbles:true}));
-      node.dispatchEvent(new Event('change',{bubbles:true}));
+      if(node.value!==v) node.value=v;
     }
   };
   const rawExpiry=extra.expiryDate || extra.expiry || extra.expirationDate || extra.expiration || extra.expiryText || extra.expiryDetectedRaw || parseExpiryLoose([...(extra.detectedText||[]), ...(extra.visibleEvidence||[])].join(' '));
@@ -2422,13 +2431,19 @@ function mergeLabelVisionIntoResultCard(el,base={},extra={},dataUrl='', stepArg=
   if(labelConflicts){
     base=clearRejectedMemoryPrediction(base,'Etichetta attuale più affidabile della memoria locale precedente.');
   }
-  setField('[data-scan-name]', extra.productName, !base.productName || isBadScanName(base.productName) || labelConflicts);
-  setField('[data-scan-brand]', extra.brand, labelConflicts && !!extra.brand);
-  setField('[data-scan-size]', extra.estimatedSize || extra.size, labelConflicts && !!(extra.estimatedSize||extra.size));
+  const currentName=String(el.querySelector('[data-scan-name]')?.value||base.productName||'').trim();
+  const currentBrand=String(el.querySelector('[data-scan-brand]')?.value||base.brand||'').trim();
+  const currentSize=String(el.querySelector('[data-scan-size]')?.value||base.estimatedSize||'').trim();
+  const forceTrustedName = step==='label' && !!extra.productName && hasStrongCurrentLabelEvidence(extra) && (labelConflicts || trustedFieldConflict(currentName, extra.productName));
+  const forceTrustedBrand = step==='label' && !!extra.brand && hasStrongCurrentLabelEvidence(extra) && (labelConflicts || trustedFieldConflict(currentBrand, extra.brand));
+  const forceTrustedSize = step==='label' && !!(extra.estimatedSize||extra.size) && (labelConflicts || !currentSize || /da confermare|capienza da confermare|1,5 l \/ 2 l|^0?5\s*l$/i.test(currentSize));
+  setField('[data-scan-name]', extra.productName, forceTrustedName || !base.productName || isBadScanName(base.productName) || labelConflicts);
+  setField('[data-scan-brand]', extra.brand, forceTrustedBrand || (labelConflicts && !!extra.brand));
+  setField('[data-scan-size]', extra.estimatedSize || extra.size, forceTrustedSize);
   if(step==='expiry') setField('[data-scan-expiry]', expiry, !!expiry);
   if(extra.quantity && Number(extra.quantity)>0) setField('[data-scan-qty]', extra.quantity, false);
   setField('[data-scan-unit]', extra.unit, false);
-  if(extra.category) setField('[data-scan-cat]', extra.category, false);
+  if(extra.category && el.dataset.userCategoryEdited!=='1') setField('[data-scan-cat]', extra.category, step==='label' && hasStrongCurrentLabelEvidence(extra));
   if(extra.isDamaged && extra.damageType) setField('[data-scan-damage]', extra.damageType, true);
   base.productName = el.querySelector('[data-scan-name]')?.value?.trim() || base.productName || extra.productName || '';
   base.brand = el.querySelector('[data-scan-brand]')?.value?.trim() || base.brand || extra.brand || '';
@@ -2541,7 +2556,8 @@ async function analyzeLabelFrameForActiveResult(dataUrl, el, visualSignature='')
   el.dataset.liveFollowupStep='done';
   setScanVoiceHelper(el, step==='expiry' ? 'Scadenza letta e scheda aggiornata. Controlla i dati e conferma, oppure correggi a voce/manuale.' : 'Etichetta letta e scheda aggiornata. Controlla i dati e conferma, oppure correggi a voce/manuale.','live');
   setScannerStatus(step==='expiry' ? 'Scadenza acquisita: ho aggiornato la stessa scheda. Ora controlla e conferma il prodotto.' : 'Etichetta acquisita: ho aggiornato la stessa scheda. Ora controlla e conferma il prodotto.', step==='expiry' ? voiceLine('expiry_done',['Scadenza acquisita. Ho aggiornato la scheda, ora puoi controllare e confermare.']) : voiceLine('label_done',['Etichetta acquisita. Ho aggiornato la scheda, ora puoi controllare e confermare.']), true);
-  setTimeout(()=>promptScannerConversation(el, el._scanResult||base, true), 650);
+  try{ refreshGuidedScannerUx(step==='expiry' ? 'expiry-final-review' : 'label-final-review'); }catch{}
+  if(step!=='expiry') setTimeout(()=>promptScannerConversation(el, el._scanResult||base, true), 650);
   return true;
 }
 
@@ -3779,6 +3795,90 @@ function labelResultConflictsWithBase(base={}, extra={}){
   const extraHasLabel=(Array.isArray(extra.detectedText)&&extra.detectedText.join(' ').trim().length>3) || (Array.isArray(extra.visibleEvidence)&&extra.visibleEvidence.join(' ').trim().length>3) || !!extra.cloudVision;
   return extraHasLabel && tokenOverlapCount(e,b)===0;
 }
+
+function labelEvidenceText(extra={}){
+  return [extra.productName,extra.brand,extra.variant,extra.productType,extra.packageType,...(Array.isArray(extra.detectedText)?extra.detectedText:[]),...(Array.isArray(extra.visibleEvidence)?extra.visibleEvidence:[])].filter(Boolean).join(' · ');
+}
+function titleCaseProductName(s=''){
+  return String(s||'').trim().replace(/\s+/g,' ').replace(/\b\w/g,c=>c.toUpperCase()).replace(/\bBbq\b/g,'BBQ');
+}
+function deriveTrustedLabelFields(extra={}){
+  const raw=labelEvidenceText(extra);
+  const n=normalizeLearnText(raw);
+  const out={};
+  if(extra.brand && String(extra.brand).trim()) out.brand=String(extra.brand).trim();
+  else if(/\bselex\b/.test(n)) out.brand='Selex';
+  else if(/\barborea\b/.test(n)) out.brand='Arborea';
+  else if(/\bsaper(?:e)?\s+di\s+sapori\b/.test(n)) out.brand='Saper di Sapori';
+  else if(/\bbarilla\b/.test(n)) out.brand='Barilla';
+  else if(/\bmutti\b/.test(n)) out.brand='Mutti';
+  else if(/\bmulino\s+bianco\b/.test(n)) out.brand='Mulino Bianco';
+  else if(/\bgalbani\b/.test(n)) out.brand='Galbani';
+  else if(/\bgranarolo\b/.test(n)) out.brand='Granarolo';
+  else if(/\bparmalat\b/.test(n)) out.brand='Parmalat';
+  let name='';
+  const pieces=raw.split(/[·\n\|•]+/).map(x=>x.trim()).filter(Boolean);
+  const foodRx=/(pesto|salsa|bbq|barbecue|ketchup|maionese|senape|yogurt|kefir|cioccolat|crema|pistacchi|pistacchio|latte|succo|acqua|pasta|riso|biscott|tonno|passata|sugo|condimento|marmellata|confettura)/i;
+  const badPiece=/^(marca|testo|etichetta|confezione|bottiglia|barattolo|vasetto|formato|contenuto|prodotto|visibile|frontale|squeeze|tappo|colore|immagine)/i;
+  const candidates=pieces.filter(p=>foodRx.test(p) && !badPiece.test(p) && !/^\d/.test(p));
+  if(extra.productName && !isBadScanName(extra.productName)) name=String(extra.productName).trim();
+  if(!name && /\bpesto\b/.test(n) && /\bpistacchi?\b/.test(n)) name='Pesto di Pistacchi';
+  if(!name && /\bsalsa\b/.test(n) && /\bbbq\b/.test(n)) name='Salsa BBQ'+(/\bsqueeze\b/.test(n)?' squeeze':'');
+  if(!name && /\bkefir\b/.test(n) && /\bmirtill/.test(n)) name='Kefir mirtillo in pezzi';
+  if(!name && candidates.length){
+    name=candidates.sort((a,b)=>a.length-b.length)[0];
+    name=name.replace(/^(selex|arborea|saper(?:e)? di sapori|barilla|mutti)\s+/i,'').trim();
+  }
+  if(name) out.productName=titleCaseProductName(name);
+  const fmt=strictLabelFormatFromEvidence(extra);
+  if(fmt) out.estimatedSize=fmt;
+  const cat=inferRealityCategoryFromText([raw,out.productName,out.brand].filter(Boolean).join(' '), extra.category||'');
+  if(cat) out.category=cat;
+  const exp=explicitExpiryFromEvidence(extra);
+  if(exp) out.expiryDate=exp;
+  return out;
+}
+function trustedFieldConflict(current='', incoming=''){
+  const c=specificProductTokens(current||'');
+  const i=specificProductTokens(incoming||'');
+  if(!String(current||'').trim()) return true;
+  if(!i.length) return false;
+  if(!c.length) return true;
+  return tokenOverlapCount(c,i)===0;
+}
+function applyTrustedLabelFieldsToExtra(base={}, extra={}){
+  const trusted=deriveTrustedLabelFields(extra||{});
+  if(trusted.productName) extra.productName=trusted.productName;
+  if(trusted.brand) extra.brand=trusted.brand;
+  if(trusted.estimatedSize) extra.estimatedSize=trusted.estimatedSize;
+  if(trusted.category) extra.category=trusted.category;
+  if(trusted.expiryDate && !extra.expiryDate) extra.expiryDate=trusted.expiryDate;
+  return {base,extra,trusted};
+}
+
+function repairStaleScanFieldsFromLabelEvidence(el,result={}){
+  if(!el || !result?.labelScanMerged || !hasStrongCurrentLabelEvidence(result)) return result;
+  const trusted=deriveTrustedLabelFields(result);
+  const write=(sel,val,force=false)=>{
+    const node=el.querySelector(sel); const v=String(val||'').trim(); if(!node || !v) return;
+    const cur=String(node.value||'').trim();
+    if(force || !cur || trustedFieldConflict(cur,v) || /da confermare|capienza da confermare|1,5 l \/ 2 l|^0?5\s*l$/i.test(cur)){
+      if(node.value!==v) node.value=v;
+    }
+  };
+  if(trusted.productName) write('[data-scan-name]',trusted.productName,true);
+  if(trusted.brand) write('[data-scan-brand]',trusted.brand,true);
+  if(trusted.estimatedSize) write('[data-scan-size]',trusted.estimatedSize,false);
+  if(trusted.category && el.dataset.userCategoryEdited!=='1') write('[data-scan-cat]',trusted.category,false);
+  if(trusted.expiryDate && !String(el.querySelector('[data-scan-expiry]')?.value||'').trim()) write('[data-scan-expiry]',trusted.expiryDate,false);
+  result.productName=String(el.querySelector('[data-scan-name]')?.value||result.productName||'').trim();
+  result.brand=String(el.querySelector('[data-scan-brand]')?.value||result.brand||'').trim();
+  result.estimatedSize=String(el.querySelector('[data-scan-size]')?.value||result.estimatedSize||'').trim();
+  result.expiryDate=String(el.querySelector('[data-scan-expiry]')?.value||result.expiryDate||'').trim();
+  result.category=String(el.querySelector('[data-scan-cat]')?.value||result.category||'').trim();
+  el._scanResult=result;
+  return result;
+}
 function clearRejectedMemoryPrediction(result={}, reason='Memoria locale ignorata: non coerente con etichetta attuale.'){
   if(!result) return result;
   result.bestMatchName='';
@@ -4334,7 +4434,7 @@ console.log('[Spesa Pronta] V27.64 premium-mega-vision loaded: cloud fallback pu
 /* V27.81_EXPIRY_RESCAN_GUARD: follow-up scadenza protetto da riscan prodotto/etichetta. */
 
 
-/* V27.83 Guided Scan UX - stepper, safe rescan controls and clean provisional card */
+/* V27.84 Guided Scan UX - stepper, safe rescan controls and clean provisional card */
 function guidedStepMeta(step){
   const map={
     product:{idx:1,total:4,kicker:'STEP 1/4',title:'Inquadra prodotto',desc:'Fai vedere il prodotto intero. La scheda resta provvisoria finché non completi etichetta e scadenza.'},
