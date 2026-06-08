@@ -1546,3 +1546,53 @@ body{color-scheme:light;}
   .scanner-actions-showcase .action-pill-card .action-pill-title{font-size:.80rem!important}
   .secondary-pill-title{font-size:.78rem!important}
 }
+
+
+/* V27.61 CLEAN SCANNER FLOW - elimina pillole info e sposta Vision in alto */
+.scanner-card-premium .scanner-quick-cards{display:none!important}
+.scanner-title-block > #scannerSeedBrainProof{
+  margin:14px 0 14px!important;
+  padding:14px!important;
+  border-radius:24px!important;
+  box-shadow:0 16px 34px rgba(12,45,94,.07)!important;
+}
+.scanner-title-block > #scannerSeedBrainProof .seed-proof-head{
+  display:grid!important;
+  grid-template-columns:112px minmax(0,1fr)!important;
+  gap:14px!important;
+  align-items:center!important;
+}
+.scanner-title-block > #scannerSeedBrainProof .seed-proof-visual-wrap{
+  width:112px!important;
+  height:92px!important;
+  border-radius:22px!important;
+}
+.scanner-title-block > #scannerSeedBrainProof h3{
+  font-size:1.04rem!important;
+  line-height:1.05!important;
+  margin:0 0 6px!important;
+}
+.scanner-title-block > #scannerSeedBrainProof p{
+  font-size:.82rem!important;
+  line-height:1.34!important;
+  margin:0!important;
+}
+.scanner-title-block > #scannerSeedBrainProof .seed-proof-stats{display:none!important}
+.scanner-title-block > #scannerSeedBrainProof + .scanner-actions,
+.scanner-card-premium .scanner-actions-showcase{margin-top:12px!important}
+.scanner-card-premium .scanner-actions-showcase + .scanner-secondary-actions{margin-top:10px!important}
+.scanner-preview[data-live="1"]{margin-top:12px!important}
+.scanner-status{margin-top:10px!important}
+@media(max-width:640px){
+  .scanner-title-block > #scannerSeedBrainProof{padding:12px!important;border-radius:22px!important;margin:12px 0!important}
+  .scanner-title-block > #scannerSeedBrainProof .seed-proof-head{grid-template-columns:96px minmax(0,1fr)!important;gap:12px!important}
+  .scanner-title-block > #scannerSeedBrainProof .seed-proof-visual-wrap{width:96px!important;height:78px!important;border-radius:18px!important}
+  .scanner-title-block > #scannerSeedBrainProof h3{font-size:.94rem!important}
+  .scanner-title-block > #scannerSeedBrainProof p{font-size:.72rem!important;line-height:1.28!important}
+}
+@media(max-width:390px){
+  .scanner-title-block > #scannerSeedBrainProof .seed-proof-head{grid-template-columns:88px minmax(0,1fr)!important;gap:10px!important}
+  .scanner-title-block > #scannerSeedBrainProof .seed-proof-visual-wrap{width:88px!important;height:72px!important}
+  .scanner-title-block > #scannerSeedBrainProof h3{font-size:.88rem!important}
+  .scanner-title-block > #scannerSeedBrainProof p{font-size:.68rem!important}
+}
