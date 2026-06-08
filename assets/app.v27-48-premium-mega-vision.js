@@ -2411,6 +2411,79 @@ function ensureScannerLiveButtons(){
   $('#liveVisionBtn')?.addEventListener('click', ()=>startLiveVisionMode('smart'));
   $('#scannerCaptureNowBtn')?.addEventListener('click', ()=>captureLiveFrame(true));
 }
+
+function applyScannerLayoutOnce(){
+  const d=$('#groceryScannerDialog');
+  if(!d) return;
+  const set=(el,p,v)=>{ if(el) el.style.setProperty(p,v,'important'); };
+  set(d,'width','min(94vw,740px)');
+  set(d,'max-width','740px');
+  set(d,'max-height','calc(100dvh - 20px)');
+  const card=d.querySelector('.scanner-card-premium');
+  set(card,'max-height','calc(100dvh - 20px)');
+  set(card,'overflow','auto');
+  const quick=d.querySelector('.scanner-quick-cards');
+  set(quick,'display','grid');
+  set(quick,'grid-template-columns','repeat(2,minmax(0,1fr))');
+  set(quick,'max-width','640px');
+  set(quick,'margin','14px auto 0');
+  set(quick,'gap','12px');
+  d.querySelectorAll('.scanner-quick-cards > span').forEach(box=>{
+    set(box,'display','grid');
+    set(box,'grid-template-columns','94px minmax(0,1fr)');
+    set(box,'align-items','center');
+    set(box,'gap','10px');
+    set(box,'min-height','124px');
+    set(box,'padding','12px');
+    set(box,'text-align','left');
+  });
+  d.querySelectorAll('.scanner-quick-cards img.quick-card-art').forEach(img=>{
+    set(img,'width','86px');
+    set(img,'height','86px');
+    set(img,'object-fit','contain');
+    set(img,'object-position','center');
+    set(img,'padding','5px');
+    set(img,'box-sizing','border-box');
+  });
+  const actions=d.querySelector('.scanner-actions.pro-actions');
+  set(actions,'display','grid');
+  set(actions,'grid-template-columns','repeat(2,minmax(0,1fr))');
+  set(actions,'max-width','640px');
+  set(actions,'margin','16px auto 0');
+  set(actions,'gap','12px');
+  d.querySelectorAll('.scanner-actions.pro-actions > *').forEach(btn=>set(btn,'min-height','78px'));
+  ['.scanner-seed-proof','.scanner-status','.scanner-preview','.scanner-results','.scanner-footer'].forEach(sel=>{
+    d.querySelectorAll(sel).forEach(el=>{
+      set(el,'max-width','640px');
+      set(el,'margin-left','auto');
+      set(el,'margin-right','auto');
+    });
+  });
+  if(window.matchMedia('(max-width:430px)').matches){
+    set(d,'width','calc(100vw - 12px)');
+    set(d,'max-height','calc(100dvh - 12px)');
+    set(card,'padding','14px');
+    set(quick,'gap','9px');
+    d.querySelectorAll('.scanner-quick-cards > span').forEach(box=>{
+      set(box,'grid-template-columns','1fr');
+      set(box,'justify-items','center');
+      set(box,'text-align','center');
+      set(box,'min-height','148px');
+      set(box,'padding','9px');
+    });
+    d.querySelectorAll('.scanner-quick-cards img.quick-card-art').forEach(img=>{
+      set(img,'width','74px');
+      set(img,'height','74px');
+    });
+    d.querySelectorAll('.scanner-quick-cards .quick-copy').forEach(c=>{
+      set(c,'text-align','center');
+      set(c,'align-items','center');
+    });
+    set(actions,'gap','9px');
+    d.querySelectorAll('.scanner-actions.pro-actions > *').forEach(btn=>set(btn,'min-height','72px'));
+  }
+}
+
 function openGroceryScanner(afterShopping=false){
   const dlg=$('#groceryScannerDialog'); if(!dlg) return;
   ensureScannerLiveButtons();
@@ -2418,6 +2491,8 @@ function openGroceryScanner(afterShopping=false){
   refreshVisionBrainPanel();
   setScannerStatus(!settings.inventorySetupDone ? 'Scansiona un prodotto per volta: controlla foto, nome, formato, scadenza e stato prima di salvare.' : (afterShopping ? 'Controllo spesa: conferma la scheda, poi dai OK per passare al prossimo prodotto.' : 'Scatta o avvia la diretta. La Vision legge dettagli e ti fa correggere prima del salvataggio.'));
   try{ dlg.showModal(); }catch{ dlg.setAttribute('open',''); }
+  applyScannerLayoutOnce();
+  setTimeout(applyScannerLayoutOnce, 80);
   openAiPanel();
 }
 function stopLiveVisionMode(keepMessage=false){

@@ -1070,9 +1070,9 @@ body::after{content:'V27.74 UI POLISH'!important}
 </style>
 
 
-<style id="v2779-header-controls-fix">
-/* V27.79 DIRECT SCAN FIX FIX */
-body::after{content:'V27.79 DIRECT SCAN FIX'!important}
+<style id="v2780-header-controls-fix">
+/* V27.80 SAFE SCAN FIX FIX */
+body::after{content:'V27.80 SAFE SCAN FIX'!important}
 
 .top-actions{
   display:grid!important;
@@ -1154,9 +1154,9 @@ body::after{content:'V27.79 DIRECT SCAN FIX'!important}
 </style>
 
 
-<style id="v2779-logout-fix">
-/* V27.79 logout fix */
-body::after{content:'V27.79 DIRECT SCAN FIX'!important}
+<style id="v2780-logout-fix">
+/* V27.80 logout fix */
+body::after{content:'V27.80 SAFE SCAN FIX'!important}
 .returning-account-box{
   grid-column:1/-1;
   padding:14px;
@@ -1171,236 +1171,100 @@ body::after{content:'V27.79 DIRECT SCAN FIX'!important}
 </style>
 
 
-<style id="v2779-hard-scan-modal-fix">
-/* V27.79 DIRECT SCAN FIX - inline ultimo, quindi vince su tutti gli stili precedenti */
-body::after{content:'V27.79 DIRECT SCAN FIX'!important}
+<style id="v2780-safe-scan-css">
+/* V27.80 SAFE SCAN FIX */
+body::after{content:'V27.80 SAFE SCAN FIX'!important}
 
-/* Centro reale del popup su qualsiasi schermo */
-#groceryScannerDialog.scanner-dialog,
+/* Solo CSS leggero, nessun loop */
 #groceryScannerDialog[open]{
-  position:fixed!important;
-  top:50%!important;
-  left:50%!important;
-  right:auto!important;
-  bottom:auto!important;
-  transform:translate(-50%,-50%)!important;
-  margin:0!important;
-  padding:0!important;
-  border:0!important;
-  width:min(94vw,760px)!important;
-  max-width:760px!important;
-  min-width:0!important;
-  max-height:calc(100dvh - 22px)!important;
-  background:transparent!important;
-  overflow:visible!important;
+  width:min(94vw,740px)!important;
+  max-width:740px!important;
+  max-height:calc(100dvh - 20px)!important;
 }
 
-#groceryScannerDialog::backdrop{
-  background:rgba(7,20,38,.46)!important;
-  backdrop-filter:blur(10px)!important;
-}
-
-/* Card interna più centrata, meno larga e più premium */
-#groceryScannerDialog .scanner-card.scanner-card-premium{
-  width:100%!important;
-  max-width:760px!important;
-  max-height:calc(100dvh - 22px)!important;
-  margin:0 auto!important;
-  padding:18px!important;
+#groceryScannerDialog .scanner-card-premium{
+  max-height:calc(100dvh - 20px)!important;
   overflow:auto!important;
   border-radius:30px!important;
-  background:linear-gradient(180deg,#ffffff,#f7fbff)!important;
-  box-sizing:border-box!important;
 }
 
-/* Titolo */
-#groceryScannerDialog .scanner-head{
-  display:grid!important;
-  grid-template-columns:minmax(0,1fr) 48px!important;
-  gap:12px!important;
-  align-items:start!important;
-  margin-bottom:14px!important;
-}
-#groceryScannerDialog .scanner-title-block{
-  min-width:0!important;
-  max-width:100%!important;
-}
-#groceryScannerDialog .scanner-title-block h3{
-  font-size:clamp(1.85rem,6vw,2.8rem)!important;
-  line-height:.95!important;
-}
-#groceryScannerDialog .scanner-title-block p{
-  max-width:100%!important;
-  font-size:clamp(.86rem,2.4vw,.98rem)!important;
-  line-height:1.25!important;
-}
-
-/* Primo blocco 4 riquadri: SEMPRE 2x2, centrato */
 #groceryScannerDialog .scanner-quick-cards{
   display:grid!important;
   grid-template-columns:repeat(2,minmax(0,1fr))!important;
-  gap:12px!important;
-  width:100%!important;
   max-width:640px!important;
   margin:14px auto 0!important;
-  justify-content:center!important;
-  align-items:stretch!important;
+  gap:12px!important;
 }
 
-/* Box info */
 #groceryScannerDialog .scanner-quick-cards > span{
   display:grid!important;
-  grid-template-columns:92px minmax(0,1fr)!important;
+  grid-template-columns:94px minmax(0,1fr)!important;
   align-items:center!important;
   gap:10px!important;
-  min-width:0!important;
-  min-height:122px!important;
+  min-height:124px!important;
   padding:12px!important;
-  border-radius:22px!important;
-  background:linear-gradient(180deg,#ffffff,#f8fbff)!important;
-  border:1px solid rgba(18,102,241,.14)!important;
-  box-shadow:0 14px 30px rgba(8,40,88,.055)!important;
-  overflow:hidden!important;
   text-align:left!important;
 }
 
-/* Immagini non croppate: si vede tutto il contenuto */
-#groceryScannerDialog .scanner-quick-cards img.quick-card-art,
-#groceryScannerDialog .scanner-quick-cards > span > img.quick-card-art{
-  display:block!important;
-  width:84px!important;
-  height:84px!important;
-  max-width:84px!important;
-  max-height:84px!important;
+#groceryScannerDialog .scanner-quick-cards img.quick-card-art{
+  width:86px!important;
+  height:86px!important;
   object-fit:contain!important;
   object-position:center!important;
   padding:5px!important;
-  border-radius:18px!important;
-  background:linear-gradient(180deg,#eef6ff,#ffffff)!important;
-  border:1px solid rgba(18,102,241,.12)!important;
-  box-shadow:0 10px 24px rgba(13,110,253,.09)!important;
   box-sizing:border-box!important;
 }
 
-#groceryScannerDialog .scanner-quick-cards .quick-copy{
-  display:flex!important;
-  flex-direction:column!important;
-  justify-content:center!important;
-  min-width:0!important;
-  max-width:100%!important;
-  overflow:visible!important;
-  background:transparent!important;
-  border:0!important;
-  box-shadow:none!important;
-  padding:0!important;
-}
-#groceryScannerDialog .scanner-quick-cards .quick-copy b{
-  display:block!important;
-  font-size:.98rem!important;
-  line-height:1.06!important;
-  color:#10233f!important;
-  white-space:normal!important;
-  overflow-wrap:anywhere!important;
-}
-#groceryScannerDialog .scanner-quick-cards .quick-copy em{
-  display:block!important;
-  margin-top:4px!important;
-  font-size:.78rem!important;
-  line-height:1.14!important;
-  color:#5b708d!important;
-  white-space:normal!important;
-  overflow-wrap:anywhere!important;
-}
-
-/* Pulsanti azione: 2 colonne, centrati con stessa larghezza del blocco sopra */
 #groceryScannerDialog .scanner-actions.pro-actions{
   display:grid!important;
   grid-template-columns:repeat(2,minmax(0,1fr))!important;
-  gap:12px!important;
-  width:100%!important;
   max-width:640px!important;
   margin:16px auto 0!important;
-}
-#groceryScannerDialog .scanner-actions.pro-actions > *{
-  min-width:0!important;
-  width:100%!important;
-  min-height:78px!important;
-  border-radius:22px!important;
-  box-sizing:border-box!important;
-}
-#groceryScannerDialog .scanner-actions.pro-actions .primary-btn,
-#groceryScannerDialog .scanner-actions.pro-actions .outline-btn,
-#groceryScannerDialog .scanner-actions.pro-actions .scanner-capture{
-  display:flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  gap:8px!important;
-  text-align:center!important;
-  font-size:.92rem!important;
-  line-height:1.1!important;
-  padding:10px 12px!important;
+  gap:12px!important;
 }
 
-/* Blocchi sotto centrati come il resto */
+#groceryScannerDialog .scanner-actions.pro-actions > *{
+  min-height:78px!important;
+}
+
 #groceryScannerDialog .scanner-seed-proof,
 #groceryScannerDialog .scanner-status,
 #groceryScannerDialog .scanner-preview,
 #groceryScannerDialog .scanner-results,
 #groceryScannerDialog .scanner-footer{
-  width:100%!important;
   max-width:640px!important;
   margin-left:auto!important;
   margin-right:auto!important;
 }
 
-/* Mobile stretto: resta 2x2 ma le immagini non spariscono */
 @media(max-width:430px){
-  #groceryScannerDialog.scanner-dialog,
   #groceryScannerDialog[open]{
     width:calc(100vw - 12px)!important;
     max-height:calc(100dvh - 12px)!important;
   }
-  #groceryScannerDialog .scanner-card.scanner-card-premium{
+  #groceryScannerDialog .scanner-card-premium{
     padding:14px!important;
-    max-height:calc(100dvh - 12px)!important;
-    border-radius:26px!important;
   }
   #groceryScannerDialog .scanner-quick-cards{
     gap:9px!important;
-    max-width:100%!important;
   }
   #groceryScannerDialog .scanner-quick-cards > span{
     grid-template-columns:1fr!important;
     justify-items:center!important;
-    align-content:start!important;
     text-align:center!important;
     min-height:148px!important;
-    padding:10px 8px!important;
-    gap:7px!important;
+    padding:9px!important;
   }
-  #groceryScannerDialog .scanner-quick-cards img.quick-card-art,
-  #groceryScannerDialog .scanner-quick-cards > span > img.quick-card-art{
-    width:72px!important;
-    height:72px!important;
-    max-width:72px!important;
-    max-height:72px!important;
-    padding:4px!important;
+  #groceryScannerDialog .scanner-quick-cards img.quick-card-art{
+    width:74px!important;
+    height:74px!important;
   }
   #groceryScannerDialog .scanner-quick-cards .quick-copy{
-    align-items:center!important;
     text-align:center!important;
-  }
-  #groceryScannerDialog .scanner-quick-cards .quick-copy b{
-    font-size:.88rem!important;
-    line-height:1.02!important;
-  }
-  #groceryScannerDialog .scanner-quick-cards .quick-copy em{
-    font-size:.70rem!important;
-    line-height:1.08!important;
+    align-items:center!important;
   }
   #groceryScannerDialog .scanner-actions.pro-actions{
     gap:9px!important;
-    max-width:100%!important;
   }
   #groceryScannerDialog .scanner-actions.pro-actions > *{
     min-height:72px!important;
@@ -1408,26 +1272,6 @@ body::after{content:'V27.79 DIRECT SCAN FIX'!important}
 }
 </style>
 
-<style id="v2779-direct-scan-style">
-body::after{content:'V27.79 DIRECT SCAN FIX'!important}
-#groceryScannerDialog[open]{position:fixed!important;top:50%!important;left:50%!important;right:auto!important;bottom:auto!important;transform:translate(-50%,-50%)!important;margin:0!important;padding:0!important;width:min(92vw,720px)!important;max-width:720px!important;max-height:calc(100dvh - 18px)!important;background:transparent!important;overflow:visible!important}
-#groceryScannerDialog::backdrop{background:rgba(7,20,38,.46)!important;backdrop-filter:blur(10px)!important}
-#groceryScannerDialog .scanner-card.scanner-card-premium{width:100%!important;max-width:720px!important;max-height:calc(100dvh - 18px)!important;margin:0 auto!important;padding:18px!important;overflow:auto!important;border-radius:30px!important;box-sizing:border-box!important}
-#groceryScannerDialog .scanner-head{display:grid!important;grid-template-columns:minmax(0,1fr) 48px!important;gap:12px!important;align-items:start!important;margin-bottom:14px!important}
-#groceryScannerDialog .scanner-title-block{min-width:0!important;max-width:100%!important}
-#groceryScannerDialog .scanner-title-block h3{font-size:clamp(1.85rem,6vw,2.8rem)!important;line-height:.95!important}
-#groceryScannerDialog .scanner-title-block p{max-width:100%!important;font-size:clamp(.86rem,2.4vw,.98rem)!important;line-height:1.25!important}
-#groceryScannerDialog .scanner-quick-cards{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px!important;width:100%!important;max-width:620px!important;margin:14px auto 0!important;justify-content:center!important;align-items:stretch!important}
-#groceryScannerDialog .scanner-quick-cards>span{display:grid!important;grid-template-columns:96px minmax(0,1fr)!important;align-items:center!important;gap:12px!important;min-width:0!important;min-height:128px!important;padding:12px!important;border-radius:22px!important;overflow:hidden!important;text-align:left!important}
-#groceryScannerDialog .scanner-quick-cards img.quick-card-art{display:block!important;width:88px!important;height:88px!important;max-width:88px!important;max-height:88px!important;object-fit:contain!important;object-position:center!important;padding:5px!important;border-radius:18px!important;box-sizing:border-box!important}
-#groceryScannerDialog .scanner-quick-cards .quick-copy{display:flex!important;flex-direction:column!important;justify-content:center!important;min-width:0!important;overflow:visible!important;background:transparent!important;border:0!important;box-shadow:none!important;padding:0!important}
-#groceryScannerDialog .scanner-quick-cards .quick-copy b{font-size:.98rem!important;line-height:1.06!important;white-space:normal!important;overflow-wrap:anywhere!important}
-#groceryScannerDialog .scanner-quick-cards .quick-copy em{font-size:.78rem!important;line-height:1.14!important;white-space:normal!important;overflow-wrap:anywhere!important}
-#groceryScannerDialog .scanner-actions.pro-actions{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px!important;width:100%!important;max-width:620px!important;margin:16px auto 0!important}
-#groceryScannerDialog .scanner-actions.pro-actions>*{min-width:0!important;width:100%!important;min-height:80px!important;box-sizing:border-box!important}
-#groceryScannerDialog .scanner-seed-proof,#groceryScannerDialog .scanner-status,#groceryScannerDialog .scanner-preview,#groceryScannerDialog .scanner-results,#groceryScannerDialog .scanner-footer{width:100%!important;max-width:620px!important;margin-left:auto!important;margin-right:auto!important}
-@media(max-width:430px){#groceryScannerDialog[open]{width:calc(100vw - 10px)!important;max-height:calc(100dvh - 10px)!important}#groceryScannerDialog .scanner-card.scanner-card-premium{padding:12px!important;max-height:calc(100dvh - 10px)!important;border-radius:26px!important}#groceryScannerDialog .scanner-quick-cards{gap:8px!important}#groceryScannerDialog .scanner-quick-cards>span{grid-template-columns:1fr!important;justify-items:center!important;text-align:center!important;min-height:148px!important;padding:9px!important;gap:7px!important}#groceryScannerDialog .scanner-quick-cards img.quick-card-art{width:74px!important;height:74px!important;max-width:74px!important;max-height:74px!important}#groceryScannerDialog .scanner-quick-cards .quick-copy{align-items:center!important;text-align:center!important}#groceryScannerDialog .scanner-quick-cards .quick-copy b{font-size:.88rem!important;line-height:1.02!important}#groceryScannerDialog .scanner-quick-cards .quick-copy em{font-size:.70rem!important;line-height:1.08!important}#groceryScannerDialog .scanner-actions.pro-actions{gap:8px!important}}
-</style>
 </head>
 <body>
   <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.73-ALEXA-SKILL-READY -->
@@ -2131,27 +1975,5 @@ body::after{content:'V27.79 DIRECT SCAN FIX'!important}
   <script src="assets/vision-seed-memory.js?v=2773" defer></script>
   <script src="assets/vision-mega-index.js?v=2773" defer></script>
   <script src="assets/app.v27-48-premium-mega-vision.js?v=2773" defer></script>
-<script id="v2779-direct-scan-layout">
-(function(){
-  const imp='important';
-  function set(el,p,v){if(el)el.style.setProperty(p,v,imp)}
-  function apply(){
-    const d=document.getElementById('groceryScannerDialog'); if(!d) return;
-    document.body.dataset.scanFix='v2779';
-    set(d,'position','fixed'); set(d,'top','50%'); set(d,'left','50%'); set(d,'right','auto'); set(d,'bottom','auto'); set(d,'transform','translate(-50%,-50%)'); set(d,'margin','0'); set(d,'padding','0'); set(d,'width','min(92vw,720px)'); set(d,'max-width','720px'); set(d,'max-height','calc(100dvh - 18px)'); set(d,'overflow','visible');
-    const card=d.querySelector('.scanner-card-premium'); set(card,'width','100%'); set(card,'max-width','720px'); set(card,'margin','0 auto'); set(card,'padding','18px'); set(card,'box-sizing','border-box');
-    const quick=d.querySelector('.scanner-quick-cards'); set(quick,'display','grid'); set(quick,'grid-template-columns','repeat(2,minmax(0,1fr))'); set(quick,'gap','12px'); set(quick,'width','100%'); set(quick,'max-width','620px'); set(quick,'margin','14px auto 0'); set(quick,'justify-content','center');
-    d.querySelectorAll('.scanner-quick-cards > span').forEach(box=>{set(box,'display','grid'); set(box,'grid-template-columns','96px minmax(0,1fr)'); set(box,'align-items','center'); set(box,'gap','12px'); set(box,'min-height','128px'); set(box,'padding','12px'); set(box,'text-align','left'); set(box,'overflow','hidden')});
-    d.querySelectorAll('.scanner-quick-cards img.quick-card-art').forEach(img=>{set(img,'display','block'); set(img,'width','88px'); set(img,'height','88px'); set(img,'max-width','88px'); set(img,'max-height','88px'); set(img,'object-fit','contain'); set(img,'object-position','center'); set(img,'padding','5px'); set(img,'box-sizing','border-box'); set(img,'border-radius','18px')});
-    d.querySelectorAll('.scanner-quick-cards .quick-copy').forEach(c=>{set(c,'display','flex'); set(c,'flex-direction','column'); set(c,'justify-content','center'); set(c,'min-width','0'); set(c,'overflow','visible')});
-    const actions=d.querySelector('.scanner-actions.pro-actions'); set(actions,'display','grid'); set(actions,'grid-template-columns','repeat(2,minmax(0,1fr))'); set(actions,'gap','12px'); set(actions,'max-width','620px'); set(actions,'margin','16px auto 0'); set(actions,'width','100%');
-    d.querySelectorAll('.scanner-actions.pro-actions > *').forEach(b=>{set(b,'min-height','80px'); set(b,'width','100%')});
-    ['.scanner-seed-proof','.scanner-status','.scanner-preview','.scanner-results','.scanner-footer'].forEach(sel=>d.querySelectorAll(sel).forEach(el=>{set(el,'max-width','620px'); set(el,'margin-left','auto'); set(el,'margin-right','auto')}));
-    if(matchMedia('(max-width:430px)').matches){set(d,'width','calc(100vw - 10px)'); set(d,'max-height','calc(100dvh - 10px)'); set(card,'padding','12px'); set(quick,'gap','8px'); d.querySelectorAll('.scanner-quick-cards > span').forEach(box=>{set(box,'grid-template-columns','1fr'); set(box,'justify-items','center'); set(box,'text-align','center'); set(box,'min-height','148px'); set(box,'padding','9px')}); d.querySelectorAll('.scanner-quick-cards img.quick-card-art').forEach(img=>{set(img,'width','74px'); set(img,'height','74px'); set(img,'max-width','74px'); set(img,'max-height','74px')}); set(actions,'gap','8px')}
-  }
-  window.applyDirectScanLayout=apply; document.addEventListener('DOMContentLoaded',apply); addEventListener('resize',apply); setTimeout(apply,300); setInterval(apply,1200);
-  document.addEventListener('DOMContentLoaded',()=>{const d=document.getElementById('groceryScannerDialog'); if(d)new MutationObserver(apply).observe(d,{attributes:true,childList:true,subtree:true})});
-})();
-</script>
 </body>
 </html>
