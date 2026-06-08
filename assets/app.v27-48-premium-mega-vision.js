@@ -2416,7 +2416,7 @@ async function analyzeLabelFrameForActiveResult(dataUrl, el, visualSignature='')
     setLiveFollowupHud(step);
     return true;
   }
-  // V27.80: se siamo nello step scadenza, una nuova foto del prodotto/etichetta non deve
+  // V27.81: se siamo nello step scadenza, una nuova foto del prodotto/etichetta non deve
   // sovrascrivere o riavviare la scheda. Accetto solo una foto dove leggo davvero una data.
   if(step==='expiry'){
     const expiryCandidate = explicitExpiryFromEvidence(extra) || parseExpiryLoose([
@@ -4173,7 +4173,27 @@ function confirmScanResult(el,result,silent=false){
   const confirmedLearning={productName,brand,size,qty,unit,category,expiryDate,damageNote,productMemory:savedProductMemory||internalProductMemory,confirmedAt:Date.now(),visualFeatures:result.visualFeatures||null,visualSignature:result.visualSignature||'',visibleEvidence:result.visibleEvidence||[],detectedText:result.detectedText||[],confidence:result.confidence||null,cloudVision:!!result.cloudVision,autonomousVision:!!result.autonomousVision,memoryVision:!!result.memoryVision,localFirst:!!result.localFirst,learningAudit:{teacherUsed:!!result.cloudVision,recognizedByLocalOrServer:!!(result.localFirst||result.autonomousVision||result.memoryVision),memoryUpdated:true}};
   updateLearningAuditBox(el,result,true);
   pushLearningAudit({type:'product-confirmed', productName, brand, size, teacherUsed:!!result.cloudVision, recognizedByLocalOrServer:!!(result.localFirst||result.autonomousVision||result.memoryVision), memoryUpdated:true});
-  rememberVisionSampleFromScan(result.dataUrl||'', result, {productName,brand,size,qty,unit,category,expiryDate,damageNote}).then(()=>syncAutonomyLearningToServer({type:'vision-confirmation', confirmed:confirmedLearning, voiceProfile:ensureVoiceProfile(), visionStatus:visionBrainStatus()}, true)).catch(()=>syncAutonomyLearningToServer({type:'vision-confirmation', confirmed:confirmedLearning, voiceProfile:ensureVoiceProfile(), visionStatus:visionBrainStatus()}, true));
+  // V27.81: la memoria globale server si aggiorna articolo-per-articolo
+  // nel momento esatto in cui l'utente preme "Conferma e aggiungi in casa".
+  // Non aspettiamo "Completa controllo" e non dipendiamo dalla scansione successiva.
+  if(!el.dataset.serverMemorySyncStarted){
+    el.dataset.serverMemorySyncStarted='1';
+    setScanVoiceHelper(el,'Prodotto confermato. Sto aggiornando la memoria server per questo articolo.', 'ok');
+    syncAutonomyLearningToServer({type:'item-confirmed-add-home', confirmed:confirmedLearning, voiceProfile:ensureVoiceProfile(), visionStatus:visionBrainStatus()}, true)
+      .then(ok=>{
+        if(ok){
+          el.dataset.serverMemorySynced='1';
+          updateLearningAuditBox(el,Object.assign({}, result, {serverMemoryVision:true}),true);
+          pushLearningAudit({type:'server-memory-updated', productName, brand, size, memoryUpdated:true, scope:'single-item'});
+        }else{
+          el.dataset.serverMemorySynced='0';
+          pushLearningAudit({type:'server-memory-pending', productName, brand, size, memoryUpdated:false, scope:'single-item'});
+        }
+      })
+      .catch(()=>{ el.dataset.serverMemorySynced='0'; });
+  }
+  // Il campione visivo locale resta separato: utile per migliorare la visione, ma non deve ritardare il salvataggio server.
+  rememberVisionSampleFromScan(result.dataUrl||'', result, {productName,brand,size,qty,unit,category,expiryDate,damageNote}).catch(()=>{});
   aiMemory.pendingVerification=false;
   liveScanLastAcceptedSig = result.visualSignature || liveScanLastMetrics?.signature || liveScanLastAcceptedSig; liveScanLastAcceptedName=productName; liveScanSameObjectWarnings=0;
   saveAiMemory(); saveAll(); render(); if(!silent){ toast('Articolo aggiornato in casa ✅'); const finalVoice=`Perfetto. Ho aggiornato ${productName}${brand ? ' marca '+brand : ''}${size ? ' formato '+size : ''} in casa.${expiryDate? ' Scadenza registrata '+expiryDate+'.' : ''}${damageNote && damageNote!=='Integro' ? ' Ho segnato anche lo stato del prodotto.' : ''}`; speakNatural(finalVoice, {flush:true, rate:1.0, pitch:1.02}); } el.classList.remove('voice-active'); const next=document.querySelector('#scannerResults .scan-result:not(.confirmed):not(.bad)'); if(next){ setTimeout(()=>promptScannerConversation(next, next._scanResult||{}, true), 500); } else { enterNextObjectGate(); }
@@ -4222,4 +4242,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
 console.log('[Spesa Pronta] V27.64 premium-mega-vision loaded: cloud fallback pulito + no errori tecnici in scheda');
 
-/* V27.80_EXPIRY_RESCAN_GUARD: follow-up scadenza protetto da riscan prodotto/etichetta. */
+/* V27.81_EXPIRY_RESCAN_GUARD: follow-up scadenza protetto da riscan prodotto/etichetta. */
