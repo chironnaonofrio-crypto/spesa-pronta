@@ -2507,17 +2507,6 @@ function enhanceScannerQuickCards(){ const wrap=document.querySelector('#grocery
 
 function ensureScannerLiveButtons(){ return; }
 
-function openGroceryScanner(afterShopping=false){
-  const dlg=$('#groceryScannerDialog'); if(!dlg) return;
-  enhanceScannerQuickCards();
-  rebuildScannerMergedPills();
-  ensureScannerLiveButtons();
-  dlg.dataset.afterShopping = afterShopping ? '1' : '0';
-  refreshVisionBrainPanel();
-  setScannerStatus(!settings.inventorySetupDone ? 'Scansiona un prodotto per volta: controlla foto, nome, formato, scadenza e stato prima di salvare.' : (afterShopping ? 'Controllo spesa: conferma la scheda, poi dai OK per passare al prossimo prodotto.' : 'Scatta o avvia la diretta. La Vision legge dettagli e ti fa correggere prima del salvataggio.'));
-  try{ dlg.showModal(); }catch{ dlg.setAttribute('open',''); }
-  openAiPanel();
-}
 function stopLiveVisionMode(keepMessage=false){
   liveScanActive=false; liveScanStableCount=0; liveScanLastHint=''; liveScanPrevSample=null; liveScanLastSpeechKey=''; liveScanReadySince=0; liveScanCooldownUntil=0; liveScanPendingResult=false; liveScanAwaitNextOk=false, visionBackendStatus=null, visionBackendStatusAt=0; stopScannerMic(true); if('speechSynthesis' in window) try{ speechSynthesis.cancel(); }catch{}
   if(liveScanTimer){ clearTimeout(liveScanTimer); liveScanTimer=null; }
