@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v27.57-premium-wow-mobile';
+window.SPESA_PRONTA_VERSION='v27.47-blank-page-fixed';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -769,7 +769,6 @@ function render(){
   updateFlowClasses();
   renderStats(); renderProducts(); renderSide(); renderSettings(); renderAllProducts(); renderShoppingFull(); renderSuggestions(); renderWelcome(); renderVerifyEmail(); applyInlineImages();
   renderUserPill();
-  renderV2757VerificationLauncher();
 }
 
 function renderUserPill(){
@@ -2019,12 +2018,10 @@ function ensureScannerLiveButtons(){
 function openGroceryScanner(afterShopping=false){
   const dlg=$('#groceryScannerDialog'); if(!dlg) return;
   ensureScannerLiveButtons();
-  ensureV2757ScannerActions();
   dlg.dataset.afterShopping = afterShopping ? '1' : '0';
   refreshVisionBrainPanel();
   setScannerStatus(!settings.inventorySetupDone ? 'Scansiona un prodotto per volta: controlla foto, nome, formato, scadenza e stato prima di salvare.' : (afterShopping ? 'Controllo spesa: conferma la scheda, poi dai OK per passare al prossimo prodotto.' : 'Scatta o avvia la diretta. La Vision legge dettagli e ti fa correggere prima del salvataggio.'));
   try{ dlg.showModal(); }catch{ dlg.setAttribute('open',''); }
-  kickV2757ScannerWow();
   openAiPanel();
 }
 function stopLiveVisionMode(keepMessage=false){
@@ -2035,7 +2032,7 @@ function stopLiveVisionMode(keepMessage=false){
   if(pv) pv.dataset.live='0';
   if(!keepMessage && pv && pv.innerHTML && pv.querySelector('.live-scan-stage')) pv.innerHTML='';
 }
-function closeGroceryScanner(){ stopLiveVisionMode(); closeV2757ScannerWow(); const dlg=$('#groceryScannerDialog'); if(dlg?.open) dlg.close(); else dlg?.removeAttribute('open'); }
+function closeGroceryScanner(){ stopLiveVisionMode(); const dlg=$('#groceryScannerDialog'); if(dlg?.open) dlg.close(); else dlg?.removeAttribute('open'); }
 function resetScannerResults(){ stopLiveVisionMode(true); scannerMicCurrentResultId=''; scannerMicStep=''; scannerMicLastPrompt=''; liveScanPendingResult=false; liveScanCooldownUntil=0; liveScanAwaitNextOk=false; $('#scannerResults').innerHTML=''; $('#scannerPreview').innerHTML=''; setScannerStatus('Risultati svuotati. Puoi riaprire la diretta AI o scattare nuove foto.', '', false); }
 function completeShoppingDone(needsVerification=false){
   if(state.length){
@@ -3049,92 +3046,11 @@ function toggleWakeWord(on){
   try{ aiRecognition.start(); toast('Wake word attivo: dì “Hey Spesa Pronta”'); }catch{}
 }
 
-
-/* ===============================
-   V27.57 premium wow mobile helpers
-   Conservative layer: adds UI polish and safety buttons without removing existing logic.
-   =============================== */
-function ensureV2757ScannerActions(){
-  const bar=document.querySelector('#groceryScannerDialog .scanner-actions');
-  if(!bar) return;
-  const makeLabel=(id, text, cls, capture=false, multiple=false)=>{
-    if(document.getElementById(id)) return;
-    const label=document.createElement('label');
-    label.className=`scanner-capture ${cls||'outline-btn'}`;
-    label.dataset.v2757Created='1';
-    label.innerHTML=`<span class="action-symbol ${capture?'camera':'gallery'}"></span><span>${text}</span><input data-v2757-created="1" accept="image/*" ${capture?'capture="environment"':''} ${multiple?'multiple':''} id="${id}" type="file">`;
-    bar.insertBefore(label, bar.firstChild);
-  };
-  makeLabel('groceryPhotoInput','SCATTA FOTO','primary-btn',true,false);
-  makeLabel('groceryGalleryInput','CARICA FOTO','outline-btn',false,true);
-  if(!document.getElementById('liveVisionBtn')){
-    const btn=document.createElement('button'); btn.className='primary-btn'; btn.id='liveVisionBtn'; btn.type='button'; btn.dataset.v2757Created='1'; btn.innerHTML='<span class="action-symbol live"></span><span>DIRETTA AI</span>'; bar.appendChild(btn);
-  }
-  if(!document.getElementById('scannerCaptureNowBtn')){
-    const btn=document.createElement('button'); btn.className='outline-btn'; btn.id='scannerCaptureNowBtn'; btn.type='button'; btn.dataset.v2757Created='1'; btn.innerHTML='<span class="action-symbol zap"></span><span>SCATTA ORA</span>'; bar.appendChild(btn);
-  }
-  if(!document.getElementById('fridgeModeBtn')){
-    const btn=document.createElement('button'); btn.className='outline-btn fridge-btn'; btn.id='fridgeModeBtn'; btn.type='button'; btn.dataset.v2757Created='1'; btn.innerHTML='<span class="action-symbol fridge"></span><span>SCANSIONE FRIGO</span>'; bar.appendChild(btn);
-  }
-  if(!document.getElementById('markVerifyBtn')){
-    const btn=document.createElement('button'); btn.className='outline-btn warning'; btn.id='markVerifyBtn'; btn.type='button'; btn.dataset.v2757Created='1'; btn.textContent='FATTA DA VERIFICARE'; bar.appendChild(btn);
-  }
-  const bindings=[
-    ['#liveVisionBtn','click',()=>startLiveVisionMode('smart')],
-    ['#scannerCaptureNowBtn','click',()=>captureLiveFrame(true)],
-    ['#fridgeModeBtn','click',startFridgeMode],
-    ['#markVerifyBtn','click',markShoppingDoneToVerify],
-    ['#groceryPhotoInput','change',e=>handleGroceryFiles(e.target.files)],
-    ['#groceryGalleryInput','change',e=>handleGroceryFiles(e.target.files)]
-  ];
-  bindings.forEach(([sel,event,fn])=>{
-    const el=document.querySelector(sel);
-    if(el && el.dataset.v2757Created==='1' && !el.dataset.v2757Bound){ el.dataset.v2757Bound='1'; el.addEventListener(event,fn); }
-  });
-}
-function renderV2757VerificationLauncher(){
-  const dashboard=document.querySelector('#view-dashboard');
-  if(!dashboard) return;
-  let box=document.getElementById('v2757VerificationLauncher');
-  const shouldShow=isSignedIn() && settings.inventorySetupDone;
-  if(!shouldShow){ box?.remove(); return; }
-  const pending=!!(aiMemory.pendingVerification || settings.inventoryStatus==='to_verify');
-  const badge=pending ? '<span class="v2757-badge warn">● DA VERIFICARE</span>' : '<span class="v2757-badge">◆ VISION SEMPRE PRONTA</span>';
-  const title=pending ? 'Continua la verifica della spesa' : 'Riapri la scansione quando vuoi';
-  const sub=pending ? 'Hai segnato una spesa da controllare: questo pulsante resta qui, così torni subito al popup Vision.' : 'Scatta foto, usa la diretta AI o controlla il frigo senza cercare il menu.';
-  const html=`<div class="v2757-launch-copy">${badge}<strong>${title}</strong><span>${sub}</span></div><div class="v2757-launch-actions"><button class="primary-btn" id="v2757OpenScannerBtn" type="button">VISION PRO</button><button class="outline-btn" id="v2757OpenFridgeBtn" type="button">FRIGO EXP</button></div>`;
-  if(!box){
-    box=document.createElement('section'); box.id='v2757VerificationLauncher'; box.className='v2757-verification-launcher';
-    const stats=dashboard.querySelector('.stats-grid');
-    stats ? stats.insertAdjacentElement('afterend', box) : dashboard.prepend(box);
-  }
-  if(box.dataset.pending!==String(pending)){ box.innerHTML=html; box.dataset.pending=String(pending); }
-  const scanBtn=box.querySelector('#v2757OpenScannerBtn');
-  const fridgeBtn=box.querySelector('#v2757OpenFridgeBtn');
-  if(scanBtn && !scanBtn.dataset.v2757Bound){ scanBtn.dataset.v2757Bound='1'; scanBtn.addEventListener('click',()=>openGroceryScanner(true)); }
-  if(fridgeBtn && !fridgeBtn.dataset.v2757Bound){ fridgeBtn.dataset.v2757Bound='1'; fridgeBtn.addEventListener('click',()=>{ openGroceryScanner(false); setTimeout(()=>startFridgeMode(),140); }); }
-}
-function kickV2757ScannerWow(){
-  const dlg=document.querySelector('#groceryScannerDialog');
-  if(!dlg) return;
-  dlg.classList.remove('v2757-kick');
-  void dlg.offsetWidth;
-  dlg.classList.add('v2757-kick');
-  document.body.classList.add('scanner-open-v2757');
-}
-function closeV2757ScannerWow(){ document.body.classList.remove('scanner-open-v2757'); }
-function bootV2757PremiumWow(){
-  ensureV2757ScannerActions();
-  renderV2757VerificationLauncher();
-  document.documentElement.dataset.spesaProntaVersion='v27.57-premium-wow-mobile';
-}
-
 init();
 
 
 // register-fix-hard-fallback: se qualche altro bind si blocca, il pulsante Registrati resta comunque funzionante.
 document.addEventListener('DOMContentLoaded', () => {
-  bootV2757PremiumWow();
   const form=document.querySelector('#registerForm');
   const btn=document.querySelector('#registerSubmitBtn') || document.querySelector('.register-submit-btn');
   form?.setAttribute('novalidate','novalidate');
@@ -3144,4 +3060,4 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-console.log('[Spesa Pronta] V27.57 premium-wow-mobile loaded: premium hero + wow scanner + safe mobile actions');
+console.log('[Spesa Pronta] V27.48 premium-mega-vision loaded: uppercase UI + 1M virtual seed core + 11200 active products');
