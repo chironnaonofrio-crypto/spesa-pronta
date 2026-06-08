@@ -174,6 +174,72 @@ let liveScanStream = null, liveScanTimer = null, liveScanBusy = false, liveScanA
 let aiListening = false;
 let accountPendingAction = null;
 
+// V27.82 stability helpers: ID scansione, coda memoria, scadenza dedicata.
+let scannerProductSessionCounter=0;
+let scannerActiveProductSessionId='';
+const LEARNING_QUEUE_KEY='spesa_pronta_learning_queue_v2782';
+function newScannerProductSessionId(prefix='scan'){
+  scannerProductSessionCounter++;
+  return `${prefix}_${Date.now()}_${scannerProductSessionCounter}_${Math.random().toString(36).slice(2,7)}`;
+}
+function beginScannerProductSession(source=''){
+  scannerActiveProductSessionId=newScannerProductSessionId('product');
+  scannerMicCurrentResultId=''; scannerMicStep=''; scannerMicLastPrompt='';
+  return scannerActiveProductSessionId;
+}
+function isCurrentScannerProductSession(id=''){
+  return !!id && (!scannerActiveProductSessionId || id===scannerActiveProductSessionId);
+}
+function attachScannerSessionToResult(result={}, sessionId=''){
+  if(!result || typeof result!=='object') return result;
+  const id=sessionId || scannerActiveProductSessionId || newScannerProductSessionId('manual');
+  result.scanSessionId=id;
+  if(Array.isArray(result.items)) result.items.forEach(it=>{ if(it && typeof it==='object') it.scanSessionId=id; });
+  return result;
+}
+function loadLearningQueue(){ try{ return JSON.parse(localStorage.getItem(LEARNING_QUEUE_KEY)||'[]').filter(Boolean); }catch(_){ return []; } }
+function saveLearningQueue(q=[]){ try{ localStorage.setItem(LEARNING_QUEUE_KEY, JSON.stringify((q||[]).slice(0,120))); }catch(_){ } }
+function queueLearningPayload(payload={}, reason='offline'){
+  const q=loadLearningQueue();
+  const confirmed=payload.confirmed||{};
+  const sig=[confirmed.productName,confirmed.brand,confirmed.size,confirmed.category,confirmed.confirmedAt].join('|');
+  if(!q.some(x=>x.sig===sig)) q.push({id:newScannerProductSessionId('learn'), sig, payload, reason, tries:0, queuedAt:Date.now(), lastTryAt:0});
+  saveLearningQueue(q);
+  pushLearningAudit({type:'server-memory-queued', productName:confirmed.productName||'', brand:confirmed.brand||'', size:confirmed.size||'', reason, memoryUpdated:false, queued:true});
+  return q.length;
+}
+function pendingLearningQueueCount(){ return loadLearningQueue().length; }
+function setCardMemorySyncState(el,state='pending',text=''){
+  if(!el) return;
+  let box=el.querySelector('[data-memory-sync-state]');
+  if(!box){
+    box=document.createElement('div');
+    box.setAttribute('data-memory-sync-state','1');
+    box.className='memory-sync-state';
+    const anchor=el.querySelector('[data-learning-audit]') || el.querySelector('.scan-summary-box') || el.querySelector('.scan-fields');
+    if(anchor && anchor.parentNode) anchor.insertAdjacentElement('afterend', box);
+  }
+  box.className='memory-sync-state '+state;
+  const label=text || (state==='ok'?'Memoria server aggiornata ✅':state==='queued'?'Memoria in attesa sync ⚠️':'Aggiorno memoria server…');
+  box.textContent=label;
+}
+async function flushLearningQueue(quiet=true){
+  let q=loadLearningQueue();
+  if(!q.length) return true;
+  const remaining=[];
+  for(const job of q){
+    job.tries=Number(job.tries||0)+1; job.lastTryAt=Date.now();
+    const ok=await syncAutonomyLearningToServer(job.payload, true, true).catch(()=>false);
+    if(!ok && job.tries<12) remaining.push(job);
+  }
+  saveLearningQueue(remaining);
+  if(!quiet && remaining.length) toast(`Memoria server: ${remaining.length} elementi in attesa sync`);
+  return remaining.length===0;
+}
+window.addEventListener('online',()=>flushLearningQueue(true));
+setInterval(()=>flushLearningQueue(true), 45000);
+
+
 function loadState(){ try { const x=JSON.parse(localStorage.getItem(STORAGE_KEY)); return Array.isArray(x) ? migrateItems(x) : []; } catch { return []; } }
 function loadSettings(){ try { return Object.assign(defaultSettings(), JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}')); } catch { return defaultSettings(); } }
 function loadSession(){ try { return Object.assign({mode:'guest', user:null}, JSON.parse(localStorage.getItem(SESSION_KEY)||'{}')); } catch { return {mode:'guest', user:null}; } }
@@ -379,9 +445,9 @@ function updateLearningAuditBox(el,result={}, confirmed=false){
   box.innerHTML=`<strong>AI Learning Audit</strong><div>${badges}</div>`;
 }
 
-async function syncAutonomyLearningToServer(payload={}, quiet=true){
+async function syncAutonomyLearningToServer(payload={}, quiet=true, fromQueue=false){
   try{
-    if(!settings.apiEndpoint || !settings.householdId || !settings.token) return false;
+    if(!settings.apiEndpoint || !settings.householdId || !settings.token){ if(!fromQueue && payload?.confirmed) queueLearningPayload(payload,'missing_cloud_settings'); return false; }
     const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/ai/learn/autonomy`,{
       method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token||''}`},
       body:JSON.stringify({householdId:settings.householdId, memory:aiMemory, payload})
@@ -398,6 +464,7 @@ async function syncAutonomyLearningToServer(payload={}, quiet=true){
       return true;
     }
   }catch(e){ if(!quiet) console.warn('server learning sync failed',e); }
+  if(!fromQueue && payload?.confirmed) queueLearningPayload(payload,'sync_failed');
   return false;
 }
 function t(k){ return translations[settings.lang]?.[k] || translations.it[k] || k; }
@@ -1543,6 +1610,7 @@ function pickPhrase(list, seed=''){
 function voiceLine(key, variants){ return pickPhrase(variants,key)||''; }
 function setScannerStatus(text, voiceText='', forceVoice=false){
   const el=$('#scannerStatus'); if(el) el.textContent=text;
+  try{ refreshGuidedScannerUx(text); }catch{}
   if(voiceText) speakLiveGuidance(forceVoice?('force_'+voiceText):voiceText, voiceText, forceVoice);
 }
 function setVoiceToggleUi(){
@@ -1795,22 +1863,23 @@ function parseSizeFromSpeech(raw=''){
 function parseExpiryLoose(raw=''){
   let text=String(raw||'').trim();
   if(!text) return '';
-  const dateText=text.replace(/[Oo]/g,'0').replace(/[Il]/g,'1');
-  let m=dateText.match(/(\d{1,2})[\/\-.\s](\d{1,2})[\/\-.\s](\d{2,4})/);
-  if(m){ let d=m[1].padStart(2,'0'), mo=m[2].padStart(2,'0'), y=m[3]; if(y.length===2) y='20'+y; if(Number(mo)>=1&&Number(mo)<=12) return `${d}/${mo}/${y}`; }
-  m=dateText.match(/(?:scad(?:e|enza)?|scad\.?|exp|bb|best\s*before|tmc|da\s*consumarsi).*?(\d{1,2})[\/\-.\s](\d{1,2})[\/\-.\s](\d{2,4})/i);
-  if(m){ let d=m[1].padStart(2,'0'), mo=m[2].padStart(2,'0'), y=m[3]; if(y.length===2) y='20'+y; if(Number(mo)>=1&&Number(mo)<=12) return `${d}/${mo}/${y}`; }
-  m=dateText.match(/(?:scad(?:e|enza)?|scad\.?|exp|bb|tmc|entro|consumare\s*entro)?\s*(\d{1,2})\s*[\/\-.\s]\s*(20\d{2}|\d{2})(?!\s*[\/\-.\s]\d)/i);
+  text=text.replace(/[Oo]/g,'0').replace(/[Il]/g,'1').replace(/[–—]/g,'-');
+  const dateText=text;
+  let m=dateText.match(/\b(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{2,4})\b/);
+  if(m){ let d=m[1].padStart(2,'0'), mo=m[2].padStart(2,'0'), y=m[3]; if(y.length===2) y='20'+y; if(Number(mo)>=1&&Number(mo)<=12&&Number(d)>=1&&Number(d)<=31) return `${d}/${mo}/${y}`; }
+  m=dateText.match(/(?:scad(?:e|enza)?|scad\.?|exp|bb|best\s*before|tmc|entro|preferibilmente|consumarsi).*?(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{2,4})/i);
+  if(m){ let d=m[1].padStart(2,'0'), mo=m[2].padStart(2,'0'), y=m[3]; if(y.length===2) y='20'+y; if(Number(mo)>=1&&Number(mo)<=12&&Number(d)>=1&&Number(d)<=31) return `${d}/${mo}/${y}`; }
+  m=dateText.match(/(?:scad(?:e|enza)?|scad\.?|exp|bb|tmc|entro|preferibilmente|consumarsi)?\s*\b(\d{1,2})\s*[\/\-.\s]\s*(20\d{2}|\d{2})\b(?!\s*[\/\-.\s]\d)/i);
   if(m){ const mo=Number(m[1]); let y=m[2]; if(y.length===2) y='20'+y; if(mo>=1&&mo<=12) return `${String(mo).padStart(2,'0')}/${y}`; }
-  m=dateText.match(/(20\d{2})\s*[\/\-.]\s*(\d{1,2})/);
+  m=dateText.match(/\b(20\d{2})\s*[\/\-.]\s*(\d{1,2})\b/);
   if(m){ const mo=Number(m[2]); if(mo>=1&&mo<=12) return `${String(mo).padStart(2,'0')}/${m[1]}`; }
   const lower=normalizeText(text);
   const months={gennaio:'01',gen:'01',febbraio:'02',feb:'02',marzo:'03',mar:'03',aprile:'04',apr:'04',maggio:'05',mag:'05',giugno:'06',giu:'06',luglio:'07',lug:'07',agosto:'08',ago:'08',settembre:'09',set:'09',ottobre:'10',ott:'10',novembre:'11',nov:'11',dicembre:'12',dic:'12'};
   for(const [name,mo] of Object.entries(months)){
-    const rx=new RegExp('(?:scad(?:e|enza)?\s*)?'+name+'\s+(20\d{2}|\d{2})');
+    const rx=new RegExp('(?:scad(?:e|enza)?\\s*)?'+name+'\\s+(20\\d{2}|\\d{2})');
     const hit=lower.match(rx);
     if(hit){ let y=hit[1]; if(y.length===2) y='20'+y; return `${mo}/${y}`; }
-    const rx2=new RegExp('(\d{1,2})\s+'+name+'\s+(20\d{2}|\d{2})');
+    const rx2=new RegExp('(\\d{1,2})\\s+'+name+'\\s+(20\\d{2}|\\d{2})');
     const hit2=lower.match(rx2);
     if(hit2){ let y=hit2[2]; if(y.length===2) y='20'+y; return `${String(hit2[1]).padStart(2,'0')}/${mo}/${y}`; }
   }
@@ -2389,6 +2458,8 @@ function mergeLabelVisionIntoResultCard(el,base={},extra={},dataUrl='', stepArg=
 }
 async function analyzeLabelFrameForActiveResult(dataUrl, el, visualSignature=''){
   if(!el) return false;
+  if(!document.body.contains(el) || el.classList.contains('confirmed') || el.classList.contains('bad')) return false;
+  const targetScanSessionId=el.dataset.scanSessionId||'';
   const base=el._scanResult || {};
   const step=getLiveFollowupStep(el);
   const liveStage=$('#scannerPreview')?.querySelector('.live-scan-stage');
@@ -2403,6 +2474,7 @@ async function analyzeLabelFrameForActiveResult(dataUrl, el, visualSignature='')
     try{ extra=await guessScanFallback('label-live.jpg', dataUrl, null); }catch(e){ extra={needsRetake:true, reason:err?.message||'Lettura etichetta non riuscita'}; }
   }
   document.querySelector('.scanning-preview')?.remove();
+  if(!document.body.contains(el) || el.classList.contains('confirmed') || (targetScanSessionId && el.dataset.scanSessionId!==targetScanSessionId)) return false;
   if(!extra || extra.needsRetake){
     el.dataset.liveLabelTarget='1';
     el.dataset.liveFollowupStep=step;
@@ -2505,7 +2577,7 @@ function stopLiveVisionMode(keepMessage=false){
   if(!keepMessage && pv && pv.innerHTML && pv.querySelector('.live-scan-stage')) pv.innerHTML='';
 }
 function closeGroceryScanner(){ stopLiveVisionMode(); const dlg=$('#groceryScannerDialog'); if(dlg?.open) dlg.close(); else dlg?.removeAttribute('open'); }
-function resetScannerResults(){ stopLiveVisionMode(true); scannerMicCurrentResultId=''; scannerMicStep=''; scannerMicLastPrompt=''; liveScanPendingResult=false; liveScanCooldownUntil=0; liveScanAwaitNextOk=false; $('#scannerResults').innerHTML=''; $('#scannerPreview').innerHTML=''; setScannerStatus('Risultati svuotati. Puoi riaprire la diretta AI o scattare nuove foto.', '', false); }
+function resetScannerResults(){ stopLiveVisionMode(true); scannerMicCurrentResultId=''; scannerMicStep=''; scannerMicLastPrompt=''; liveScanPendingResult=false; liveScanCooldownUntil=0; liveScanAwaitNextOk=false; $('#scannerResults').innerHTML=''; $('#scannerPreview').innerHTML=''; setScannerStatus('Risultati svuotati. Puoi riaprire la diretta AI o scattare nuove foto.', '', false); try{ refreshGuidedScannerUx('reset'); }catch{} }
 function completeShoppingDone(needsVerification=false){
   if(state.length){
     state=state.map(i=>{ const newQty=recommendedQty(i); if(newQty>i.qty) rememberEvent('restock', i, newQty-i.qty, needsVerification?'shopping done unverified':'shopping done verified'); return {...i,qty:newQty,updatedAt:Date.now()}; });
@@ -3128,13 +3200,16 @@ function markTeacherInactive(result={}, statusOrError=null){
   });
 }
 async function analyzeGroceryDataUrl(dataUrl,fileName='photo.jpg', visualSignature=''){
+  const isFollowupStage=/^(label|expiry)-/i.test(String(fileName||'')) || !!(typeof getLiveLabelTarget==='function' && getLiveLabelTarget());
+  const scanSessionId=isFollowupStage ? ((typeof getLiveLabelTarget==='function' && getLiveLabelTarget()?.dataset?.scanSessionId) || scannerActiveProductSessionId || newScannerProductSessionId('followup')) : beginScannerProductSession(fileName||'photo');
   const liveStage=$('#scannerPreview')?.querySelector('.live-scan-stage');
   if(!liveStage) $('#scannerPreview').innerHTML=`<img src="${dataUrl}" alt="Foto articolo"><p>Vision AI sta leggendo prodotto, etichetta, marca, formato, scadenza, quantità e stato del prodotto...</p>`;
   else liveStage.insertAdjacentHTML('beforeend', `<div class="live-scan-pill scanning-preview" style="position:absolute;top:18px;right:18px;z-index:3">Analisi in corso…</div>`);
   const quality=await imageQuality(dataUrl).catch(()=>({ok:false,reason:'non riesco a leggere la foto'}));
   if(!quality.ok){
     setScannerStatus(`Non vedo bene: ${quality.reason}. Rifai la foto più vicino, con luce buona, prodotto centrato e data di scadenza visibile.`, voiceLine('quality_bad',['Non vedo bene il prodotto. Avvicinalo, illuminalo meglio e riprova.','La foto non è abbastanza chiara. Riprova con più luce e prodotto più fermo.']), true);
-    addScannerResult({needsRetake:true, reason:quality.reason, dataUrl});
+    if(!isFollowupStage && !isCurrentScannerProductSession(scanSessionId)) { document.querySelector('.scanning-preview')?.remove(); return; }
+    addScannerResult(attachScannerSessionToResult({needsRetake:true, reason:quality.reason, dataUrl}, scanSessionId));
     document.querySelector('.scanning-preview')?.remove();
     return;
   }
@@ -3174,7 +3249,8 @@ async function analyzeGroceryDataUrl(dataUrl,fileName='photo.jpg', visualSignatu
     // In diretta, se il gate ha già stabilito che l'oggetto è idoneo, non ricomincio da capo: creo una scheda prudente e passo a etichetta/scadenza.
     result=normalizeLiveProductCaptureResult(result,fileName);
   }
-  if(result.needsRetake){ setScannerStatus(result.reason || 'Non vedo bene, rifai la foto.', voiceLine('retake',['La foto non è abbastanza chiara. Riproviamo con il prodotto più fermo e ben visibile.','Non riesco a riconoscerlo bene. Prova a centrarlo meglio e rifare la scansione.']), true); addScannerResult({...result,dataUrl}); document.querySelector('.scanning-preview')?.remove(); return; }
+  if(!isFollowupStage && !isCurrentScannerProductSession(scanSessionId)){ document.querySelector('.scanning-preview')?.remove(); return; }
+  if(result.needsRetake){ setScannerStatus(result.reason || 'Non vedo bene, rifai la foto.', voiceLine('retake',['La foto non è abbastanza chiara. Riproviamo con il prodotto più fermo e ben visibile.','Non riesco a riconoscerlo bene. Prova a centrarlo meglio e rifare la scansione.']), true); addScannerResult(attachScannerSessionToResult({...result,dataUrl}, scanSessionId)); document.querySelector('.scanning-preview')?.remove(); return; }
   if(liveCapture || guidedPhotoCapture){
     result.liveProductCapture=!!liveCapture;
     result.guidedPhotoCapture=!!guidedPhotoCapture;
@@ -3187,6 +3263,8 @@ async function analyzeGroceryDataUrl(dataUrl,fileName='photo.jpg', visualSignatu
       it.requiresThreeScanFlow=true;
     });
   }
+  if(!isFollowupStage && !isCurrentScannerProductSession(scanSessionId)){ document.querySelector('.scanning-preview')?.remove(); return; }
+  result=attachScannerSessionToResult(result, scanSessionId);
   result.dataUrl=dataUrl; result.quality=quality; result.visualSignature=visualSignature || liveScanLastMetrics?.signature || ''; ensureVisionBrain().totalScans=Number(ensureVisionBrain().totalScans||0)+1; if(result.autonomousVision) ensureVisionBrain().autonomousHits=Number(ensureVisionBrain().autonomousHits||0)+1;
   const summary=presentVisionResults(result,dataUrl);
   if(summary.count>1){
@@ -4032,7 +4110,7 @@ function scanEvidenceHtml(result){
   return base + ocrHtml + matchHtml;
 }
 function addScannerResult(result){
-  result=applyRealityCategoryGuard(purgeContradictoryMemoryAndFormat(result||{}));
+  result=attachScannerSessionToResult(applyRealityCategoryGuard(purgeContradictoryMemoryAndFormat(result||{})), result?.scanSessionId || scannerActiveProductSessionId || newScannerProductSessionId('manual'));
   const id='scan_'+Math.random().toString(36).slice(2,9);
   const title=result.needsRetake?'Foto da rifare':(result.needsManual?'Controlla risultato':'Prodotto riconosciuto da Vision AI');
   const multiLabel=(result.multiTotal && result.multiTotal>1)?`Prodotto ${result.multiIndex}/${result.multiTotal}`:'';
@@ -4065,15 +4143,20 @@ function addScannerResult(result){
       <div class="scan-grid-3 pro detail"><label><small>Marca</small><input data-scan-brand value="${esc(result.brand||'')}" placeholder="Es. Vera, Levissima, Divella"></label><label><small>Formato / capienza</small><input data-scan-size value="${esc(result.estimatedSize||'')}" placeholder="Es. 2 L, 1,5 L, 500 ml"></label><label><small>Quantità pezzi</small><input data-scan-qty type="number" min="0" step="0.1" value="${esc(result.quantity||1)}"></label></div>
       <div class="scan-grid-3 pro detail"><label><small>Unità</small><input data-scan-unit value="${esc(result.unit||'pz')}"></label><label><small>Scadenza</small><input data-scan-expiry value="${esc(result.expiryDate||'')}" placeholder="Es. 12/08/2026"></label><label><small>Categoria</small><select data-scan-cat>${categoryOptions(result.category||'food')}</select></label></div>
       <label><small>Stato prodotto</small><input data-scan-damage value="${esc(result.isDamaged?(result.damageType||'Danneggiato'):'Integro')}" placeholder="Integro / rotto / ammaccato"></label>
-      <div class="scan-actions-row"><button class="secondary-btn" type="button" data-scan-recap>Riepilogo AI</button><button class="danger-btn" type="button" data-force-rescan>Rifai questo</button><button class="danger-btn" type="button" data-delete-scan>Elimina</button><button class="primary-btn" data-confirm-scan>Conferma e aggiungi in casa</button></div>`}
+      <div class="scan-actions-row"><button class="secondary-btn" type="button" data-scan-recap>Riepilogo AI</button><button class="outline-btn" type="button" data-rescan-label>Rifai etichetta</button><button class="outline-btn" type="button" data-rescan-expiry>Rifai scadenza</button><button class="danger-btn" type="button" data-force-rescan>Rifai questo</button><button class="danger-btn" type="button" data-delete-scan>Elimina</button><button class="primary-btn" data-confirm-scan>Conferma e aggiungi in casa</button></div>`}
     </div>
   </article>`;
   $('#scannerResults').insertAdjacentHTML('afterbegin',html);
+  try{ refreshGuidedScannerUx('new-result'); }catch{}
   const el=$('#'+id);
+  el.dataset.scanSessionId=result.scanSessionId||'';
+  el.dataset.scanRevision=String(Date.now());
   el._scanResult=result;
   el.querySelector('[data-retake]')?.addEventListener('click',()=>{ liveScanPendingResult=false; liveScanCooldownUntil=Date.now()+1200; $('#groceryPhotoInput')?.click(); if(liveScanActive) queueLiveScanLoop(); });
   el.querySelector('[data-confirm-scan]')?.addEventListener('click',()=>confirmScanResult(el,result));
   el.querySelector('[data-scan-recap]')?.addEventListener('click',()=>speakCurrentScanSummary(el,result));
+  el.querySelector('[data-rescan-label]')?.addEventListener('click',()=>guidedStartLabelRescan(el,result));
+  el.querySelector('[data-rescan-expiry]')?.addEventListener('click',()=>{ setActiveScannerResult(el); el.dataset.liveLabelTarget='1'; el.dataset.liveFollowupStep='expiry'; liveScanPendingResult=true; liveScanAwaitNextOk=false; setScanVoiceHelper(el,'Rifacciamo solo la scadenza: inquadra la data e usa Scatta foto, Carica foto oppure Scatta ora in diretta.', 'live'); setScannerStatus('Rifai solo scadenza: inquadra la data senza rifare prodotto ed etichetta.', liveScanSpeechEnabled ? 'Rifacciamo solo la scadenza. Inquadra la data e scatta quando è leggibile.' : '', true); if(liveScanActive) queueLiveScanLoop(); else $('#groceryPhotoInput')?.click(); });
   el.querySelector('[data-force-rescan]')?.addEventListener('click',()=>{ liveScanPendingResult=false; liveScanAwaitNextOk=false; liveScanCooldownUntil=Date.now()+900; el.remove(); if(liveScanSpeechEnabled) speakNatural('Ok, rifacciamo questo prodotto. Tienilo nel riquadro e lo analizzo di nuovo.', {flush:true}); if(liveScanActive) queueLiveScanLoop(); });
   el.querySelector('[data-delete-scan]')?.addEventListener('click',()=>{
     const wasActive = scannerMicCurrentResultId===id;
@@ -4084,8 +4167,8 @@ function addScannerResult(result){
     toast('Risultato eliminato');
   });
   el.querySelectorAll('[data-scan-name],[data-scan-brand],[data-scan-size],[data-scan-qty],[data-scan-unit],[data-scan-expiry],[data-scan-cat],[data-scan-damage]').forEach(field=>{
-    field.addEventListener('input',(ev)=>{ if(field.matches('[data-scan-cat]') && ev.isTrusted) el.dataset.userCategoryEdited='1'; result=syncScanResultFromFields(el,result); refreshScanResultCard(el,result); });
-    field.addEventListener('change',(ev)=>{ if(field.matches('[data-scan-cat]') && ev.isTrusted) el.dataset.userCategoryEdited='1'; result=syncScanResultFromFields(el,result); refreshScanResultCard(el,result); });
+    field.addEventListener('input',(ev)=>{ if(field.matches('[data-scan-cat]') && ev.isTrusted) el.dataset.userCategoryEdited='1'; result=syncScanResultFromFields(el,result); refreshScanResultCard(el,result); try{ refreshGuidedScannerUx('field-change'); }catch{} });
+    field.addEventListener('change',(ev)=>{ if(field.matches('[data-scan-cat]') && ev.isTrusted) el.dataset.userCategoryEdited='1'; result=syncScanResultFromFields(el,result); refreshScanResultCard(el,result); try{ refreshGuidedScannerUx('field-change'); }catch{} });
     field.addEventListener('focus',()=>setActiveScannerResult(el));
   });
   refreshScanResultCard(el,result);
@@ -4179,25 +4262,31 @@ function confirmScanResult(el,result,silent=false){
   if(!el.dataset.serverMemorySyncStarted){
     el.dataset.serverMemorySyncStarted='1';
     setScanVoiceHelper(el,'Prodotto confermato. Sto aggiornando la memoria server per questo articolo.', 'ok');
-    syncAutonomyLearningToServer({type:'item-confirmed-add-home', confirmed:confirmedLearning, voiceProfile:ensureVoiceProfile(), visionStatus:visionBrainStatus()}, true)
+    setCardMemorySyncState(el,'pending','Aggiorno memoria server…');
+    const learningPayload={type:'item-confirmed-add-home', confirmed:confirmedLearning, voiceProfile:ensureVoiceProfile(), visionStatus:visionBrainStatus()};
+    syncAutonomyLearningToServer(learningPayload, true)
       .then(ok=>{
         if(ok){
           el.dataset.serverMemorySynced='1';
+          setCardMemorySyncState(el,'ok','Memoria server aggiornata ✅');
           updateLearningAuditBox(el,Object.assign({}, result, {serverMemoryVision:true}),true);
           pushLearningAudit({type:'server-memory-updated', productName, brand, size, memoryUpdated:true, scope:'single-item'});
         }else{
           el.dataset.serverMemorySynced='0';
+          queueLearningPayload(learningPayload,'server_not_reachable');
+          setCardMemorySyncState(el,'queued','Memoria in attesa sync ⚠️');
           pushLearningAudit({type:'server-memory-pending', productName, brand, size, memoryUpdated:false, scope:'single-item'});
         }
       })
-      .catch(()=>{ el.dataset.serverMemorySynced='0'; });
+      .catch(()=>{ el.dataset.serverMemorySynced='0'; queueLearningPayload(learningPayload,'network_error'); setCardMemorySyncState(el,'queued','Memoria in attesa sync ⚠️'); });
   }
   // Il campione visivo locale resta separato: utile per migliorare la visione, ma non deve ritardare il salvataggio server.
   rememberVisionSampleFromScan(result.dataUrl||'', result, {productName,brand,size,qty,unit,category,expiryDate,damageNote}).catch(()=>{});
   aiMemory.pendingVerification=false;
   liveScanLastAcceptedSig = result.visualSignature || liveScanLastMetrics?.signature || liveScanLastAcceptedSig; liveScanLastAcceptedName=productName; liveScanSameObjectWarnings=0;
-  saveAiMemory(); saveAll(); render(); if(!silent){ toast('Articolo aggiornato in casa ✅'); const finalVoice=`Perfetto. Ho aggiornato ${productName}${brand ? ' marca '+brand : ''}${size ? ' formato '+size : ''} in casa.${expiryDate? ' Scadenza registrata '+expiryDate+'.' : ''}${damageNote && damageNote!=='Integro' ? ' Ho segnato anche lo stato del prodotto.' : ''}`; speakNatural(finalVoice, {flush:true, rate:1.0, pitch:1.02}); } el.classList.remove('voice-active'); const next=document.querySelector('#scannerResults .scan-result:not(.confirmed):not(.bad)'); if(next){ setTimeout(()=>promptScannerConversation(next, next._scanResult||{}, true), 500); } else { enterNextObjectGate(); }
+  saveAiMemory(); saveAll(); render(); if(!silent){ toast('Articolo aggiornato in casa ✅'); const finalVoice=`Perfetto. Ho aggiornato ${productName}${brand ? ' marca '+brand : ''}${size ? ' formato '+size : ''} in casa.${expiryDate? ' Scadenza registrata '+expiryDate+'.' : ''}${damageNote && damageNote!=='Integro' ? ' Ho segnato anche lo stato del prodotto.' : ''}`; speakNatural(finalVoice, {flush:true, rate:1.0, pitch:1.02}); } el.classList.remove('voice-active'); const next=document.querySelector('#scannerResults .scan-result:not(.confirmed):not(.bad)'); if(next){ setTimeout(()=>promptScannerConversation(next, next._scanResult||{}, true), 500); } else { enterNextObjectGate(); } try{ guidedMarkCardConfirmed(el); }catch{}
 }
+
 
 function startAiVoiceOnce(){
   const SR=window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -4243,3 +4332,156 @@ document.addEventListener('DOMContentLoaded', () => {
 console.log('[Spesa Pronta] V27.64 premium-mega-vision loaded: cloud fallback pulito + no errori tecnici in scheda');
 
 /* V27.81_EXPIRY_RESCAN_GUARD: follow-up scadenza protetto da riscan prodotto/etichetta. */
+
+
+/* V27.83 Guided Scan UX - stepper, safe rescan controls and clean provisional card */
+function guidedStepMeta(step){
+  const map={
+    product:{idx:1,total:4,kicker:'STEP 1/4',title:'Inquadra prodotto',desc:'Fai vedere il prodotto intero. La scheda resta provvisoria finché non completi etichetta e scadenza.'},
+    label:{idx:2,total:4,kicker:'STEP 2/4',title:'Etichetta e ingredienti',desc:'Inquadra nome, marca, formato e ingredienti. Questi dati vengono salvati nella memoria interna prodotto.'},
+    expiry:{idx:3,total:4,kicker:'STEP 3/4',title:'Scadenza',desc:'Inquadra solo la data di scadenza oppure dilla a voce, per esempio 09/2025.'},
+    confirm:{idx:4,total:4,kicker:'STEP 4/4',title:'Conferma articolo',desc:'Controlla i dati e premi Conferma e aggiungi in casa. Da lì il server impara questo articolo.'},
+    done:{idx:4,total:4,kicker:'ARTICOLO OK',title:'Articolo aggiunto',desc:'Prodotto salvato. Puoi passare al prossimo senza contaminare la scheda precedente.'}
+  };
+  return map[step]||map.product;
+}
+function ensureGuidedScanUx(){
+  const preview=$('#scannerPreview');
+  const card=document.querySelector('#groceryScannerDialog .scanner-card');
+  if(!preview||!card) return null;
+  let panel=$('#guidedScanPanel');
+  if(!panel){
+    preview.insertAdjacentHTML('beforebegin', `<section class="guided-scan-panel" id="guidedScanPanel" aria-live="polite">
+      <div class="guided-scan-top">
+        <div><small data-guided-kicker>STEP 1/4</small><h4 data-guided-title>Inquadra prodotto</h4><p data-guided-desc>Fai vedere il prodotto intero. Poi ti chiederò etichetta e scadenza.</p></div>
+        <div class="guided-step-badge" data-guided-counter>1/4</div>
+      </div>
+      <div class="guided-stepper" data-guided-stepper>
+        <span data-step="product">Prodotto</span><span data-step="label">Etichetta</span><span data-step="expiry">Scadenza</span><span data-step="confirm">Conferma</span>
+      </div>
+      <div class="guided-scan-summary" data-guided-summary><strong>Pronto</strong><span>Scansiona il primo prodotto.</span></div>
+      <div class="guided-missing" data-guided-missing></div>
+      <div class="guided-actions">
+        <button class="outline-btn" type="button" data-guided-rescan-label>Rifai etichetta</button>
+        <button class="outline-btn" type="button" data-guided-rescan-expiry>Rifai scadenza</button>
+        <button class="primary-btn" type="button" data-guided-next-product>Scansiona prossimo prodotto</button>
+      </div>
+    </section>`);
+    panel=$('#guidedScanPanel');
+  }
+  if(panel && !panel.dataset.guidedWired){
+    panel.dataset.guidedWired='1';
+    panel.querySelector('[data-guided-rescan-label]')?.addEventListener('click',()=>{
+      const el=getActiveScannerResult();
+      if(el) guidedStartLabelRescan(el, el._scanResult||{});
+      else setScannerStatus('Prima scansiona un prodotto, poi potrai rifare solo l’etichetta.', '', false);
+    });
+    panel.querySelector('[data-guided-rescan-expiry]')?.addEventListener('click',()=>{
+      const el=getActiveScannerResult();
+      if(el) guidedStartExpiryRescan(el, el._scanResult||{});
+      else setScannerStatus('Prima scansiona un prodotto, poi potrai rifare solo la scadenza.', '', false);
+    });
+    panel.querySelector('[data-guided-next-product]')?.addEventListener('click',()=>guidedStartNextProduct());
+  }
+  return panel;
+}
+function guidedActiveResult(){
+  const active=getActiveScannerResult?.();
+  if(active && !active.classList.contains('bad')) return active;
+  const last=document.querySelector('#scannerResults .scan-result.confirmed');
+  return last || null;
+}
+function guidedCurrentStep(el=null,result={}){
+  el=el||guidedActiveResult();
+  if(!el) return 'product';
+  if(el.classList.contains('confirmed')) return 'done';
+  result=result||el._scanResult||{};
+  const follow=String(el.dataset.liveFollowupStep||'').toLowerCase();
+  const state=getScanFormState ? getScanFormState(el,result) : {expiry:''};
+  if(follow==='label' || (!result.labelScanMerged && (result.liveProductCapture || result.guidedPhotoCapture || result.requiresThreeScanFlow))) return 'label';
+  if(follow==='expiry' || ((result.labelScanMerged || follow==='done') && !state.expiry && el.dataset.voiceExpiryDone!=='1')) return 'expiry';
+  const next=getNextScanMicStep ? getNextScanMicStep(el,result) : 'confirm';
+  if(next==='confirm') return 'confirm';
+  if(next==='expiry') return 'expiry';
+  if(next==='brand'||next==='size'||next==='category'||next==='damage'||next==='name'||next==='qty') return 'label';
+  return 'confirm';
+}
+function guidedSummaryFor(el,result={},step='product'){
+  if(!el) return {main:'Pronto per iniziare', sub:'Scansiona il prodotto intero. La scheda finale arriverà dopo prodotto, etichetta e scadenza.', missing:['Prodotto']};
+  const s=getScanFormState ? getScanFormState(el,result) : {};
+  const info=getScanCompletionStatus ? getScanCompletionStatus(el,result) : {missing:[]};
+  const main=s.name || result.productName || 'Prodotto in analisi';
+  const chunks=[];
+  if(s.brand||result.brand) chunks.push('Marca: '+(s.brand||result.brand));
+  if(s.size||result.estimatedSize) chunks.push('Formato: '+(s.size||result.estimatedSize));
+  if(s.category) chunks.push('Categoria: '+(typeof catName==='function'?catName(s.category):s.category));
+  if(s.expiry) chunks.push('Scadenza: '+s.expiry);
+  const missing=[];
+  if(step==='label') missing.push('etichetta / ingredienti');
+  if(step==='expiry') missing.push('scadenza');
+  if(step==='confirm' && info?.missing?.length) missing.push(...info.missing.map(k=>({name:'nome',brand:'marca',size:'formato',qty:'quantità',label:'etichetta',expiry:'scadenza',category:'categoria',damage:'stato'}[k]||k)));
+  return {main, sub:chunks.length?chunks.join(' · '):(step==='done'?'Articolo salvato in casa.':'Sto compilando la scheda, senza mostrare dati sporchi.'), missing};
+}
+function refreshGuidedScannerUx(reason=''){
+  const panel=ensureGuidedScanUx(); if(!panel) return;
+  const el=guidedActiveResult();
+  const result=el? (el._scanResult||{}) : {};
+  const step=guidedCurrentStep(el,result);
+  const meta=guidedStepMeta(step);
+  panel.dataset.step=step;
+  const summary=guidedSummaryFor(el,result,step);
+  panel.querySelector('[data-guided-kicker]').textContent=meta.kicker;
+  panel.querySelector('[data-guided-title]').textContent=meta.title;
+  panel.querySelector('[data-guided-desc]').textContent=meta.desc;
+  panel.querySelector('[data-guided-counter]').textContent=meta.idx+'/'+meta.total;
+  panel.querySelectorAll('[data-step]').forEach(node=>{
+    const key=node.dataset.step;
+    const order={product:1,label:2,expiry:3,confirm:4}[key]||1;
+    node.classList.toggle('active', key===step || (step==='done'&&key==='confirm'));
+    node.classList.toggle('done', order<meta.idx || step==='done');
+  });
+  const sum=panel.querySelector('[data-guided-summary]');
+  if(sum) sum.innerHTML=`<strong>${esc(summary.main)}</strong><span>${esc(summary.sub)}</span>`;
+  const miss=panel.querySelector('[data-guided-missing]');
+  if(miss){
+    if(summary.missing?.length) miss.innerHTML=`<span>Manca: ${esc(summary.missing.join(', '))}</span>`;
+    else if(step==='confirm') miss.innerHTML='<span class="ok">Scheda pronta: conferma e aggiungi in casa.</span>';
+    else if(step==='done') miss.innerHTML='<span class="ok">Memoria articolo aggiornata o in coda sync.</span>';
+    else miss.innerHTML='';
+  }
+  panel.querySelector('[data-guided-rescan-label]').hidden=!(el && !el.classList.contains('confirmed') && step!=='product');
+  panel.querySelector('[data-guided-rescan-expiry]').hidden=!(el && !el.classList.contains('confirmed') && (step==='expiry'||step==='confirm'));
+  panel.querySelector('[data-guided-next-product]').hidden=!(step==='done' || liveScanAwaitNextOk);
+}
+function guidedStartLabelRescan(el,result={}){
+  if(!el) return;
+  setActiveScannerResult(el);
+  el.dataset.liveLabelTarget='1';
+  el.dataset.liveFollowupStep='label';
+  liveScanPendingResult=true; liveScanAwaitNextOk=false;
+  setScanVoiceHelper(el,'Rifacciamo solo etichetta e ingredienti: inquadra la parte dove si leggono nome, marca, formato e composizione.', 'live');
+  setScannerStatus('Rifai etichetta: inquadra nome, marca, formato e ingredienti senza creare un nuovo prodotto.', liveScanSpeechEnabled ? 'Rifacciamo solo etichetta e ingredienti. Inquadra la parte scritta e scatta quando è leggibile.' : '', true);
+  refreshGuidedScannerUx('rescan-label');
+  if(liveScanActive) queueLiveScanLoop(); else $('#groceryPhotoInput')?.click();
+}
+function guidedStartExpiryRescan(el,result={}){
+  if(!el) return;
+  setActiveScannerResult(el);
+  el.dataset.liveLabelTarget='1';
+  el.dataset.liveFollowupStep='expiry';
+  liveScanPendingResult=true; liveScanAwaitNextOk=false;
+  setScanVoiceHelper(el,'Rifacciamo solo la scadenza: inquadra la data oppure dilla a voce, per esempio 09/2025.', 'live');
+  setScannerStatus('Rifai solo scadenza: inquadra la data senza rifare prodotto ed etichetta.', liveScanSpeechEnabled ? 'Rifacciamo solo la scadenza. Inquadra la data e scatta quando è leggibile, oppure dimmela a voce.' : '', true);
+  refreshGuidedScannerUx('rescan-expiry');
+  if(liveScanActive) queueLiveScanLoop(); else $('#groceryPhotoInput')?.click();
+}
+function guidedStartNextProduct(){
+  liveScanPendingResult=false; liveScanAwaitNextOk=false; scannerMicCurrentResultId=''; scannerMicStep=''; scannerMicLastPrompt=''; setActiveScannerResult(null);
+  setScannerStatus('Pronto per il prossimo prodotto: inquadra l’articolo intero.', liveScanSpeechEnabled ? 'Perfetto. Passiamo al prossimo prodotto. Inquadralo intero.' : '', true);
+  refreshGuidedScannerUx('next-product');
+  if(liveScanActive){ resumeLiveAutoScan?.(650); queueLiveScanLoop?.(); }
+}
+function guidedMarkCardConfirmed(el){
+  if(!el) return;
+  setTimeout(()=>refreshGuidedScannerUx('confirmed'),80);
+}
