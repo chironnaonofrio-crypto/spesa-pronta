@@ -1663,3 +1663,16 @@ body{color-scheme:light;}
   font-weight:850!important;
   line-height:1.35!important;
 }
+
+
+/* V27.79 - AI Learning Audit */
+.learning-audit-box{margin:.7rem 0;padding:10px 12px;border-radius:16px;background:linear-gradient(180deg,#f8fbff,#eef6ff);border:1px solid rgba(13,110,253,.14);box-shadow:0 10px 22px rgba(8,40,88,.045)}
+.learning-audit-box strong{display:block;color:#12335f;font-weight:1000;font-size:.9rem;margin-bottom:7px;letter-spacing:.01em}
+.learning-audit-box div{display:flex;flex-wrap:wrap;gap:7px}
+.learning-audit-box span{display:inline-flex;align-items:center;border-radius:999px;padding:.42rem .62rem;font-weight:900;font-size:.74rem;line-height:1.1;border:1px solid rgba(13,110,253,.12);background:#fff;color:#194b86}
+.learning-audit-box span.teacher{background:#fff8e8;color:#8a5a00;border-color:#f1d394}
+.learning-audit-box span.server{background:#eafbf3;color:#12643c;border-color:#bfead5}
+.learning-audit-box span.updated{background:#eafbf3;color:#12643c;border-color:#bfead5}
+.learning-audit-box span.off{background:#fff0f0;color:#8b2525;border-color:#f0c7c7}
+.learning-audit-box span.wait{background:#f6f8fb;color:#53667f}
+@media(max-width:520px){.learning-audit-box{padding:9px 10px}.learning-audit-box span{font-size:.68rem;padding:.38rem .5rem}}

@@ -177,8 +177,8 @@ let accountPendingAction = null;
 function loadState(){ try { const x=JSON.parse(localStorage.getItem(STORAGE_KEY)); return Array.isArray(x) ? migrateItems(x) : []; } catch { return []; } }
 function loadSettings(){ try { return Object.assign(defaultSettings(), JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}')); } catch { return defaultSettings(); } }
 function loadSession(){ try { return Object.assign({mode:'guest', user:null}, JSON.parse(localStorage.getItem(SESSION_KEY)||'{}')); } catch { return {mode:'guest', user:null}; } }
-function defaultAiMemory(){ return {messages:[], facts:[], events:[], scanHistory:[], learnedProducts:[], productDeepMemory:[], productMemoryIndex:{}, visionBrain:{version:48,coreVersion:48,samples:[],candidateSamples:[],productStats:{},productModels:{},corrections:0,totalScans:0,autonomousHits:0,localFirstDecisions:0,cloudTeacherCalls:0,autonomyLevel:0,lastTrainedAt:0,serverSyncs:0,serverLastSyncAt:0}, voiceProfile:{version:48,heard:[],corrections:[],intentPhrases:{},fieldPhrases:{},productAliases:{},speakerStyle:{shortCommands:0,corrections:0,italianSlang:0},updatedAt:0,serverSyncs:0}, pendingVerification:false, lastGreetingDate:'', summary:'', lastInsights:{}, consumptionProfile:{version:27, learnedItems:{}, lastAnalysisAt:0}, seedMemory:{version:'',loaded:false,products:0,categories:0,lastLoadedAt:0}, personality:{warmth:1}}; }
-function loadAiMemory(){ try { const mem=Object.assign(defaultAiMemory(), JSON.parse(localStorage.getItem(AI_MEMORY_KEY)||'{}')); mem.productDeepMemory=Array.isArray(mem.productDeepMemory)?mem.productDeepMemory:[]; mem.productMemoryIndex=mem.productMemoryIndex||{}; mem.visionBrain=Object.assign(defaultAiMemory().visionBrain, mem.visionBrain||{}); mem.visionBrain.samples=Array.isArray(mem.visionBrain.samples)?mem.visionBrain.samples:[]; mem.visionBrain.productStats=mem.visionBrain.productStats||{}; mem.visionBrain.productModels=mem.visionBrain.productModels||{}; mem.visionBrain.candidateSamples=Array.isArray(mem.visionBrain.candidateSamples)?mem.visionBrain.candidateSamples:[]; mem.voiceProfile=Object.assign(defaultAiMemory().voiceProfile, mem.voiceProfile||{}); mem.voiceProfile.heard=Array.isArray(mem.voiceProfile.heard)?mem.voiceProfile.heard:[]; mem.voiceProfile.corrections=Array.isArray(mem.voiceProfile.corrections)?mem.voiceProfile.corrections:[]; mem.voiceProfile.intentPhrases=mem.voiceProfile.intentPhrases||{}; mem.voiceProfile.fieldPhrases=mem.voiceProfile.fieldPhrases||{}; mem.voiceProfile.productAliases=mem.voiceProfile.productAliases||{}; mem.voiceProfile.speakerStyle=Object.assign(defaultAiMemory().voiceProfile.speakerStyle, mem.voiceProfile.speakerStyle||{}); return mem; } catch { return defaultAiMemory(); } }
+function defaultAiMemory(){ return {messages:[], facts:[], events:[], scanHistory:[], learningAudit:[], learnedProducts:[], productDeepMemory:[], productMemoryIndex:{}, visionBrain:{version:48,coreVersion:48,samples:[],candidateSamples:[],productStats:{},productModels:{},corrections:0,totalScans:0,autonomousHits:0,localFirstDecisions:0,cloudTeacherCalls:0,autonomyLevel:0,lastTrainedAt:0,serverSyncs:0,serverLastSyncAt:0}, voiceProfile:{version:48,heard:[],corrections:[],intentPhrases:{},fieldPhrases:{},productAliases:{},speakerStyle:{shortCommands:0,corrections:0,italianSlang:0},updatedAt:0,serverSyncs:0}, pendingVerification:false, lastGreetingDate:'', summary:'', lastInsights:{}, consumptionProfile:{version:27, learnedItems:{}, lastAnalysisAt:0}, seedMemory:{version:'',loaded:false,products:0,categories:0,lastLoadedAt:0}, personality:{warmth:1}}; }
+function loadAiMemory(){ try { const mem=Object.assign(defaultAiMemory(), JSON.parse(localStorage.getItem(AI_MEMORY_KEY)||'{}')); mem.learningAudit=Array.isArray(mem.learningAudit)?mem.learningAudit:[]; mem.productDeepMemory=Array.isArray(mem.productDeepMemory)?mem.productDeepMemory:[]; mem.productMemoryIndex=mem.productMemoryIndex||{}; mem.visionBrain=Object.assign(defaultAiMemory().visionBrain, mem.visionBrain||{}); mem.visionBrain.samples=Array.isArray(mem.visionBrain.samples)?mem.visionBrain.samples:[]; mem.visionBrain.productStats=mem.visionBrain.productStats||{}; mem.visionBrain.productModels=mem.visionBrain.productModels||{}; mem.visionBrain.candidateSamples=Array.isArray(mem.visionBrain.candidateSamples)?mem.visionBrain.candidateSamples:[]; mem.voiceProfile=Object.assign(defaultAiMemory().voiceProfile, mem.voiceProfile||{}); mem.voiceProfile.heard=Array.isArray(mem.voiceProfile.heard)?mem.voiceProfile.heard:[]; mem.voiceProfile.corrections=Array.isArray(mem.voiceProfile.corrections)?mem.voiceProfile.corrections:[]; mem.voiceProfile.intentPhrases=mem.voiceProfile.intentPhrases||{}; mem.voiceProfile.fieldPhrases=mem.voiceProfile.fieldPhrases||{}; mem.voiceProfile.productAliases=mem.voiceProfile.productAliases||{}; mem.voiceProfile.speakerStyle=Object.assign(defaultAiMemory().voiceProfile.speakerStyle, mem.voiceProfile.speakerStyle||{}); return mem; } catch { return defaultAiMemory(); } }
 function saveAiMemory(){ localStorage.setItem(AI_MEMORY_KEY, JSON.stringify(aiMemory)); }
 function defaultSettings(){ return {lang:'it', cloudEnabled:false, apiEndpoint:'/api', token:'', householdId:'', people:2, animals:0, autoSmart:true, alexaConnected:false, googleAssistantConnected:false, inventorySetupDone:false, inventoryStatus:'required', inventoryUpdatedAt:null, profile:{firstName:'',lastName:'',username:'',email:''}}; }
 function migrateItems(items){ return items.map(x => ({...createItem(x.id||cryptoId(), x.image||'assets/illustrations/generic-item.png', x.category||'food', x.names||{it:x.name||x.id,en:x.name||x.id,es:x.name||x.id,de:x.name||x.id}, x.qty??1, x.maxQty??6, x.baseThreshold??2, x.unitOptions||['pz','pc','lt','kg'], {custom:x.custom, usage:x.usage||0, kind:x.kind, perPersonMin:x.perPersonMin, perAnimalMin:x.perAnimalMin, recommendedBuy:x.recommendedBuy}), ...x})); }
@@ -352,6 +352,33 @@ function mergeServerLearning(payload={}){
     saveAiMemory();
   }
 }
+
+function pushLearningAudit(event={}){
+  aiMemory.learningAudit=Array.isArray(aiMemory.learningAudit)?aiMemory.learningAudit:[];
+  aiMemory.learningAudit.unshift(Object.assign({at:Date.now()}, event||{}));
+  aiMemory.learningAudit=aiMemory.learningAudit.slice(0,300);
+  saveAiMemory();
+}
+function scanLearningAuditBadges(result={}, confirmed=false){
+  const out=[];
+  if(result.cloudVision) out.push({cls:'teacher', text:'Nuovo prodotto: docente usato'});
+  if(result.localFirst || result.autonomousVision || result.memoryVision || result.serverMemoryVision) out.push({cls:'server', text:'Riconosciuto da memoria locale/server'});
+  if(result.teacherInactive) out.push({cls:'off', text:'Docente OpenAI non attivo'});
+  if(confirmed) out.push({cls:'updated', text:'Prodotto confermato: memoria aggiornata'});
+  if(!out.length) out.push({cls:'wait', text:'Apprendimento in attesa di conferma'});
+  return out;
+}
+function scanLearningAuditHtml(result={}, confirmed=false){
+  const badges=scanLearningAuditBadges(result, confirmed).map(b=>`<span class="${b.cls}">${esc(b.text)}</span>`).join('');
+  return `<div class="learning-audit-box" data-learning-audit><strong>AI Learning Audit</strong><div>${badges}</div></div>`;
+}
+function updateLearningAuditBox(el,result={}, confirmed=false){
+  const box=el?.querySelector?.('[data-learning-audit]');
+  if(!box) return;
+  const badges=scanLearningAuditBadges(result, confirmed).map(b=>`<span class="${b.cls}">${esc(b.text)}</span>`).join('');
+  box.innerHTML=`<strong>AI Learning Audit</strong><div>${badges}</div>`;
+}
+
 async function syncAutonomyLearningToServer(payload={}, quiet=true){
   try{
     if(!settings.apiEndpoint || !settings.householdId || !settings.token) return false;
@@ -364,7 +391,10 @@ async function syncAutonomyLearningToServer(payload={}, quiet=true){
     if(data.ok){
       ensureVisionBrain().serverSyncs=Number(ensureVisionBrain().serverSyncs||0)+1; ensureVisionBrain().serverLastSyncAt=Date.now();
       ensureVoiceProfile().serverSyncs=Number(ensureVoiceProfile().serverSyncs||0)+1;
-      mergeServerLearning(data); saveAiMemory(); refreshVisionBrainPanel();
+      mergeServerLearning(data);
+      if(data.audit) pushLearningAudit(Object.assign({source:'server'}, data.audit));
+      if(data.globalProductMemory) aiMemory.globalProductMemory=data.globalProductMemory;
+      saveAiMemory(); refreshVisionBrainPanel();
       return true;
     }
   }catch(e){ if(!quiet) console.warn('server learning sync failed',e); }
@@ -1763,11 +1793,27 @@ function parseSizeFromSpeech(raw=''){
   return '';
 }
 function parseExpiryLoose(raw=''){
-  const text=String(raw||'').trim();
-  let m=text.match(/(\d{1,2})[\/\-.\s](\d{1,2})[\/\-.\s](\d{2,4})/);
-  if(m){ let d=m[1].padStart(2,'0'), mo=m[2].padStart(2,'0'), y=m[3]; if(y.length===2) y='20'+y; return `${d}/${mo}/${y}`; }
-  m=text.match(/(?:scad(?:e|enza)?|exp|bb|tmc).*?(\d{1,2})[\/\-.\s](\d{1,2})[\/\-.\s](\d{2,4})/i);
-  if(m){ let d=m[1].padStart(2,'0'), mo=m[2].padStart(2,'0'), y=m[3]; if(y.length===2) y='20'+y; return `${d}/${mo}/${y}`; }
+  let text=String(raw||'').trim();
+  if(!text) return '';
+  const dateText=text.replace(/[Oo]/g,'0').replace(/[Il]/g,'1');
+  let m=dateText.match(/(\d{1,2})[\/\-.\s](\d{1,2})[\/\-.\s](\d{2,4})/);
+  if(m){ let d=m[1].padStart(2,'0'), mo=m[2].padStart(2,'0'), y=m[3]; if(y.length===2) y='20'+y; if(Number(mo)>=1&&Number(mo)<=12) return `${d}/${mo}/${y}`; }
+  m=dateText.match(/(?:scad(?:e|enza)?|scad\.?|exp|bb|best\s*before|tmc|da\s*consumarsi).*?(\d{1,2})[\/\-.\s](\d{1,2})[\/\-.\s](\d{2,4})/i);
+  if(m){ let d=m[1].padStart(2,'0'), mo=m[2].padStart(2,'0'), y=m[3]; if(y.length===2) y='20'+y; if(Number(mo)>=1&&Number(mo)<=12) return `${d}/${mo}/${y}`; }
+  m=dateText.match(/(?:scad(?:e|enza)?|scad\.?|exp|bb|tmc|entro|consumare\s*entro)?\s*(\d{1,2})\s*[\/\-.\s]\s*(20\d{2}|\d{2})(?!\s*[\/\-.\s]\d)/i);
+  if(m){ const mo=Number(m[1]); let y=m[2]; if(y.length===2) y='20'+y; if(mo>=1&&mo<=12) return `${String(mo).padStart(2,'0')}/${y}`; }
+  m=dateText.match(/(20\d{2})\s*[\/\-.]\s*(\d{1,2})/);
+  if(m){ const mo=Number(m[2]); if(mo>=1&&mo<=12) return `${String(mo).padStart(2,'0')}/${m[1]}`; }
+  const lower=normalizeText(text);
+  const months={gennaio:'01',gen:'01',febbraio:'02',feb:'02',marzo:'03',mar:'03',aprile:'04',apr:'04',maggio:'05',mag:'05',giugno:'06',giu:'06',luglio:'07',lug:'07',agosto:'08',ago:'08',settembre:'09',set:'09',ottobre:'10',ott:'10',novembre:'11',nov:'11',dicembre:'12',dic:'12'};
+  for(const [name,mo] of Object.entries(months)){
+    const rx=new RegExp('(?:scad(?:e|enza)?\s*)?'+name+'\s+(20\d{2}|\d{2})');
+    const hit=lower.match(rx);
+    if(hit){ let y=hit[1]; if(y.length===2) y='20'+y; return `${mo}/${y}`; }
+    const rx2=new RegExp('(\d{1,2})\s+'+name+'\s+(20\d{2}|\d{2})');
+    const hit2=lower.match(rx2);
+    if(hit2){ let y=hit2[2]; if(y.length===2) y='20'+y; return `${String(hit2[1]).padStart(2,'0')}/${mo}/${y}`; }
+  }
   return parseExpiryMonthYear(text);
 }
 function isBottleLike(result={}, state={}){
@@ -1793,12 +1839,16 @@ function getScanCompletionStatus(el, result={}){
   const sizeImportant = isBottleLike(result,s);
   const rawSize=String(s.size||'').toLowerCase();
   const sizeOk = (!!s.size && !/da confermare|capienza da confermare|1,5 l \/ 2 l/.test(rawSize)) || el.dataset.voiceSizeDone==='1';
+  const guided = !!(result.liveProductCapture || result.guidedPhotoCapture || el.dataset.liveLabelTarget==='1' || result.requiresThreeScanFlow);
+  const labelOk = !guided || !!result.labelScanMerged || el.dataset.liveFollowupStep==='expiry' || el.dataset.liveFollowupStep==='done';
+  const expiryRequired = guided && labelOk && el.dataset.voiceExpiryDone!=='1';
   const checks=[
     {key:'name', label:'Nome', ok:!!s.name && !/^es\./i.test(s.name) && !isBadScanName(s.name), required:true, warn:Number(result.confidence||0)<0.50},
     {key:'brand', label:'Marca', ok:!!s.brand || !!result.brand || !brandRequired || el.dataset.voiceBrandDone==='1', required:brandRequired, warn:!s.brand},
     {key:'size', label:'Formato', ok:!sizeImportant || sizeOk, required:sizeImportant && !sizeOk, warn:sizeImportant && !sizeOk, important:sizeImportant},
     {key:'qty', label:'Quantità', ok:s.qty>0 && !!s.unit, required:true},
-    {key:'expiry', label:'Scadenza', ok:!!s.expiry || el.dataset.voiceExpiryDone==='1', required:false, warn:!s.expiry},
+    {key:'label', label:'Etichetta', ok:labelOk, required:guided && !labelOk, warn:guided && !labelOk, important:guided},
+    {key:'expiry', label:'Scadenza', ok:!!s.expiry || el.dataset.voiceExpiryDone==='1', required:expiryRequired && !s.expiry, warn:!s.expiry && !expiryRequired},
     {key:'category', label:'Categoria', ok:!!s.category, required:true},
     {key:'damage', label:'Stato', ok:!!s.damage, required:true}
   ];
@@ -1816,7 +1866,7 @@ function scanSummaryText(el, result={}){
   if(s.expiry) parts.push(`Scadenza: ${s.expiry}.`); else parts.push('Scadenza ancora da confermare.');
   if(s.category) parts.push(`Categoria: ${catName(s.category)}.`);
   if(s.damage) parts.push(`Stato: ${s.damage}.`);
-  if(info.missing.length){ parts.push(`Mi manca ancora: ${info.missing.map(k=>({name:'nome',brand:'marca',size:'formato/capienza',qty:'quantità',expiry:'scadenza',category:'categoria',damage:'stato'}[k]||k)).join(', ')}.`); }
+  if(info.missing.length){ parts.push(`Mi manca ancora: ${info.missing.map(k=>({name:'nome',brand:'marca',size:'formato/capienza',qty:'quantità',label:'etichetta',expiry:'scadenza',category:'categoria',damage:'stato'}[k]||k)).join(', ')}.`); }
   else if(info.warn.includes('expiry') || info.warn.includes('brand')) parts.push('La scheda è utilizzabile; marca o scadenza sono opzionali se non visibili.');
   else parts.push('La scheda è completa e pronta per la conferma.');
   return parts.join(' ');
@@ -1827,7 +1877,7 @@ function renderScanCompletionStatus(el, result={}){
   const info=getScanCompletionStatus(el,result);
   const pct=Math.round((info.done/info.total)*100);
   const progress=info.checks.map(c=>`<div class="step ${c.ok?'ok':(c.warn?'warn':'')} ${c.important?'important':''}">${c.ok?'✓':'•'} ${esc(c.label)}</div>`).join('');
-  const line = info.missing.length ? `Completamento ${pct}%. Mancano: ${info.missing.map(k=>({name:'nome',brand:'marca',size:'formato/capienza',qty:'quantità',expiry:'scadenza',category:'categoria',damage:'stato'}[k]||k)).join(', ')}.` : (info.warn.length ? `Scheda utilizzabile. Opzionali non letti: ${info.warn.map(k=>({brand:'marca',size:'formato/capienza',expiry:'scadenza'}[k]||k)).join(', ')}.` : 'Scheda completa: puoi confermare.');
+  const line = info.missing.length ? `Completamento ${pct}%. Mancano: ${info.missing.map(k=>({name:'nome',brand:'marca',size:'formato/capienza',qty:'quantità',label:'etichetta',expiry:'scadenza',category:'categoria',damage:'stato'}[k]||k)).join(', ')}.` : (info.warn.length ? `Scheda utilizzabile. Opzionali non letti: ${info.warn.map(k=>({brand:'marca',size:'formato/capienza',label:'etichetta',expiry:'scadenza'}[k]||k)).join(', ')}.` : 'Scheda completa: puoi confermare.');
   box.innerHTML=`<strong>Riepilogo smart</strong><div class="line">${esc(line)}</div><div class="scan-progress">${progress}</div>`;
 }
 
@@ -2293,7 +2343,9 @@ function mergeLabelVisionIntoResultCard(el,base={},extra={},dataUrl=''){
       node.dispatchEvent(new Event('change',{bubbles:true}));
     }
   };
-  const expiry=extra.expiryDate || extra.expiry || extra.expirationDate || extra.expiration || extra.expiryText || extra.expiryDetectedRaw || parseExpiryLoose([...(extra.detectedText||[]), ...(extra.visibleEvidence||[])].join(' '));
+  const rawExpiry=extra.expiryDate || extra.expiry || extra.expirationDate || extra.expiration || extra.expiryText || extra.expiryDetectedRaw || parseExpiryLoose([...(extra.detectedText||[]), ...(extra.visibleEvidence||[])].join(' '));
+  const expiry=step==='expiry' ? rawExpiry : '';
+  if(step==='label' && rawExpiry) base.possibleExpiryFromLabel=rawExpiry;
   const labelConflicts=labelResultConflictsWithBase(base, extra);
   if(labelConflicts){
     base=clearRejectedMemoryPrediction(base,'Etichetta attuale più affidabile della memoria locale precedente.');
@@ -2301,7 +2353,7 @@ function mergeLabelVisionIntoResultCard(el,base={},extra={},dataUrl=''){
   setField('[data-scan-name]', extra.productName, !base.productName || isBadScanName(base.productName) || labelConflicts);
   setField('[data-scan-brand]', extra.brand, labelConflicts && !!extra.brand);
   setField('[data-scan-size]', extra.estimatedSize || extra.size, labelConflicts && !!(extra.estimatedSize||extra.size));
-  setField('[data-scan-expiry]', expiry, !!expiry && !base.expiryDate);
+  if(step==='expiry') setField('[data-scan-expiry]', expiry, !!expiry);
   if(extra.quantity && Number(extra.quantity)>0) setField('[data-scan-qty]', extra.quantity, false);
   setField('[data-scan-unit]', extra.unit, false);
   if(extra.category) setField('[data-scan-cat]', extra.category, false);
@@ -2309,7 +2361,7 @@ function mergeLabelVisionIntoResultCard(el,base={},extra={},dataUrl=''){
   base.productName = el.querySelector('[data-scan-name]')?.value?.trim() || base.productName || extra.productName || '';
   base.brand = el.querySelector('[data-scan-brand]')?.value?.trim() || base.brand || extra.brand || '';
   base.estimatedSize = el.querySelector('[data-scan-size]')?.value?.trim() || base.estimatedSize || extra.estimatedSize || '';
-  base.expiryDate = el.querySelector('[data-scan-expiry]')?.value?.trim() || base.expiryDate || expiry || '';
+  base.expiryDate = el.querySelector('[data-scan-expiry]')?.value?.trim() || (step==='expiry' ? (base.expiryDate || expiry || '') : (base.expiryDate||''));
   // V27.73: se la nuova etichetta entra in conflitto con la memoria/AI locale precedente, la nuova etichetta comanda.
   if(labelConflicts || hasStrongCurrentLabelEvidence(extra)){
     const curTokens=specificProductTokens([base.productName,base.brand,base.variant,...(extra.detectedText||[]),...(extra.visibleEvidence||[])].join(' '));
@@ -3095,10 +3147,12 @@ async function analyzeGroceryDataUrl(dataUrl,fileName='photo.jpg', visualSignatu
     result.liveProductCapture=!!liveCapture;
     result.guidedPhotoCapture=!!guidedPhotoCapture;
     result.shouldAskConfirmation=true;
+    result.requiresThreeScanFlow=true;
     if(Array.isArray(result.items)) result.items.forEach(it=>{
       it.liveProductCapture=!!liveCapture;
       it.guidedPhotoCapture=!!guidedPhotoCapture;
       it.shouldAskConfirmation=true;
+      it.requiresThreeScanFlow=true;
     });
   }
   result.dataUrl=dataUrl; result.quality=quality; result.visualSignature=visualSignature || liveScanLastMetrics?.signature || ''; ensureVisionBrain().totalScans=Number(ensureVisionBrain().totalScans||0)+1; if(result.autonomousVision) ensureVisionBrain().autonomousHits=Number(ensureVisionBrain().autonomousHits||0)+1;
@@ -3528,16 +3582,32 @@ function predictFromVisionBrain(features){
   const nearest=1-(ranked[0]?.dist??1);
   const confidence=Math.min(.96, Math.max(.35, .45*score + .55*nearest));
   if(confidence<.62) return null;
+  if(bestSamples.length<2 && confidence<.92) return null;
   const stats=getStatsForProduct(best.productName,best.brand,best.variant);
   const learnedSize=topKey(stats.sizes)||best.size||'';
   const learnedCategory=topKey(stats.categories)||best.category||'food';
   const learnedUnit=topKey(stats.units)||best.unit||'pz';
   return {productName:topKey(stats.names)||best.productName, brand:topKey(stats.brands)||best.brand||'', variant:best.variant||'', estimatedSize:learnedSize, quantity:1, unit:learnedUnit, category:learnedCategory, confidence:Number(confidence.toFixed(2)), productType:best.productType||'', packageType:best.packageType||'', isLiquid:!!best.isLiquid, autonomousVision:true, localVision:true, bestMatchName:best.productName, bestMatchSource:'AI locale imparata', bestMatchScore:Number((confidence*100).toFixed(1)), reason:`AI locale: riconosciuto da ${bestSamples.length} esempi simili confermati.`};
 }
+function localPredictionTrustedForPrefill(pred={}){
+  if(!pred || !pred.productName || isBadScanName(pred.productName)) return false;
+  const count=productCountForLocal(pred.productName,pred.brand,pred.variant);
+  const conf=Number(pred.confidence||0);
+  if(pred.modelVision && count>=2 && conf>=.88) return true;
+  if(pred.autonomousVision && count>=3 && conf>=.90) return true;
+  if(pred.memoryVision && count>=4 && conf>=.92) return true;
+  return false;
+}
 async function autonomousVisionGuess(dataUrl=''){
   const features=await extractLocalVisionFeatures(dataUrl);
   const pred=predictFromVisionBrain(features);
-  if(pred){ pred.visualFeatures=features; pred=applyCompetenceCore(pred,features); pred.needsManual = pred.confidence<.90; pred.shouldAskConfirmation = pred.confidence<.93; return pred; }
+  if(pred && localPredictionTrustedForPrefill(pred)){
+    pred.visualFeatures=features;
+    pred=applyCompetenceCore(pred,features);
+    pred.needsManual = pred.confidence<.90;
+    pred.shouldAskConfirmation = pred.confidence<.93;
+    return pred;
+  }
   return null;
 }
 
@@ -3569,7 +3639,7 @@ function strictLabelFormatFromEvidence(result={}){
 }
 
 function specificProductTokens(text=''){
-  const stop=new Set(['prodotto','confezione','barattolo','bottiglia','vetro','plastica','formato','marca','tipo','variante','squeeze','etichetta','frontale','visibile','testo','grande','contenuto','colore','colori','chiaro','scuro','verde','rosso','blu','bianco','nero','giallo','marrone','centrato','immagine','tenuta','mano','centro','salsa']);
+  const stop=new Set(['prodotto','confezione','barattolo','bottiglia','vetro','plastica','formato','marca','tipo','variante','squeeze','etichetta','frontale','visibile','testo','grande','contenuto','colore','colori','chiaro','scuro','verde','rosso','blu','bianco','nero','giallo','marrone','centrato','immagine','tenuta','mano','centro']);
   return normalizeLearnText(text).split(/\s+/).filter(t=>t.length>=3 && !stop.has(t) && !/^\d+$/.test(t));
 }
 function tokenOverlapCount(a=[], b=[]){
@@ -3614,8 +3684,12 @@ function clearRejectedMemoryPrediction(result={}, reason='Memoria locale ignorat
   return result;
 }
 function explicitExpiryFromEvidence(result={}){
-  const raw=[result.expiryDate,result.expiry,result.expirationDate,result.expiration,result.expiryText,result.expiryDetectedRaw,...(Array.isArray(result.detectedText)?result.detectedText:[]),...(Array.isArray(result.visibleEvidence)?result.visibleEvidence:[])].join(' ');
-  return parseExpiryLoose(raw);
+  const fields=[
+    result.expiryDate,result.expiry,result.expirationDate,result.expiration,result.expiryText,result.expiryDetectedRaw,result.bestBefore,result.bestBeforeText,
+    ...(Array.isArray(result.detectedText)?result.detectedText:[]),
+    ...(Array.isArray(result.visibleEvidence)?result.visibleEvidence:[])
+  ].filter(Boolean).join(' · ');
+  return parseExpiryLoose(fields) || parseExpiryMonthYear(fields) || '';
 }
 function sanitizeExpiryFromEvidence(result={}){
   if(!result) return result;
@@ -3739,6 +3813,14 @@ function applyLearnedProductMemory(result={}){
   const matches=list.map(row=>({row,score:learnedRowMatchScore(row,result)})).filter(x=>x.score>=7.5).sort((a,b)=>b.score-a.score);
   const best=matches[0]?.row;
   if(best){
+    const strongCurrent=hasStrongCurrentLabelEvidence(result);
+    const currentTokens=specificProductTokens([result.productName,result.brand,result.variant,...(result.detectedText||[]),...(result.visibleEvidence||[])].join(' '));
+    const rowTokens=specificProductTokens([best.productName,best.brand,best.variant,best.productType,best.packageType].join(' '));
+    if(strongCurrent && currentTokens.length && rowTokens.length && tokenOverlapCount(currentTokens,rowTokens)===0){
+      result=clearRejectedMemoryPrediction(result,'Memoria confermata ignorata: etichetta attuale indica un prodotto diverso.');
+      result.memoryVision=false;
+      return purgeContradictoryMemoryAndFormat(applyRealityCategoryGuard(sanitizeFormatAgainstProduct(result)));
+    }
     result.memoryVision=true;
     result.bestMatchName=best.productName; result.bestMatchSource=best.seed?'seed prodotti comuni':'memoria confermata';
     if(!result.brand && best.brand) result.brand=best.brand;
@@ -3785,8 +3867,15 @@ async function improveVisionWithLocalLearning(dataUrl='', result={}){
     const strongLabel=hasStrongCurrentLabelEvidence(result);
     // V27.73: l'AI locale è memoria, non autorità.
     // Se l'etichetta attuale contiene testo leggibile, NON può mai sostituire nome/prodotto con un prodotto imparato prima.
-    if(missingName && !strongLabel){
+    if(missingName && !strongLabel && localPredictionTrustedForPrefill(local)){
       result=Object.assign({}, result, local, {cloudVision:!!result.cloudVision, cloudFallback:!!result.cloudFallback, localEnhanced:true, needsManual: Number(local.confidence||0)<.91 || result.needsManual, shouldAskConfirmation: Number(local.confidence||0)<.93});
+    }else if(missingName && !strongLabel){
+      result.localPredictionRejected=true;
+      result.rejectedLocalPrediction=local.productName||local.bestMatchName||'';
+      result.matchRejectedReason='AI locale non usata come precompilazione: servono più conferme su questo prodotto.';
+      result=clearRejectedMemoryPrediction(result,result.matchRejectedReason);
+      result.needsManual=true;
+      result.shouldAskConfirmation=true;
     }else if(agrees){
       // Etichetta/OCR attuale vince sempre: la memoria locale può solo completare campi mancanti.
       const keep=Object.assign({}, result);
@@ -3901,7 +3990,7 @@ function scanEvidenceHtml(result){
   if(Number(result.confidence)>0) bits.push('Sicurezza: '+Math.round(Number(result.confidence)*100)+'%');
   if(Array.isArray(result.visibleEvidence)) bits.push(...result.visibleEvidence.slice(0,3));
   const ocr=Array.isArray(result.detectedText) ? result.detectedText.filter(Boolean).slice(0,6) : [];
-  const match=(result.bestMatchName||'').trim();
+  const match=(!result.matchRejected && !result.localPredictionRejected ? (result.bestMatchName||'').trim() : '');
   const matchSource=(result.bestMatchSource||'').trim();
   const chips=bits.map(x=>{ const cls=/Autonomia|Modello locale/.test(x)?'local-core':(/AI locale/.test(x)?'autonomous':(/Memoria/.test(x)?'memory':(/confermare|possibile/i.test(x)?'warn-soft':''))); return `<span class="${cls}">${esc(x)}</span>`; }).join('');
   const soft=(result.estimatedSize?`<span class="soft">Formato: ${esc(result.estimatedSize)}</span>`:'');
@@ -3933,6 +4022,7 @@ function addScannerResult(result){
         ${result.localFirst?'<span class="autonomous-badge">Autonomia locale</span>':''}${result.modelVision?'<span class="autonomous-badge">Modello locale</span>':''}${result.cloudVision?'<span class="cloud-ok">Docente OpenAI attivo</span>':''}${result.teacherInactive?'<span class="teacher-offline">Docente OpenAI non attivo</span>':''}${result.cloudFallback?'<span class="cloud-fallback">Fallback locale prudente</span>':''}${result.localVision?'<span class="info">Stima locale prudente</span>':''}${result.seedVision?'<span class="autonomous-badge">Seed prodotti comuni</span>':''}${result.autonomousVision?'<span class="autonomous-badge">AI locale imparata</span>':''}${result.memoryVision?'<span class="autonomous-badge">Memoria autonoma</span>':''}
       </div>
       ${result.teacherInactive?`<div class="teacher-offline-note">${esc(result.teacherInactiveReason || 'Docente OpenAI non attivo: sto usando la visione locale prudente e aspetto conferma.')}</div>`:''}
+      ${scanLearningAuditHtml(result,false)}
       <div class="scan-voice-helper ${helperMode}" data-scan-voice-note><span class="dot"></span><div><strong>Assistente live</strong><br>${esc(helperText)}</div></div>
       <div class="scan-summary-box" data-scan-summary></div>
       <div class="scan-warning-box ${result.isDamaged?'':'good'}" data-scan-warning><strong>${result.isDamaged?'Controllo qualità':'Controllo qualità OK'}</strong>${result.isDamaged?`Possibile irregolarità: ${esc(result.damageType||'da verificare')}. Conferma a voce se è integro o danneggiato.`:'Nessun danno evidente rilevato. Puoi correggere se noti qualcosa.'}</div>
@@ -4048,7 +4138,9 @@ function confirmScanResult(el,result,silent=false){
   const internalProductMemory=buildInternalProductMemory(result,{productName,brand,size,qty,unit,category,expiryDate,damageNote,userConfirmed:true,confirmedAt:Date.now()});
   const savedProductMemory=rememberInternalProductMemory(internalProductMemory);
   rememberLearnedProduct({productName,brand,variant:result.variant||'',category,unit,productType:result.productType||'',packageType:result.packageType||'',estimatedSize:size,isLiquid:!!result.isLiquid,visibleEvidence:result.visibleEvidence||[],baseName:result.productName||'',ingredients:internalProductMemory.ingredients,allergens:internalProductMemory.allergens,colors:internalProductMemory.visualAppearance.colors,nutrition:internalProductMemory.nutrition,memorySources:internalProductMemory.source});
-  const confirmedLearning={productName,brand,size,qty,unit,category,expiryDate,damageNote,productMemory:savedProductMemory||internalProductMemory,confirmedAt:Date.now(),visualFeatures:result.visualFeatures||null,visualSignature:result.visualSignature||'',visibleEvidence:result.visibleEvidence||[],detectedText:result.detectedText||[],confidence:result.confidence||null,cloudVision:!!result.cloudVision,autonomousVision:!!result.autonomousVision};
+  const confirmedLearning={productName,brand,size,qty,unit,category,expiryDate,damageNote,productMemory:savedProductMemory||internalProductMemory,confirmedAt:Date.now(),visualFeatures:result.visualFeatures||null,visualSignature:result.visualSignature||'',visibleEvidence:result.visibleEvidence||[],detectedText:result.detectedText||[],confidence:result.confidence||null,cloudVision:!!result.cloudVision,autonomousVision:!!result.autonomousVision,memoryVision:!!result.memoryVision,localFirst:!!result.localFirst,learningAudit:{teacherUsed:!!result.cloudVision,recognizedByLocalOrServer:!!(result.localFirst||result.autonomousVision||result.memoryVision),memoryUpdated:true}};
+  updateLearningAuditBox(el,result,true);
+  pushLearningAudit({type:'product-confirmed', productName, brand, size, teacherUsed:!!result.cloudVision, recognizedByLocalOrServer:!!(result.localFirst||result.autonomousVision||result.memoryVision), memoryUpdated:true});
   rememberVisionSampleFromScan(result.dataUrl||'', result, {productName,brand,size,qty,unit,category,expiryDate,damageNote}).then(()=>syncAutonomyLearningToServer({type:'vision-confirmation', confirmed:confirmedLearning, voiceProfile:ensureVoiceProfile(), visionStatus:visionBrainStatus()}, true)).catch(()=>syncAutonomyLearningToServer({type:'vision-confirmation', confirmed:confirmedLearning, voiceProfile:ensureVoiceProfile(), visionStatus:visionBrainStatus()}, true));
   aiMemory.pendingVerification=false;
   liveScanLastAcceptedSig = result.visualSignature || liveScanLastMetrics?.signature || liveScanLastAcceptedSig; liveScanLastAcceptedName=productName; liveScanSameObjectWarnings=0;

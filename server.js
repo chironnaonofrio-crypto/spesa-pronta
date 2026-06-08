@@ -50,7 +50,7 @@ let db = { users:{}, households:{} };
 let dbMode = 'file';
 let pgPool = null;
 
-function emptyDb(){ return { users:{}, households:{}, assistantBrain:{version:2, globalFacts:[], productLearnings:{}, phrasePatterns:{}, dailyStats:{}, autonomousVision:{products:{},voice:{},samples:0,corrections:0}, seedMemory:{version:'',products:0,totalProfiles:0,loaded:false}, updatedAt:0} }; }
+function emptyDb(){ return { users:{}, households:{}, assistantBrain:{version:3, globalFacts:[], productLearnings:{}, globalProductMemory:{products:{}, confirmations:0, teacherHelp:0, localRecognitions:0, updatedAt:0}, learningAudit:[], phrasePatterns:{}, dailyStats:{}, autonomousVision:{products:{},voice:{},samples:0,corrections:0}, seedMemory:{version:'',products:0,totalProfiles:0,loaded:false}, updatedAt:0} }; }
 
 function loadVisionSeedMemory(){
   const candidates=[path.resolve(STATIC_DIR,'assets/vision-seed-memory.json'), path.resolve(process.cwd(),'assets/vision-seed-memory.json')];
@@ -165,6 +165,9 @@ function ensureDbShape(){
   db.assistantBrain = db.assistantBrain || {version:2, globalFacts:[], productLearnings:{}, phrasePatterns:{}, dailyStats:{}, autonomousVision:{products:{},voice:{},samples:0,corrections:0}, updatedAt:0};
   db.assistantBrain.globalFacts = db.assistantBrain.globalFacts || [];
   db.assistantBrain.productLearnings = db.assistantBrain.productLearnings || {};
+  db.assistantBrain.globalProductMemory = db.assistantBrain.globalProductMemory || {products:{}, confirmations:0, teacherHelp:0, localRecognitions:0, updatedAt:0};
+  db.assistantBrain.globalProductMemory.products = db.assistantBrain.globalProductMemory.products || {};
+  db.assistantBrain.learningAudit = Array.isArray(db.assistantBrain.learningAudit) ? db.assistantBrain.learningAudit : [];
   db.assistantBrain.phrasePatterns = db.assistantBrain.phrasePatterns || {};
   db.assistantBrain.dailyStats = db.assistantBrain.dailyStats || {};
   db.assistantBrain.autonomousVision = db.assistantBrain.autonomousVision || {products:{},voice:{},samples:0,corrections:0};
@@ -248,12 +251,93 @@ function updateGlobalBrain({message='', action='', productName='', category='', 
   brain.globalFacts=(brain.globalFacts||[]).slice(-300);
   brain.updatedAt=Date.now();
 }
+
+function productMemoryGlobalKey(productName='', brand='', size=''){
+  return normalizeText([productName, brand, size].filter(Boolean).join(' ')).slice(0,140) || normalizeText(productName).slice(0,80);
+}
+function compactGlobalProductRecord(record={}){
+  return {
+    key:record.key||'', productName:record.productName||'', brand:record.brand||'', format:record.format||record.size||'', category:record.category||'',
+    confirmations:Number(record.confirmations||0), teacherHelp:Number(record.teacherHelp||0), localRecognitions:Number(record.localRecognitions||0),
+    confidence:Number(record.confidence||0), reliability:record.reliability||'bassa', updatedAt:record.updatedAt||0,
+    allergens:Array.isArray(record.allergens)?record.allergens.slice(0,10):[], ingredients:Array.isArray(record.ingredients)?record.ingredients.slice(0,12):[]
+  };
+}
+function updateGlobalLearningAudit(event={}){
+  ensureDbShape();
+  const audit=Object.assign({at:Date.now()}, event||{});
+  db.assistantBrain.learningAudit.unshift(audit);
+  db.assistantBrain.learningAudit=db.assistantBrain.learningAudit.slice(0,500);
+  db.assistantBrain.updatedAt=Date.now();
+  return audit;
+}
+function upsertGlobalProductMemory(confirmed={}){
+  ensureDbShape();
+  const name=String(confirmed.productName||'').trim();
+  if(!name) return null;
+  const brand=String(confirmed.brand||'').trim();
+  const size=String(confirmed.size||confirmed.format||confirmed.estimatedSize||'').trim();
+  const key=productMemoryGlobalKey(name, brand, size);
+  const gpm=db.assistantBrain.globalProductMemory;
+  const old=gpm.products[key]||{key, productName:name, brand, format:size, category:'', confirmations:0, teacherHelp:0, localRecognitions:0, sources:{}, firstSeenAt:Date.now(), updatedAt:0, confidence:0, allergens:[], ingredients:[], colors:[]};
+  old.productName=name || old.productName;
+  old.brand=brand || old.brand || '';
+  old.format=size || old.format || '';
+  old.category=confirmed.category || confirmed.productMemory?.category || old.category || '';
+  old.confirmations=Number(old.confirmations||0)+1;
+  old.teacherHelp=Number(old.teacherHelp||0)+(confirmed.cloudVision?1:0);
+  old.localRecognitions=Number(old.localRecognitions||0)+(confirmed.autonomousVision||confirmed.memoryVision||confirmed.localFirst?1:0);
+  old.sources=old.sources||{};
+  old.sources.userConfirmations=Number(old.sources.userConfirmations||0)+1;
+  if(confirmed.cloudVision) old.sources.openAiTeacher=Number(old.sources.openAiTeacher||0)+1;
+  if(confirmed.autonomousVision||confirmed.memoryVision||confirmed.localFirst) old.sources.localServer=Number(old.sources.localServer||0)+1;
+  const pm=confirmed.productMemory||{};
+  const merged=(arr1=[], arr2=[])=>[...new Set([...(Array.isArray(arr1)?arr1:[]), ...(Array.isArray(arr2)?arr2:[])].map(x=>String(x||'').trim()).filter(Boolean))];
+  old.ingredients=merged(old.ingredients, pm.ingredients||confirmed.ingredients||[]).slice(0,40);
+  old.allergens=merged(old.allergens, pm.allergens||confirmed.allergens||[]).slice(0,25);
+  old.colors=merged(old.colors, pm.visualAppearance?.colors||confirmed.colors||[]).slice(0,16);
+  old.visibleEvidence=merged(old.visibleEvidence, confirmed.visibleEvidence||[]).slice(0,20);
+  const c=Number(confirmed.confidence||0);
+  if(c>0) old.confidence=Number((((Number(old.confidence||0)*(old.confirmations-1))+c)/old.confirmations).toFixed(3));
+  old.reliability=old.confirmations>=5?'alta':old.confirmations>=2?'media':'bassa';
+  old.updatedAt=Date.now();
+  gpm.products[key]=old;
+  gpm.confirmations=Number(gpm.confirmations||0)+1;
+  if(confirmed.cloudVision) gpm.teacherHelp=Number(gpm.teacherHelp||0)+1;
+  if(confirmed.autonomousVision||confirmed.memoryVision||confirmed.localFirst) gpm.localRecognitions=Number(gpm.localRecognitions||0)+1;
+  gpm.updatedAt=Date.now();
+  updateGlobalLearningAudit({type:'product-confirmed', key, productName:name, brand, format:size, category:old.category, teacherUsed:!!confirmed.cloudVision, memoryUpdated:true, reliability:old.reliability});
+  return compactGlobalProductRecord(old);
+}
+function publicGlobalProductMemory(limit=20){
+  ensureDbShape();
+  const g=db.assistantBrain.globalProductMemory||{products:{}};
+  const products=Object.values(g.products||{}).sort((a,b)=>Number(b.confirmations||0)-Number(a.confirmations||0)).slice(0,limit).map(compactGlobalProductRecord);
+  return {products, count:Object.keys(g.products||{}).length, confirmations:Number(g.confirmations||0), teacherHelp:Number(g.teacherHelp||0), localRecognitions:Number(g.localRecognitions||0), updatedAt:g.updatedAt||0};
+}
+function matchGlobalProductMemory(query={}){
+  const needle=normalizeText([query.productName,query.brand,query.size,query.detectedText].filter(Boolean).join(' '));
+  if(!needle || needle.length<3) return null;
+  const products=Object.values(db.assistantBrain?.globalProductMemory?.products||{});
+  let best=null;
+  for(const p of products){
+    const hay=normalizeText([p.productName,p.brand,p.format,p.category,(p.visibleEvidence||[]).join(' ')].filter(Boolean).join(' '));
+    let score=0;
+    for(const part of needle.split(' ').filter(x=>x.length>2)){ if(hay.includes(part)) score+=1; }
+    if(query.brand && normalizeText(p.brand).includes(normalizeText(query.brand))) score+=4;
+    if(query.productName && normalizeText(p.productName).includes(normalizeText(query.productName))) score+=5;
+    const normScore=score/Math.max(3, needle.split(' ').length);
+    if(normScore>=1.2 && (!best || normScore>best.score)) best={score:normScore, product:compactGlobalProductRecord(p)};
+  }
+  return best;
+}
+
 function publicGlobalBrain(){
   ensureDbShape();
   const brain=db.assistantBrain;
   const topProducts=Object.values(brain.productLearnings||{}).sort((a,b)=>b.count-a.count).slice(0,20).map(p=>({name:p.name, category:p.category, count:p.count, avgConfidence:p.count?Number((p.confidenceSum/p.count).toFixed(2)):null}));
   const topPhrases=Object.entries(brain.phrasePatterns||{}).sort((a,b)=>b[1]-a[1]).slice(0,20).map(([phrase,count])=>({phrase,count}));
-  return {version:brain.version||1, updatedAt:brain.updatedAt||0, topProducts, topPhrases, dailyStats:brain.dailyStats||{}};
+  return {version:brain.version||1, updatedAt:brain.updatedAt||0, topProducts, topPhrases, dailyStats:brain.dailyStats||{}, globalProductMemory:publicGlobalProductMemory(20), recentLearningAudit:(brain.learningAudit||[]).slice(0,30)};
 }
 
 function learnAutonomyOnServer(h, payload={}){
@@ -286,6 +370,8 @@ function learnAutonomyOnServer(h, payload={}){
     if(confirmed.unit) prod.units[confirmed.unit]=Number(prod.units[confirmed.unit]||0)+1;
     db.assistantBrain.autonomousVision.products[key]=prod;
     db.assistantBrain.autonomousVision.samples=Number(db.assistantBrain.autonomousVision.samples||0)+1;
+    const globalProduct=upsertGlobalProductMemory(Object.assign({}, confirmed, {memoryVision:confirmed.memoryVision||confirmed.autonomousVision||false, localFirst:confirmed.localFirst||false}));
+    payload.learningAudit=Object.assign({}, payload.learningAudit||{}, {teacherUsed:!!confirmed.cloudVision, memoryUpdated:!!globalProduct, recognizedByLocalOrServer:!!(confirmed.autonomousVision||confirmed.memoryVision||confirmed.localFirst), globalProduct});
   }
   const vp=payload.voiceProfile||{};
   if(Array.isArray(vp.heard)){
@@ -1493,7 +1579,7 @@ const server = http.createServer(async (req,res)=>{
         dbMode,
         databaseConnected: dbMode !== 'file',
         memoryReady: dbMode !== 'file',
-        globalLearning: 'anonymous_aggregate',
+        globalLearning: 'server_global_product_memory', globalProductMemory: publicGlobalProductMemory(10),
         smsReady: PHONE_VERIFY_READY,
         seedMemory:{version:VISION_SEED_MEMORY.version||'', products:(VISION_SEED_MEMORY.products||[]).length, totalProfiles:Number(VISION_MEGA_INDEX.totalProfiles||1000000), megaVersion:VISION_MEGA_INDEX.version||'', categories:(VISION_SEED_MEMORY.categories||[]).length, loaded:(VISION_SEED_MEMORY.products||[]).length>0},
         twilioVerifyReady: TWILIO_VERIFY_ENABLED,
@@ -1805,7 +1891,7 @@ const server = http.createServer(async (req,res)=>{
       if(!h) return send(res, 401, {ok:false,error:'unauthorized_household'});
       const mem=learnAutonomyOnServer(h, body.payload||{});
       await saveDb();
-      return send(res, 200, {ok:true, memory:mem, status:autonomyStatusFor(h), persistent:true});
+      return send(res, 200, {ok:true, memory:mem, status:autonomyStatusFor(h), audit:(body.payload||{}).learningAudit||null, globalProductMemory:publicGlobalProductMemory(10), persistent:true});
     }
 
     if(req.method === 'GET' && pathName === '/api/ai/learning-status'){
@@ -1814,6 +1900,12 @@ const server = http.createServer(async (req,res)=>{
       const h=(householdId && db.households[householdId] && db.households[householdId].token===bearer) ? db.households[householdId] : null;
       if(!h) return send(res, 401, {ok:false,error:'unauthorized_household'});
       return send(res, 200, {ok:true,status:autonomyStatusFor(h),memory:ensureHouseholdMemory(h)});
+    }
+
+
+    if(req.method === 'POST' && pathName === '/api/ai/global-products/match'){
+      const match=matchGlobalProductMemory(body||{});
+      return send(res,200,{ok:true, match:match?.product||null, score:match?.score||0, globalProductMemory:publicGlobalProductMemory(10)});
     }
 
     if(req.method === 'GET' && pathName === '/api/ai/global-memory'){
