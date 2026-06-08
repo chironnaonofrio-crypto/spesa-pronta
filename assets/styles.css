@@ -1694,7 +1694,7 @@ body{color-scheme:light;}
 @media(max-width:520px){.guided-scan-panel{padding:12px;border-radius:22px}.guided-stepper{gap:5px}.guided-stepper span{font-size:.66rem;padding:0 4px}.guided-scan-top h4{font-size:1.04rem}.guided-scan-top p{font-size:.86rem}.guided-actions{grid-template-columns:1fr}.guided-actions .primary-btn{grid-column:auto}}
 
 
-/* V27.90 - Fridge mode maintenance notice */
+/* V27.91 - Fridge mode maintenance notice */
 .fridge-maintenance-card{
   display:grid!important;
   grid-template-columns:54px minmax(0,1fr)!important;
@@ -1737,3 +1737,43 @@ body{color-scheme:light;}
   .fridge-maintenance-card strong{font-size:.94rem!important}
   .fridge-maintenance-card p{font-size:.82rem!important}
 }
+
+/* V27.91: campi scheda sempre modificabili e sync più chiaro */
+.scan-result input[data-user-editable="1"], .scan-result input[data-scan-name], .scan-result input[data-scan-brand]{
+  pointer-events:auto!important;
+  user-select:text!important;
+  opacity:1!important;
+  background:#fff!important;
+  border-color:#cfe1f5!important;
+}
+.scan-result.confirmed input, .scan-result.confirmed select{
+  pointer-events:auto!important;
+  opacity:1!important;
+}
+.memory-sync-state.queued{background:#fff7e6!important;border-color:#ffd58a!important;color:#805100!important}
+.memory-sync-state.ok{background:#effaf3!important;border-color:#bfe8cc!important;color:#0f653a!important}
+
+
+/* =============================================================
+   V27.98 Preflight Stability Check
+   ============================================================= */
+.preflight-panel-v98{margin:12px 0 14px;padding:13px 14px;border-radius:22px;border:1px solid rgba(13,110,253,.14);background:linear-gradient(180deg,#ffffff,#f7fbff);box-shadow:0 14px 32px rgba(12,45,94,.06);display:grid;gap:10px}
+.preflight-head-v98{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.preflight-title-v98{display:flex;align-items:center;gap:9px;font-weight:1000;color:#102a52;letter-spacing:.01em}
+.preflight-dot-v98{width:12px;height:12px;border-radius:999px;background:#a8b6c7;box-shadow:0 0 0 5px rgba(168,182,199,.13)}
+.preflight-panel-v98.ready .preflight-dot-v98{background:#18bf72;box-shadow:0 0 0 5px rgba(24,191,114,.14)}
+.preflight-panel-v98.warn .preflight-dot-v98{background:#f0a400;box-shadow:0 0 0 5px rgba(240,164,0,.16)}
+.preflight-panel-v98.bad .preflight-dot-v98{background:#e84855;box-shadow:0 0 0 5px rgba(232,72,85,.14)}
+.preflight-body-v98{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.preflight-pill-v98{border-radius:16px;background:#fff;border:1px solid rgba(13,110,253,.10);padding:8px 9px;min-height:48px;display:grid;align-content:center;box-shadow:0 8px 18px rgba(12,45,94,.045)}
+.preflight-pill-v98 b{font-size:.72rem;color:#526b91;text-transform:uppercase;letter-spacing:.045em;line-height:1.05}
+.preflight-pill-v98 span{font-size:.84rem;color:#102a52;font-weight:900;line-height:1.14;margin-top:3px;word-break:break-word}
+.preflight-actions-v98{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.preflight-mini-btn-v98{border:1px solid rgba(13,110,253,.16);background:#fff;color:#16427d;border-radius:14px;min-height:40px;padding:0 12px;font-weight:900;font-size:.82rem;box-shadow:0 8px 16px rgba(12,45,94,.04)}
+.preflight-mini-btn-v98.primary{background:linear-gradient(135deg,#176fff,#0d57d5);color:#fff;border:0}
+.ai-diagnostics-v98{display:none;border-radius:18px;border:1px solid rgba(13,110,253,.12);background:#071b34;color:#eaf3ff;padding:12px;max-height:260px;overflow:auto;font-size:.82rem;line-height:1.35;white-space:pre-wrap}
+.preflight-panel-v98.open .ai-diagnostics-v98{display:block}
+.scan-preflight-badge-v98{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:6px 9px;font-size:.72rem;font-weight:900;background:#eef7ff;color:#16427d;border:1px solid rgba(13,110,253,.12)}
+.memory-sync-state.ok{background:#f1fbf4!important;border-color:#bdeccb!important;color:#176b38!important}.memory-sync-state.queued{background:#fff8e6!important;border-color:#ffdf9a!important;color:#7a5200!important}.memory-sync-state.bad{background:#fff1f2!important;border-color:#ffc6cc!important;color:#9f1d2b!important}.memory-sync-state.pending{background:#eef6ff!important;border-color:#cfe4ff!important;color:#174070!important}
+@media(max-width:720px){.preflight-body-v98{grid-template-columns:repeat(2,minmax(0,1fr))}.preflight-head-v98{align-items:flex-start}.preflight-title-v98{line-height:1.15}.preflight-pill-v98{min-height:44px}.preflight-actions-v98 .preflight-mini-btn-v98{flex:1 1 calc(50% - 8px)}}
+@media(max-width:390px){.preflight-body-v98{grid-template-columns:1fr}.preflight-actions-v98 .preflight-mini-btn-v98{flex:1 1 100%}}
