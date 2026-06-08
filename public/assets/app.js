@@ -1,10 +1,10 @@
-window.SPESA_PRONTA_VERSION='V27.55-IMG-FIX';
+window.SPESA_PRONTA_VERSION='v27.47-blank-page-fixed';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
-    const flag='spesaProntaNoLoopCleanedV2755';
-    if(true){
-      try{{ sessionStorage.setItem(flag,'1'); }}catch(_){{}}
+    const flag='spesaProntaNoLoopCleanedV2710';
+    if(!sessionStorage.getItem(flag)){
+      sessionStorage.setItem(flag,'1');
       if('serviceWorker' in navigator){
         navigator.serviceWorker.getRegistrations()
           .then(regs=>regs.forEach(reg=>reg.unregister().catch(()=>{})))
@@ -180,9 +180,8 @@ function loadSession(){ try { return Object.assign({mode:'guest', user:null}, JS
 function defaultAiMemory(){ return {messages:[], facts:[], events:[], scanHistory:[], learnedProducts:[], visionBrain:{version:48,coreVersion:48,samples:[],candidateSamples:[],productStats:{},productModels:{},corrections:0,totalScans:0,autonomousHits:0,localFirstDecisions:0,cloudTeacherCalls:0,autonomyLevel:0,lastTrainedAt:0,serverSyncs:0,serverLastSyncAt:0}, voiceProfile:{version:48,heard:[],corrections:[],intentPhrases:{},fieldPhrases:{},productAliases:{},speakerStyle:{shortCommands:0,corrections:0,italianSlang:0},updatedAt:0,serverSyncs:0}, pendingVerification:false, lastGreetingDate:'', summary:'', lastInsights:{}, consumptionProfile:{version:27, learnedItems:{}, lastAnalysisAt:0}, seedMemory:{version:'',loaded:false,products:0,categories:0,lastLoadedAt:0}, personality:{warmth:1}}; }
 function loadAiMemory(){ try { const mem=Object.assign(defaultAiMemory(), JSON.parse(localStorage.getItem(AI_MEMORY_KEY)||'{}')); mem.visionBrain=Object.assign(defaultAiMemory().visionBrain, mem.visionBrain||{}); mem.visionBrain.samples=Array.isArray(mem.visionBrain.samples)?mem.visionBrain.samples:[]; mem.visionBrain.productStats=mem.visionBrain.productStats||{}; mem.visionBrain.productModels=mem.visionBrain.productModels||{}; mem.visionBrain.candidateSamples=Array.isArray(mem.visionBrain.candidateSamples)?mem.visionBrain.candidateSamples:[]; mem.voiceProfile=Object.assign(defaultAiMemory().voiceProfile, mem.voiceProfile||{}); mem.voiceProfile.heard=Array.isArray(mem.voiceProfile.heard)?mem.voiceProfile.heard:[]; mem.voiceProfile.corrections=Array.isArray(mem.voiceProfile.corrections)?mem.voiceProfile.corrections:[]; mem.voiceProfile.intentPhrases=mem.voiceProfile.intentPhrases||{}; mem.voiceProfile.fieldPhrases=mem.voiceProfile.fieldPhrases||{}; mem.voiceProfile.productAliases=mem.voiceProfile.productAliases||{}; mem.voiceProfile.speakerStyle=Object.assign(defaultAiMemory().voiceProfile.speakerStyle, mem.voiceProfile.speakerStyle||{}); return mem; } catch { return defaultAiMemory(); } }
 function saveAiMemory(){ localStorage.setItem(AI_MEMORY_KEY, JSON.stringify(aiMemory)); }
-function defaultSettings(){ return {lang:'it', cloudEnabled:false, apiEndpoint:'/api', token:'', householdId:'', people:2, animals:0, autoSmart:true, alexaConnected:false, googleAssistantConnected:false, inventorySetupDone:false, inventoryStatus:'required', inventoryUpdatedAt:null, lastCloudSyncAt:null, cloudLastStatus:'unknown', cloudMode:'server', cloudLastError:'', profile:{firstName:'',lastName:'',username:'',email:''}}; }
+function defaultSettings(){ return {lang:'it', cloudEnabled:false, apiEndpoint:'/api', token:'', householdId:'', people:2, animals:0, autoSmart:true, alexaConnected:false, googleAssistantConnected:false, inventorySetupDone:false, inventoryStatus:'required', inventoryUpdatedAt:null, profile:{firstName:'',lastName:'',username:'',email:''}}; }
 function migrateItems(items){ return items.map(x => ({...createItem(x.id||cryptoId(), x.image||'assets/illustrations/generic-item.png', x.category||'food', x.names||{it:x.name||x.id,en:x.name||x.id,es:x.name||x.id,de:x.name||x.id}, x.qty??1, x.maxQty??6, x.baseThreshold??2, x.unitOptions||['pz','pc','lt','kg'], {custom:x.custom, usage:x.usage||0, kind:x.kind, perPersonMin:x.perPersonMin, perAnimalMin:x.perAnimalMin, recommendedBuy:x.recommendedBuy}), ...x})); }
-window.saveAll = saveAll;
 function saveAll(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); localStorage.setItem(SESSION_KEY, JSON.stringify(session)); scheduleSync(); }
 
 function seedCategoryToApp(cat=''){
@@ -380,7 +379,6 @@ function $all(s){ return [...document.querySelectorAll(s)]; }
 function esc(s=''){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
 let toastTimer=null;
-window.toast = toast;
 function toast(msg){
   const el=$('#toast');
   if(!el){ console.log('Toast:', msg); return; }
@@ -614,7 +612,6 @@ function init(){
   applyLang();
   ensureSeedVisionMemory();
   render();
-  bindReopenVisionButtons();
   showView(initialView());
   renderCaptcha();
   applyInlineImages();
@@ -636,379 +633,13 @@ function init(){
   // V27.10: service worker disabled to prevent auto-refresh loop.
   // if('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
 }
-
-const LANGUAGE_META = {
-  it: { code: 'IT', flagClass: 'flag-it' },
-  en: { code: 'EN', flagClass: 'flag-en' },
-  es: { code: 'ES', flagClass: 'flag-es' },
-  de: { code: 'DE', flagClass: 'flag-de' }
-};
-function closeLangMenu(){
-  const picker = $('#langPicker');
-  const overlay = $('#langOverlay');
-  const trigger = $('#langTrigger');
-  if(!picker || !overlay || !trigger) return;
-  picker.classList.remove('open');
-  overlay.hidden = true;
-  trigger.setAttribute('aria-expanded','false');
-}
-function openLangMenu(){
-  const picker = $('#langPicker');
-  const overlay = $('#langOverlay');
-  const trigger = $('#langTrigger');
-  if(!picker || !overlay || !trigger) return;
-  picker.classList.add('open');
-  overlay.hidden = false;
-  trigger.setAttribute('aria-expanded','true');
-}
-function syncLanguagePicker(){
-  const value = settings.lang || 'it';
-  const meta = LANGUAGE_META[value] || LANGUAGE_META.it;
-  const triggerCode = $('#langTriggerCode');
-  const triggerFlag = $('#langTriggerFlag');
-  if(triggerCode) triggerCode.textContent = meta.code;
-  if(triggerFlag){
-    triggerFlag.classList.remove('flag-it','flag-en','flag-es','flag-de');
-    triggerFlag.classList.add(meta.flagClass);
-  }
-  $all('[data-lang-option]').forEach(btn => btn.classList.toggle('active', btn.dataset.langOption === value));
-  const native = $('#languageSelect');
-  if(native) native.value = value;
-}
-function bindLanguagePicker(){
-  const trigger = $('#langTrigger');
-  const picker = $('#langPicker');
-  const overlay = $('#langOverlay');
-  const closeBtn = $('#langClose');
-  const modal = overlay?.querySelector('.lang-modal');
-  if(!trigger || !picker || !overlay || picker.dataset.bound === '1') return;
-  picker.dataset.bound = '1';
-  trigger.addEventListener('click', (e) => {
-    e.preventDefault();
-    if(picker.classList.contains('open')) closeLangMenu(); else openLangMenu();
-  });
-  closeBtn?.addEventListener('click', closeLangMenu);
-  overlay.addEventListener('click', (e) => {
-    if(e.target === overlay) closeLangMenu();
-  });
-  modal?.addEventListener('click', (e) => e.stopPropagation());
-  $all('[data-lang-option]').forEach(btn => btn.addEventListener('click', () => {
-    settings.lang = btn.dataset.langOption || 'it';
-    saveAll();
-    applyLang();
-    render();
-    closeLangMenu();
-  }));
-  document.addEventListener('keydown', (e) => {
-    if(e.key === 'Escape') closeLangMenu();
-  });
-  syncLanguagePicker();
-}
-
-
-function cleanApiEndpoint(){
-  return String(settings.apiEndpoint || '/api').replace(/\/$/,'') || '/api';
-}
-function localCloudKey(){
-  return `spesa-pronta-local-cloud:${settings.householdId || 'default'}`;
-}
-function buildCloudPayload(){
-  return {items:state, settings:{people:settings.people,animals:settings.animals,autoSmart:settings.autoSmart,lang:settings.lang,alexaConnected:settings.alexaConnected,googleAssistantConnected:settings.googleAssistantConnected,profile:settings.profile}, aiMemory};
-}
-function saveLocalCloudSnapshot(payload){
-  localStorage.setItem(localCloudKey(), JSON.stringify({ok:true, householdId:settings.householdId || 'local', payload, savedAt:Date.now()}));
-}
-async function checkCloudHealth(){
-  try{
-    const res = await fetch(`${cleanApiEndpoint()}/health`, {cache:'no-store'});
-    if(!res.ok) throw new Error('health fail');
-    return await res.json().catch(()=>({ok:true}));
-  }catch(e){
-    return null;
-  }
-}
-
-function cloudConfigured(){
-  return !!(settings.cloudEnabled && settings.apiEndpoint && settings.token && settings.householdId);
-}
-function formatCloudDate(ts){
-  if(!ts) return 'Mai';
-  try { return new Date(ts).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}); } catch { return 'Mai'; }
-}
-function updateCloudPanel(status=''){
-  const configured = cloudConfigured();
-  const card = $('#cloudStatusCard');
-  if(card){
-    card.classList.remove('online','offline','config','local','error');
-    if(!configured) card.classList.add('config');
-    else if(settings.cloudMode === 'local') card.classList.add('local');
-    else if(settings.cloudLastStatus === 'online') card.classList.add('online');
-    else if(settings.cloudLastStatus === 'offline') card.classList.add('error');
-    else card.classList.add('config');
-  }
-  const statusText = $('#cloudStatusText');
-  const statusSub = $('#cloudStatusSub');
-  let title = status;
-  let sub = '';
-  if(!configured){
-    title = status || 'Cloud non configurato';
-    sub = 'Accedi o configura il cloud nelle impostazioni.';
-  }else if(settings.cloudMode === 'local'){
-    title = status || 'Backup locale sincronizzato';
-    sub = 'Server API non raggiunto: i dati sono salvati su questo dispositivo. Per sync tra dispositivi avvia il backend incluso.';
-  }else if(settings.cloudLastStatus === 'online'){
-    title = status || 'Cloud online';
-    sub = `Sincronizzazione server pronta per ${state.length} prodotti.`;
-  }else if(settings.cloudLastStatus === 'offline'){
-    title = status || 'Server API non raggiunto';
-    sub = 'Il backend /api non risponde. Ho mantenuto i dati in locale e puoi riprovare.';
-  }else{
-    title = status || 'Cloud pronto';
-    sub = `Pronto a sincronizzare ${state.length} prodotti.`;
-  }
-  if(statusText) statusText.textContent = title;
-  if(statusSub) statusSub.textContent = sub;
-  const last = $('#cloudLastSync'); if(last) last.textContent = formatCloudDate(settings.lastCloudSyncAt);
-  const count = $('#cloudItemsCount'); if(count) count.textContent = String(state.length || 0);
-  const backup = $('#cloudBackupState'); if(backup) backup.textContent = settings.cloudMode === 'local' ? 'Locale' : 'Pronto';
-  const household = $('#cloudHousehold'); if(household) household.textContent = settings.householdId || 'Non configurato';
-  const endpoint = $('#cloudEndpoint'); if(endpoint) endpoint.textContent = 'Configurato';
-}
-async function openCloudPanel(){
-  updateCloudPanel('Controllo cloud…');
-  const d = $('#cloudDialog');
-  if(d?.showModal) d.showModal();
-  else d?.setAttribute('open','open');
-  if(cloudConfigured()){
-    const health = await checkCloudHealth();
-    if(health?.ok && settings.cloudMode !== 'local'){
-      settings.cloudLastStatus='online';
-      settings.cloudMode='server';
-      settings.cloudLastError='';
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-      updateCloudPanel('Cloud online');
-    }else if(!health){
-      settings.cloudLastStatus = settings.cloudMode === 'local' ? 'offline' : settings.cloudLastStatus;
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-      updateCloudPanel(settings.cloudMode === 'local' ? 'Backup locale attivo' : 'Server API non raggiunto');
-    }
-  }else{
-    updateCloudPanel('Cloud non configurato');
-  }
-}
-function closeCloudPanel(){
-  const d = $('#cloudDialog');
-  if(d?.close) d.close();
-  else d?.removeAttribute('open');
-}
-async function cloudSyncNow(){
-  updateCloudPanel('Sincronizzazione in corso…');
-  const ok = await syncCloud(true);
-  updateCloudPanel(ok ? 'Sincronizzato sul server' : 'Backup locale salvato');
-}
-function downloadCloudBackup(){
-  const backup = {
-    app:'Spesa Pronta',
-    version:'V27.67 CLOUD PANEL',
-    exportedAt:new Date().toISOString(),
-    items:state,
-    settings,
-    session,
-    aiMemory
-  };
-  const blob = new Blob([JSON.stringify(backup,null,2)], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `spesa-pronta-backup-${new Date().toISOString().slice(0,10)}.json`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url), 1200);
-  toast('Backup scaricato ✅');
-  updateCloudPanel('Backup creato');
-}
-function restoreCloudBackupFile(file){
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    try{
-      const data = JSON.parse(String(reader.result||'{}'));
-      if(!Array.isArray(data.items)) throw new Error('backup invalid');
-      state = migrateItems(data.items);
-      if(data.settings && typeof data.settings==='object') settings = Object.assign(defaultSettings(), data.settings);
-      if(data.session && typeof data.session==='object') session = Object.assign({mode:'guest',user:null}, data.session);
-      if(data.aiMemory && typeof data.aiMemory==='object') aiMemory = Object.assign(defaultAiMemory(), data.aiMemory);
-      saveAll();
-      saveAiMemory();
-      applyLang();
-      render();
-      updateCloudPanel('Backup ripristinato');
-      toast('Backup ripristinato ✅');
-    }catch(e){
-      toast('Backup non valido');
-      updateCloudPanel('Backup non valido');
-    }
-  };
-  reader.readAsText(file);
-}
-async function copyCloudId(){
-  const value = settings.householdId || settings.apiEndpoint || '';
-  if(!value){ toast('Cloud non configurato'); return; }
-  try{
-    await navigator.clipboard.writeText(value);
-    toast('ID cloud copiato ✅');
-  }catch{
-    toast(value);
-  }
-}
-
-
-let pendingVoiceAssistant = 'alexa';
-function voiceAssistantLabel(kind){
-  return kind === 'google' ? 'Google Assistant' : 'Alexa';
-}
-function voiceAssistantIcon(kind){
-  return kind === 'google' ? 'G' : 'A';
-}
-function updateVoiceConnectDialog(kind='alexa'){
-  pendingVoiceAssistant = kind;
-  const label = voiceAssistantLabel(kind);
-  const endpoint = voiceEndpoint(kind === 'google' ? 'google-assistant' : 'alexa');
-  const title = $('#voiceConnectTitle'); if(title) title.textContent = `Collega ${label}`;
-  const kicker = $('#voiceConnectKicker'); if(kicker) kicker.textContent = kind === 'google' ? 'Google Assistant' : 'Amazon Alexa';
-  const sub = $('#voiceConnectSubtitle'); if(sub) sub.textContent = 'Userà la stessa lista cloud di Spesa Pronta.';
-  const icon = $('#voiceConnectIcon'); if(icon) icon.textContent = voiceAssistantIcon(kind);
-  const ep = $('#voiceConnectEndpoint'); if(ep) ep.textContent = endpoint;
-  const st = $('#voiceConnectStatusTitle'); if(st) st.textContent = settings[kind === 'google' ? 'googleAssistantConnected' : 'alexaConnected'] ? 'Configurato' : (kind === 'google' ? 'Webhook da configurare' : 'Skill da creare');
-  const tx = $('#voiceConnectStatusText'); if(tx) tx.textContent = kind === 'google' ? 'Copia questo webhook nel tuo progetto Google/Dialogflow.' : 'Copia questo endpoint nella tua Skill Alexa custom.';
-  const step1 = $('#voiceConnectStep1'); if(step1) step1.textContent = kind === 'google' ? 'Apri il progetto Google Assistant/Dialogflow.' : 'Crea la Skill Alexa “Spesa Pronta” nel pannello Amazon Developer.';
-  const step2 = $('#voiceConnectStep2'); if(step2) step2.textContent = 'Incolla l’endpoint generato come HTTPS endpoint della Skill/Action.';
-  const step3 = $('#voiceConnectStep3'); if(step3) step3.textContent = 'La lista resta aggiornata perché ogni modifica viene sincronizzata sullo stesso cloud.';
-}
-function openVoiceConnect(kind){
-  updateVoiceConnectDialog(kind);
-  const d = $('#voiceConnectDialog');
-  if(d?.showModal) d.showModal(); else d?.setAttribute('open','open');
-}
-function closeVoiceConnect(){
-  const d = $('#voiceConnectDialog');
-  if(d?.close) d.close(); else d?.removeAttribute('open');
-}
-async function copyVoiceEndpoint(kind=pendingVoiceAssistant){
-  const endpoint = voiceEndpoint(kind === 'google' ? 'google-assistant' : 'alexa');
-  try{ await navigator.clipboard.writeText(endpoint); toast('Endpoint copiato ✅'); }
-  catch{ toast(endpoint); }
-}
-async function confirmVoiceConnect(){
-  const kind = pendingVoiceAssistant || 'alexa';
-  if(!settings.apiEndpoint) settings.apiEndpoint = '/api';
-  if(!settings.householdId) settings.householdId = `home_${Math.random().toString(16).slice(2,14)}`;
-  if(!settings.token) settings.token = `local_${Math.random().toString(36).slice(2,18)}`;
-  settings.cloudEnabled = true;
-  saveAll();
-  updateVoiceConnectDialog(kind);
-  await copyVoiceEndpoint(kind);
-  toast(kind === 'google' ? 'Webhook Google copiato ✅' : 'Endpoint Skill Alexa copiato ✅');
-}
-
-function markVoiceAssistantConfigured(kind=pendingVoiceAssistant){
-  if(kind === 'google') settings.googleAssistantConnected = true;
-  else settings.alexaConnected = true;
-  settings.cloudEnabled = true;
-  if(!settings.apiEndpoint) settings.apiEndpoint = '/api';
-  if(!settings.householdId) settings.householdId = `home_${Math.random().toString(16).slice(2,14)}`;
-  if(!settings.token) settings.token = `local_${Math.random().toString(36).slice(2,18)}`;
-  saveAll();
-  updateVoiceSyncPanel();
-  updateVoiceConnectDialog(kind);
-  syncCloud(false);
-  toast(kind === 'google' ? 'Google segnato come configurato ✅' : 'Alexa Skill segnata come configurata ✅');
-}
-
-function bindVoiceConnectDialog(){
-  $('#voiceConnectCloseBtn')?.addEventListener('click', closeVoiceConnect);
-  $('#voiceConnectDialog')?.addEventListener('click', e => { if(e.target?.id === 'voiceConnectDialog') closeVoiceConnect(); });
-  $('#voiceConnectConfirmBtn')?.addEventListener('click', confirmVoiceConnect);
-  $('#voiceConnectCopyBtn')?.addEventListener('click', () => copyVoiceEndpoint());
-  $('#voiceConnectSyncBtn')?.addEventListener('click', () => syncCloud(true));
-  $('#voiceConnectDoneBtn')?.addEventListener('click', () => markVoiceAssistantConfigured());
-}
-
-function updateVoiceSyncPanel(){
-  const alexa = !!settings.alexaConnected;
-  const google = !!settings.googleAssistantConnected;
-  const alexaBtn = $('#cloudAlexaBtn');
-  const googleBtn = $('#cloudGoogleBtn');
-  const alexaState = $('#cloudAlexaState');
-  const googleState = $('#cloudGoogleState');
-  if(alexaBtn) alexaBtn.classList.toggle('connected', alexa);
-  if(googleBtn) googleBtn.classList.toggle('connected', google);
-  if(alexaState) alexaState.textContent = alexa ? 'Collegata' : 'Configura skill';
-  if(googleState) googleState.textContent = google ? 'Collegato' : 'Configura webhook';
-}
-async function connectVoiceAssistant(kind){
-  if(kind === 'alexa') settings.alexaConnected = true;
-  if(kind === 'google') settings.googleAssistantConnected = true;
-  settings.cloudEnabled = true;
-  if(!settings.apiEndpoint) settings.apiEndpoint = '/api';
-  if(!settings.householdId) settings.householdId = `home_${Math.random().toString(16).slice(2,14)}`;
-  if(!settings.token) settings.token = `local_${Math.random().toString(36).slice(2,18)}`;
-  saveAll();
-  updateVoiceSyncPanel();
-  updateCloudPanel(kind === 'alexa' ? 'Alexa collegata' : 'Google collegato');
-  await syncCloud(false);
-  updateVoiceSyncPanel();
-  updateCloudPanel(kind === 'alexa' ? 'Alexa sincronizzata' : 'Google sincronizzato');
-  toast(kind === 'alexa' ? 'Alexa collegata ✅' : 'Google collegato ✅');
-}
-function bindVoiceSyncPanel(){
-  $('#cloudAlexaBtn')?.addEventListener('click', () => openVoiceConnect('alexa'));
-  $('#cloudGoogleBtn')?.addEventListener('click', () => openVoiceConnect('google'));
-  updateVoiceSyncPanel();
-}
-
-function bindCloudPanel(){
-  bindVoiceSyncPanel();
-  bindVoiceConnectDialog();
-  $('#cloudCloseBtn')?.addEventListener('click', closeCloudPanel);
-  $('#cloudDialog')?.addEventListener('click', e => { if(e.target?.id==='cloudDialog') closeCloudPanel(); });
-  $('#cloudSyncNowBtn')?.addEventListener('click', cloudSyncNow);
-  $('#cloudBackupBtn')?.addEventListener('click', downloadCloudBackup);
-  $('#cloudRestoreBtn')?.addEventListener('click', () => $('#cloudRestoreInput')?.click());
-  $('#cloudRestoreInput')?.addEventListener('change', e => restoreCloudBackupFile(e.target.files?.[0]));
-  $('#cloudCopyIdBtn')?.addEventListener('click', copyCloudId);
-  $('#cloudSettingsBtn')?.addEventListener('click', () => { closeCloudPanel(); showView('settings'); });
-}
-
-
-function bindReopenVisionButtons(){
-  if(document.body?.dataset.reopenVisionBound === '1') return;
-  if(document.body) document.body.dataset.reopenVisionBound = '1';
-
-  const handler = (e) => {
-    const btn = e.target?.closest?.('#reopenVisionCheckBtn,#reopenVisionCheckBtn2,.vision-verify-btn');
-    if(!btn) return;
-    e.preventDefault();
-    e.stopPropagation();
-    reopenVisionCheck();
-  };
-
-  document.addEventListener('click', handler, true);
-  $('#reopenVisionCheckBtn')?.addEventListener('click', (e)=>{ e.preventDefault(); reopenVisionCheck(); });
-  $('#reopenVisionCheckBtn2')?.addEventListener('click', (e)=>{ e.preventDefault(); reopenVisionCheck(); });
-}
-
 function bind(){
   $all('.nav-item').forEach(b => b.addEventListener('click', () => showView(b.dataset.view)));
-  $('#mobileMenuBtn')?.addEventListener('click', () => { closeLangMenu?.(); toggleMobileMenu(true); });
+  $('#mobileMenuBtn')?.addEventListener('click', () => toggleMobileMenu(true));
   $('#mobileNavBackdrop')?.addEventListener('click', () => toggleMobileMenu(false));
   $all('[data-view-shortcut]').forEach(b => b.addEventListener('click', () => showView(b.dataset.viewShortcut)));
   $('#userShortcutBtn').addEventListener('click', handleUserShortcut);
-  $('#languageSelect')?.addEventListener('change', e => { settings.lang=e.target.value; saveAll(); applyLang(); render(); });
-  bindLanguagePicker();
-  bindCloudPanel();
-  bindReopenVisionButtons();
+  $('#languageSelect').addEventListener('change', e => { settings.lang=e.target.value; saveAll(); applyLang(); render(); });
   $('#settingsLanguage').addEventListener('change', e => { settings.lang=e.target.value; saveAll(); applyLang(); render(); });
   $('#searchInput').addEventListener('input', e => { searchTerm=e.target.value.toLowerCase(); renderProducts(); });
   $('#categorySelect').addEventListener('change', e => { categoryFilter=e.target.value; renderProducts(); });
@@ -1023,7 +654,6 @@ function bind(){
   $('#customProductForm').addEventListener('submit', addCustom);
   $('#loginForm')?.addEventListener('submit', login);
   $('#forgotPasswordBtn')?.addEventListener('click', forgotPassword);
-  $('#recoverLocalAccountBtn')?.addEventListener('click', () => recoverLastLocalAccount('button'));
   $('#resetCloseBtn')?.addEventListener('click', () => $('#resetDialog').close());
   $('#resetForm')?.addEventListener('submit', resetPassword);
   $('#verifyEmailForm')?.addEventListener('submit', verifyEmailSubmit);
@@ -1044,7 +674,7 @@ function bind(){
   $('#initialScanBtn')?.addEventListener('click', () => openGroceryScanner(true));
   $('#initialVerifyLaterBtn')?.addEventListener('click', markInitialInventoryToVerify);
   $('#saveSettingsBtn').addEventListener('click', saveSettingsFromForm);
-  $('#syncNowBtn').addEventListener('click', openCloudPanel);
+  $('#syncNowBtn').addEventListener('click', () => syncCloud(true));
   $('#saveProfileBtn').addEventListener('click', saveProfile);
   $('#goRegisterBtn').addEventListener('click', () => showView(session.user ? 'settings' : 'registration'));
   $('#logoutAccountBtn')?.addEventListener('click', requestLogoutAccount);
@@ -1088,14 +718,13 @@ function applyLang(){
     const value = t(key);
     if(value && value !== key) el.placeholder = value;
   });
-  syncLanguagePicker();
+  $('#languageSelect').value = settings.lang;
   $('#settingsLanguage').value = settings.lang;
   $('#categorySelect').innerHTML = `<option value="all">${esc(t('allCategories'))}</option>` + categories.map(c=>`<option value="${c}">${esc(catName(c))}</option>`).join('');
   $('#customCategory').innerHTML = categories.map(c=>`<option value="${c}">${esc(catName(c))}</option>`).join('');
   renderCaptcha();
 }
 function toggleMobileMenu(open){
-  if(open){ try{ closeLangMenu(); }catch(e){} }
   document.querySelector('.sidebar')?.classList.toggle('open', !!open);
   $('#mobileNavBackdrop')?.classList.toggle('show', !!open);
   document.body.classList.toggle('menu-open', !!open);
@@ -1129,13 +758,12 @@ function showView(v){
   $all('.view').forEach(x=>x.classList.remove('active'));
   $(`#view-${v}`)?.classList.add('active');
   $all('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
-  if(v==='registration'){ fillRegistrationFormFromProfile(); applyLastAccountToLogin(); }
+  if(v==='registration') fillRegistrationFormFromProfile();
   if(v==='products') renderAllProducts();
   if(v==='shopping') renderShoppingFull();
   if(v==='suggestions') renderSuggestions();
   if(v==='settings') renderSettings();
 }
-window.render = render;
 function render(){
   setPhoneVerificationVisible(!!session.pendingVerifyPhone);
   updateFlowClasses();
@@ -1253,111 +881,15 @@ function requestLogoutAccount(){
     confirmLabel:'Sì, disconnetti'
   });
 }
-
-const LAST_ACCOUNT_KEY='spesa-pronta:last-account:v1';
-function saveLastAccountSnapshot(){
-  const u=session.user||{};
-  const p=settings.profile||{};
-  const snap={
-    firstName:p.firstName||u.firstName||'',
-    lastName:p.lastName||u.lastName||'',
-    username:p.username||u.username||'',
-    email:p.email||u.email||'',
-    people:settings.people||2,
-    animals:settings.animals||0,
-    apiEndpoint:settings.apiEndpoint||'/api',
-    householdId:settings.householdId||'',
-    savedAt:Date.now()
-  };
-  if(snap.email || snap.username) localStorage.setItem(LAST_ACCOUNT_KEY, JSON.stringify(snap));
-  return snap;
-}
-function loadLastAccountSnapshot(){
-  try{return JSON.parse(localStorage.getItem(LAST_ACCOUNT_KEY)||'null')||null;}catch{return null;}
-}
-function applyLastAccountToLogin(){
-  const snap=loadLastAccountSnapshot();
-  if(!snap) return;
-  const box=$('#returningAccountBox');
-  if(box){
-    box.classList.remove('hidden');
-    const name=[snap.firstName,snap.lastName].filter(Boolean).join(' ').trim() || snap.username || snap.email || 'utente';
-    $('#returningAccountTitle').textContent=`Bentornato ${name}`;
-    $('#returningAccountText').textContent='Il tuo account esiste ancora: inserisci la password per rientrare e risincronizzare tutto.';
-  }
-  if($('#loginEmail') && !$('#loginEmail').value) $('#loginEmail').value=snap.email||'';
-  if($('#regFirstName') && !$('#regFirstName').value) $('#regFirstName').value=snap.firstName||'';
-  if($('#regLastName') && !$('#regLastName').value) $('#regLastName').value=snap.lastName||'';
-  if($('#regUsername') && !$('#regUsername').value) $('#regUsername').value=snap.username||'';
-  if($('#regEmail') && !$('#regEmail').value) $('#regEmail').value=snap.email||'';
-}
-
-
-function recoverLastLocalAccount(reason='manual'){
-  const snap=loadLastAccountSnapshot();
-  if(!snap || !(snap.email || snap.username)){
-    toast('Nessun profilo locale da recuperare.');
-    return false;
-  }
-  const localUser={
-    id:snap.householdId || `local_${Date.now()}`,
-    firstName:snap.firstName||'',
-    lastName:snap.lastName||'',
-    username:snap.username || snap.email || 'utente',
-    email:snap.email || '',
-    householdId:snap.householdId || settings.householdId || `home_local_${Date.now()}`
-  };
-  session={mode:'registered', user:localUser, recoveryMode:true, recoveryReason:reason};
-  settings.profile={...(settings.profile||{}),firstName:localUser.firstName,lastName:localUser.lastName,username:localUser.username,email:localUser.email};
-  settings.apiEndpoint=snap.apiEndpoint || settings.apiEndpoint || '/api';
-  settings.householdId=snap.householdId || settings.householdId || localUser.householdId;
-  settings.cloudEnabled=!!settings.householdId;
-  if(!settings.token) settings.token=`local_recovery_${Math.random().toString(36).slice(2,18)}`;
-  try{
-    const cloudKeyPrefix='spesa-pronta-local-cloud:';
-    let newest=null;
-    for(let i=0;i<localStorage.length;i++){
-      const k=localStorage.key(i);
-      if(k && k.startsWith(cloudKeyPrefix)){
-        const data=JSON.parse(localStorage.getItem(k)||'null');
-        if(data && (!newest || Number(data.savedAt||0)>Number(newest.savedAt||0))) newest=data;
-      }
-    }
-    if(newest?.payload?.items?.length) state=migrateItems(newest.payload.items);
-    if(newest?.payload?.aiMemory) aiMemory=Object.assign(aiMemory,newest.payload.aiMemory);
-  }catch{}
-  saveAiMemory(); saveAll(); render(); showView(initialView());
-  toast('Profilo locale recuperato ✅');
-  return true;
-}
-
-function logoutOnlyAccountState(){
-  const snap=saveLastAccountSnapshot();
-  session={mode:'guest', user:null, lastLogoutAt:Date.now()};
-  settings.profile={...(settings.profile||{}),firstName:snap.firstName||'',lastName:snap.lastName||'',username:snap.username||'',email:snap.email||''};
-  settings.apiEndpoint=settings.apiEndpoint || snap.apiEndpoint || '/api';
-  // NON svuotare state/aiMemory: disconnessione non significa cancellazione dati.
-  saveAll();
-  render();
-  applyLastAccountToLogin();
-  showView('registration');
-}
-
 function resetLocalAccountState(){
-  const snap=saveLastAccountSnapshot();
   const lang=settings.lang || 'it';
-  const apiEndpoint=settings.apiEndpoint || snap.apiEndpoint || '/api';
-  const people=settings.people || snap.people || 2;
-  const animals=settings.animals ?? snap.animals ?? 0;
+  const apiEndpoint=settings.apiEndpoint || '/api';
   state=[];
   aiMemory=defaultAiMemory();
-  session={mode:'guest', user:null, lastLogoutAt:Date.now()};
+  session={mode:'guest', user:null};
   settings=defaultSettings();
   settings.lang=lang;
   settings.apiEndpoint=apiEndpoint;
-  settings.people=people;
-  settings.animals=animals;
-  settings.profile={firstName:snap.firstName||'',lastName:snap.lastName||'',username:snap.username||'',email:snap.email||''};
   saveAiMemory();
   saveAll();
   $('#loginForm')?.reset();
@@ -1366,23 +898,11 @@ function resetLocalAccountState(){
   applyLang();
   ensureSeedVisionMemory();
   render();
-  fillRegistrationFormFromProfile();
-  applyLastAccountToLogin();
   showView('registration');
 }
-async function performLogoutAccount(){
-  try{
-    if(settings.token){
-      await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/auth/logout`,{
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token}`},
-        body:JSON.stringify({token:settings.token})
-      });
-    }
-  }catch{}
-  // IMPORTANTE: logout locale, non cancellazione DB.
-  logoutOnlyAccountState();
-  showAccountNotice('Disconnessione completata', 'Profilo e database restano salvati. Hai solo scollegato questo dispositivo.', 'success');
+function performLogoutAccount(){
+  resetLocalAccountState();
+  showAccountNotice('Disconnessione completata', 'Sei uscito correttamente. Puoi accedere di nuovo quando vuoi.', 'success');
 }
 function requestDeleteAccount(){
   if(!session.user){ showAccountNotice('Nessun account da eliminare', 'Non risulta un account cloud attivo su questo dispositivo.', 'info'); showView('registration'); return; }
@@ -1406,7 +926,7 @@ async function performDeleteAccount(){
     const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/auth/delete-account`,{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token}`},
-      body:JSON.stringify({householdId:settings.householdId, token:settings.token, email:session.user?.email || settings.profile?.email || '', confirm:'ELIMINA'})
+      body:JSON.stringify({householdId:settings.householdId, token:settings.token, email:session.user?.email || settings.profile?.email || ''})
     });
     const data=await res.json().catch(()=>({}));
     if(!res.ok || !data.ok) throw new Error(data.error||'delete_failed');
@@ -1569,8 +1089,7 @@ function renderVerifyEmail(){
 }
 
 function fillRegistrationFormFromProfile(){
-  const snap=loadLastAccountSnapshot()||{};
-  const p={...snap,...(settings.profile||{})};
+  const p=settings.profile||{};
   if($('#regFirstName')) $('#regFirstName').value=p.firstName||'';
   if($('#regLastName')) $('#regLastName').value=p.lastName||'';
   if($('#regUsername')) $('#regUsername').value=p.username||'';
@@ -1658,11 +1177,6 @@ async function login(e){
       if(data.error==='email_not_verified'){ session={mode:'pending-verification',user:null,pendingVerifyEmail:data.email||email,pendingVerifyPhone:!!data.requiresPhoneVerification,phoneMasked:data.phoneMasked||''}; saveAll(); render(); toast(t('emailNotVerified')); showView('verify-email'); return; }
       if(data.error==='phone_not_verified'){ session={mode:'pending-verification',user:null,pendingVerifyEmail:data.email||email,pendingVerifyPhone:true,phoneMasked:data.phoneMasked||''}; saveAll(); render(); setPhoneVerificationVisible(true); toast(t('phoneNotVerified')); showView('verify-email'); return; }
     }catch{}
-    if(loadLastAccountSnapshot()?.email && loadLastAccountSnapshot().email.toLowerCase()===String(email).toLowerCase()){
-      showAccountNotice('Accesso cloud non riuscito', 'Il server non ha riconosciuto le credenziali. Puoi recuperare il profilo locale salvato su questo dispositivo.', 'warning');
-      applyLastAccountToLogin();
-      return;
-    }
     toast(err?.data?.error==='invalid_credentials' ? 'Accesso non riuscito: controlla email e password.' : 'Accesso non riuscito: riprova tra poco.');
   }
 }
@@ -1791,17 +1305,6 @@ function addCustom(e){
   state.unshift(createItem(cryptoId(),'assets/illustrations/generic-item.png',$('#customCategory').value,names,1,6,2,['pz','pc','lt','kg'],{custom:true}));
   $('#productDialog').close(); $('#customProductForm').reset(); saveAll(); render(); toast(t('added'));
 }
-
-function reopenVisionCheck(){
-  settings.inventorySetupDone = true;
-  settings.inventoryStatus = settings.inventoryStatus || 'to_verify';
-  settings.inventoryUpdatedAt = Date.now();
-  saveAll();
-  render();
-  toast('Apro Scansione Pro ✅');
-  setTimeout(() => openGroceryScanner(true), 60);
-}
-
 function shoppingDone(){ openGroceryScanner(true); }
 async function copyList(){ const txt=buyItems().map(i=>`- ${nameOf(i)} (${i.qty} ${i.unit})`).join('\n') || t('noBuy'); await navigator.clipboard.writeText(txt).catch(()=>{}); toast(t('copied')); }
 
@@ -1818,14 +1321,14 @@ async function sendWhatsappList(){
     else toast(t('whatsappListReady'));
   }catch(err){ toast('Invio WhatsApp non riuscito. Controlla configurazione Twilio/numero.'); }
 }
-function connectAlexa(){ connectVoiceAssistant('alexa'); }
+function connectAlexa(){ settings.alexaConnected=true; saveAll(); render(); syncCloud(true); toast(t('alexaConnected')); }
 function voiceEndpoint(path){
   const base=settings.apiEndpoint.replace(/\/$/,'');
   const params=new URLSearchParams({ householdId:settings.householdId||'DEMO', token:settings.token||'TOKEN_DA_LOGIN' });
   return `${base}/${path}?${params.toString()}`;
 }
 async function copyAlexaEndpoint(){ const url=voiceEndpoint('alexa'); await navigator.clipboard.writeText(url).catch(()=>{}); toast(t('copied')); }
-function connectGoogleAssistant(){ connectVoiceAssistant('google'); }
+function connectGoogleAssistant(){ settings.googleAssistantConnected=true; saveAll(); render(); syncCloud(true); toast(t('googleConnected')); }
 async function copyGoogleEndpoint(){ const url=voiceEndpoint('google-assistant'); await navigator.clipboard.writeText(url).catch(()=>{}); toast(t('copied')); }
 function scheduleSync(){ clearTimeout(syncTimer); if(settings.cloudEnabled) syncTimer=setTimeout(()=>syncCloud(false), SYNC_WAIT); }
 async function syncCloud(show){
@@ -2501,12 +2004,26 @@ function refreshVisionBrainPanel(){
 }
 
 
-
-function enhanceScannerQuickCards(){ const wrap=document.querySelector('#groceryScannerDialog .scanner-quick-cards'); if(wrap) wrap.style.display='none'; }
-
-
-function ensureScannerLiveButtons(){ return; }
-
+function ensureScannerLiveButtons(){
+  const bar=document.querySelector('#groceryScannerDialog .scanner-actions');
+  if(!bar || $('#liveVisionBtn')) return;
+  const fridge=bar.querySelector('#fridgeModeBtn');
+  const wrap=document.createElement('div');
+  wrap.innerHTML='<button class="primary-btn" id="liveVisionBtn" type="button"><span class="action-symbol live"></span><span>Diretta AI</span></button><button class="outline-btn" id="scannerCaptureNowBtn" type="button"><span class="action-symbol zap"></span><span>Scatta ora</span></button>';
+  bar.insertBefore(wrap.firstChild, fridge);
+  bar.insertBefore(wrap.firstChild, fridge);
+  $('#liveVisionBtn')?.addEventListener('click', ()=>startLiveVisionMode('smart'));
+  $('#scannerCaptureNowBtn')?.addEventListener('click', ()=>captureLiveFrame(true));
+}
+function openGroceryScanner(afterShopping=false){
+  const dlg=$('#groceryScannerDialog'); if(!dlg) return;
+  ensureScannerLiveButtons();
+  dlg.dataset.afterShopping = afterShopping ? '1' : '0';
+  refreshVisionBrainPanel();
+  setScannerStatus(!settings.inventorySetupDone ? 'Scansiona un prodotto per volta: controlla foto, nome, formato, scadenza e stato prima di salvare.' : (afterShopping ? 'Controllo spesa: conferma la scheda, poi dai OK per passare al prossimo prodotto.' : 'Scatta o avvia la diretta. La Vision legge dettagli e ti fa correggere prima del salvataggio.'));
+  try{ dlg.showModal(); }catch{ dlg.setAttribute('open',''); }
+  openAiPanel();
+}
 function stopLiveVisionMode(keepMessage=false){
   liveScanActive=false; liveScanStableCount=0; liveScanLastHint=''; liveScanPrevSample=null; liveScanLastSpeechKey=''; liveScanReadySince=0; liveScanCooldownUntil=0; liveScanPendingResult=false; liveScanAwaitNextOk=false, visionBackendStatus=null, visionBackendStatusAt=0; stopScannerMic(true); if('speechSynthesis' in window) try{ speechSynthesis.cancel(); }catch{}
   if(liveScanTimer){ clearTimeout(liveScanTimer); liveScanTimer=null; }
@@ -2515,7 +2032,6 @@ function stopLiveVisionMode(keepMessage=false){
   if(pv) pv.dataset.live='0';
   if(!keepMessage && pv && pv.innerHTML && pv.querySelector('.live-scan-stage')) pv.innerHTML='';
 }
-window.openGroceryScanner = openGroceryScanner;
 function closeGroceryScanner(){ stopLiveVisionMode(); const dlg=$('#groceryScannerDialog'); if(dlg?.open) dlg.close(); else dlg?.removeAttribute('open'); }
 function resetScannerResults(){ stopLiveVisionMode(true); scannerMicCurrentResultId=''; scannerMicStep=''; scannerMicLastPrompt=''; liveScanPendingResult=false; liveScanCooldownUntil=0; liveScanAwaitNextOk=false; $('#scannerResults').innerHTML=''; $('#scannerPreview').innerHTML=''; setScannerStatus('Risultati svuotati. Puoi riaprire la diretta AI o scattare nuove foto.', '', false); }
 function completeShoppingDone(needsVerification=false){
@@ -3544,4 +3060,4 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-console.log('[Spesa Pronta] V27.55 IMG FIX loaded: inline images + visible version + overflow fixed');
+console.log('[Spesa Pronta] V27.48 premium-mega-vision loaded: uppercase UI + 1M virtual seed core + 11200 active products');
