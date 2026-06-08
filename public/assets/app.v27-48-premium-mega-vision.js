@@ -1106,7 +1106,7 @@ function showView(v){
   $all('.view').forEach(x=>x.classList.remove('active'));
   $(`#view-${v}`)?.classList.add('active');
   $all('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
-  if(v==='registration') fillRegistrationFormFromProfile();
+  if(v==='registration'){ fillRegistrationFormFromProfile(); applyLastAccountToLogin(); }
   if(v==='products') renderAllProducts();
   if(v==='shopping') renderShoppingFull();
   if(v==='suggestions') renderSuggestions();
@@ -1229,15 +1229,60 @@ function requestLogoutAccount(){
     confirmLabel:'Sì, disconnetti'
   });
 }
+
+const LAST_ACCOUNT_KEY='spesa-pronta:last-account:v1';
+function saveLastAccountSnapshot(){
+  const u=session.user||{};
+  const p=settings.profile||{};
+  const snap={
+    firstName:p.firstName||u.firstName||'',
+    lastName:p.lastName||u.lastName||'',
+    username:p.username||u.username||'',
+    email:p.email||u.email||'',
+    people:settings.people||2,
+    animals:settings.animals||0,
+    apiEndpoint:settings.apiEndpoint||'/api',
+    householdId:settings.householdId||'',
+    savedAt:Date.now()
+  };
+  if(snap.email || snap.username) localStorage.setItem(LAST_ACCOUNT_KEY, JSON.stringify(snap));
+  return snap;
+}
+function loadLastAccountSnapshot(){
+  try{return JSON.parse(localStorage.getItem(LAST_ACCOUNT_KEY)||'null')||null;}catch{return null;}
+}
+function applyLastAccountToLogin(){
+  const snap=loadLastAccountSnapshot();
+  if(!snap) return;
+  const box=$('#returningAccountBox');
+  if(box){
+    box.classList.remove('hidden');
+    const name=[snap.firstName,snap.lastName].filter(Boolean).join(' ').trim() || snap.username || snap.email || 'utente';
+    $('#returningAccountTitle').textContent=`Bentornato ${name}`;
+    $('#returningAccountText').textContent='Il tuo account esiste ancora: inserisci la password per rientrare e risincronizzare tutto.';
+  }
+  if($('#loginEmail') && !$('#loginEmail').value) $('#loginEmail').value=snap.email||'';
+  if($('#regFirstName') && !$('#regFirstName').value) $('#regFirstName').value=snap.firstName||'';
+  if($('#regLastName') && !$('#regLastName').value) $('#regLastName').value=snap.lastName||'';
+  if($('#regUsername') && !$('#regUsername').value) $('#regUsername').value=snap.username||'';
+  if($('#regEmail') && !$('#regEmail').value) $('#regEmail').value=snap.email||'';
+}
+
 function resetLocalAccountState(){
+  const snap=saveLastAccountSnapshot();
   const lang=settings.lang || 'it';
-  const apiEndpoint=settings.apiEndpoint || '/api';
+  const apiEndpoint=settings.apiEndpoint || snap.apiEndpoint || '/api';
+  const people=settings.people || snap.people || 2;
+  const animals=settings.animals ?? snap.animals ?? 0;
   state=[];
   aiMemory=defaultAiMemory();
-  session={mode:'guest', user:null};
+  session={mode:'guest', user:null, lastLogoutAt:Date.now()};
   settings=defaultSettings();
   settings.lang=lang;
   settings.apiEndpoint=apiEndpoint;
+  settings.people=people;
+  settings.animals=animals;
+  settings.profile={firstName:snap.firstName||'',lastName:snap.lastName||'',username:snap.username||'',email:snap.email||''};
   saveAiMemory();
   saveAll();
   $('#loginForm')?.reset();
@@ -1246,11 +1291,13 @@ function resetLocalAccountState(){
   applyLang();
   ensureSeedVisionMemory();
   render();
+  fillRegistrationFormFromProfile();
+  applyLastAccountToLogin();
   showView('registration');
 }
 function performLogoutAccount(){
   resetLocalAccountState();
-  showAccountNotice('Disconnessione completata', 'Sei uscito correttamente. Puoi accedere di nuovo quando vuoi.', 'success');
+  showAccountNotice('Disconnessione completata', 'Account salvato: inserisci la password per rientrare. Non hai eliminato il profilo.', 'success');
 }
 function requestDeleteAccount(){
   if(!session.user){ showAccountNotice('Nessun account da eliminare', 'Non risulta un account cloud attivo su questo dispositivo.', 'info'); showView('registration'); return; }
@@ -1437,7 +1484,8 @@ function renderVerifyEmail(){
 }
 
 function fillRegistrationFormFromProfile(){
-  const p=settings.profile||{};
+  const snap=loadLastAccountSnapshot()||{};
+  const p={...snap,...(settings.profile||{})};
   if($('#regFirstName')) $('#regFirstName').value=p.firstName||'';
   if($('#regLastName')) $('#regLastName').value=p.lastName||'';
   if($('#regUsername')) $('#regUsername').value=p.username||'';

@@ -1069,6 +1069,107 @@ body::after{content:'V27.74 UI POLISH'!important}
 }
 </style>
 
+
+<style id="v2776-header-controls-fix">
+/* V27.76 LOGOUT FIX FIX */
+body::after{content:'V27.76 LOGOUT FIX'!important}
+
+.top-actions{
+  display:grid!important;
+  grid-template-columns:56px minmax(0,1fr) auto auto!important;
+  align-items:center!important;
+  gap:10px!important;
+  width:100%!important;
+}
+.top-actions > .mobile-menu-btn{
+  grid-column:1!important;
+  justify-self:start!important;
+}
+.top-actions > .lang-picker{
+  grid-column:3!important;
+  justify-self:end!important;
+  width:auto!important;
+  min-width:0!important;
+  max-width:none!important;
+  display:block!important;
+}
+.top-actions > .icon-btn,
+.top-actions > .cloud-btn,
+.top-actions > #cloudOpenBtn{
+  grid-column:4!important;
+  justify-self:end!important;
+}
+.top-actions .lang-trigger{
+  width:118px!important;
+  min-width:118px!important;
+  max-width:118px!important;
+  height:56px!important;
+  padding:0 10px!important;
+  border-radius:18px!important;
+  display:grid!important;
+  grid-template-columns:28px auto 10px!important;
+  align-items:center!important;
+  justify-content:end!important;
+  column-gap:8px!important;
+}
+.top-actions .lang-trigger .lang-mini-flag{
+  width:28px!important;
+  height:28px!important;
+  margin:0!important;
+}
+.top-actions .lang-trigger strong#langTriggerCode{
+  margin:0!important;
+  min-width:auto!important;
+  width:auto!important;
+  text-align:right!important;
+  justify-self:end!important;
+  font-size:1rem!important;
+  line-height:1!important;
+}
+.top-actions .lang-trigger .lang-trigger-caret{
+  margin:0!important;
+  justify-self:end!important;
+  font-size:.88rem!important;
+}
+
+@media (max-width:560px){
+  .top-actions{
+    grid-template-columns:54px minmax(0,1fr) auto auto!important;
+    gap:8px!important;
+  }
+  .top-actions .lang-trigger{
+    width:110px!important;
+    min-width:110px!important;
+    max-width:110px!important;
+    height:54px!important;
+    padding:0 9px!important;
+    grid-template-columns:26px auto 10px!important;
+    column-gap:7px!important;
+  }
+  .top-actions .lang-trigger .lang-mini-flag{
+    width:26px!important;
+    height:26px!important;
+  }
+}
+</style>
+
+
+<style id="v2776-logout-fix">
+/* V27.76 logout fix */
+body::after{content:'V27.76 LOGOUT FIX'!important}
+.returning-account-box{
+  grid-column:1/-1;
+  padding:14px;
+  border-radius:20px;
+  background:linear-gradient(135deg,#eef6ff,#ffffff);
+  border:1px solid rgba(18,102,241,.13);
+  box-shadow:0 12px 26px rgba(7,27,52,.055);
+  color:#10233f;
+}
+.returning-account-box strong{display:block;font-size:1rem;line-height:1.1}
+.returning-account-box p{margin:6px 0 0;color:#58708f;font-weight:800;line-height:1.25;font-size:.84rem}
+</style>
+
 </head>
 <body>
   <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.73-ALEXA-SKILL-READY -->
@@ -1204,6 +1305,12 @@ body::after{content:'V27.74 UI POLISH'!important}
             <p data-i18n="registerText">Prima di vedere i prodotti devi accedere o creare un profilo. Poi Spesa Pronta ti guiderà nell’inventario iniziale con foto.</p>
           </div>
           <form id="loginForm" class="form-grid login-form" novalidate>
+
+            <div class="returning-account-box hidden" id="returningAccountBox">
+              <strong id="returningAccountTitle">Bentornato</strong>
+              <p id="returningAccountText">Accedi con la tua password per recuperare il cloud.</p>
+            </div>
+
             <div class="wide form-section-intro login-section-intro">
               <span class="section-chip">Accesso rapido</span>
               <h3>Accedi al tuo account</h3>

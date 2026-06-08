@@ -2476,3 +2476,20 @@ body::after{content:'V27.73 ALEXA SKILL READY'!important}
 
 
 /* V27.74 UI POLISH CSS */
+
+
+/* V27.76 logout fix */
+
+/* V27.76 logout fix */
+body::after{content:'V27.76 LOGOUT FIX'!important}
+.returning-account-box{
+  grid-column:1/-1;
+  padding:14px;
+  border-radius:20px;
+  background:linear-gradient(135deg,#eef6ff,#ffffff);
+  border:1px solid rgba(18,102,241,.13);
+  box-shadow:0 12px 26px rgba(7,27,52,.055);
+  color:#10233f;
+}
+.returning-account-box strong{display:block;font-size:1rem;line-height:1.1}
+.returning-account-box p{margin:6px 0 0;color:#58708f;font-weight:800;line-height:1.25;font-size:.84rem}
