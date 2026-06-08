@@ -1362,8 +1362,8 @@ body::after{content:'V27.84 FLAG STYLE ACTION PILLS'!important}
 
 
 <style id="v2788-action-image-pills-final">
-/* V27.91 SCANNER FINAL LAYER */
-body::after{content:'V27.91 SCANNER FINAL LAYER'!important}
+/* V27.92 REOPEN VISION CHECK */
+body::after{content:'V27.92 REOPEN VISION CHECK'!important}
 
 /* quick cards più leggibili e con immagine meno tagliata */
 #groceryScannerDialog .scanner-quick-cards{
@@ -1525,8 +1525,8 @@ body::after{content:'V27.91 SCANNER FINAL LAYER'!important}
 
 
 <style id="v2788-login-recovery">
-/* V27.91 SCANNER FINAL LAYER */
-body::after{content:'V27.91 SCANNER FINAL LAYER'!important}
+/* V27.92 REOPEN VISION CHECK */
+body::after{content:'V27.92 REOPEN VISION CHECK'!important}
 .returning-account-box .recovery-actions{display:grid;gap:8px;margin-top:12px}
 .returning-account-box .recovery-btn{
   min-height:48px;border:1px solid rgba(18,102,241,.16);border-radius:16px;
@@ -1538,8 +1538,8 @@ body::after{content:'V27.91 SCANNER FINAL LAYER'!important}
 
 
 <style id="v2788-scanner-top-cards-final">
-/* V27.91 SCANNER FINAL LAYER - final hard override */
-body::after{content:'V27.91 SCANNER FINAL LAYER'!important}
+/* V27.92 REOPEN VISION CHECK - final hard override */
+body::after{content:'V27.92 REOPEN VISION CHECK'!important}
 
 /* finestra scanner stabile */
 #groceryScannerDialog .scanner-card-premium{
@@ -1678,7 +1678,7 @@ body::after{content:'V27.91 SCANNER FINAL LAYER'!important}
 
 
 <style id="v2789-scanner-merged-pills-final">
-body::after{content:'V27.91 SCANNER FINAL LAYER'!important}
+body::after{content:'V27.92 REOPEN VISION CHECK'!important}
 #groceryScannerDialog .scanner-quick-cards{display:none!important}
 #groceryScannerDialog .scanner-actions-merged{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:14px!important;width:100%!important;max-width:680px!important;margin:18px auto 10px!important}
 #groceryScannerDialog .scanner-actions-merged > *{min-width:0!important;width:100%!important;margin:0!important}
@@ -1699,8 +1699,8 @@ body::after{content:'V27.91 SCANNER FINAL LAYER'!important}
 
 
 <style id="v2790-scanner-pills-fixed">
-/* V27.91 SCANNER FINAL LAYER - kills old white overlays and makes text visible */
-body::after{content:'V27.91 SCANNER FINAL LAYER'!important}
+/* V27.92 REOPEN VISION CHECK - kills old white overlays and makes text visible */
+body::after{content:'V27.92 REOPEN VISION CHECK'!important}
 
 /* Remove the old pseudo overlays that were whitening the cards and hiding text */
 #groceryScannerDialog .scanner-actions-merged .scanner-pill-action::before,
@@ -1881,8 +1881,8 @@ body::after{content:'V27.91 SCANNER FINAL LAYER'!important}
 
 
 <style id="v2791-scanner-final-layer">
-/* V27.91 SCANNER FINAL LAYER - nuovo layer separato da scanner-actions, quindi niente CSS vecchio */
-body::after{content:'V27.91 SCANNER FINAL LAYER'!important}
+/* V27.92 REOPEN VISION CHECK - nuovo layer separato da scanner-actions, quindi niente CSS vecchio */
+body::after{content:'V27.92 REOPEN VISION CHECK'!important}
 
 /* elimina visivamente i blocchi vecchi */
 #groceryScannerDialog .scanner-quick-cards,
@@ -2029,9 +2029,117 @@ body::after{content:'V27.91 SCANNER FINAL LAYER'!important}
 }
 </style>
 
+
+<style id="v2792-reopen-vision-check">
+/* V27.92 REOPEN VISION CHECK */
+body::after{content:'V27.92 REOPEN VISION CHECK'!important}
+.vision-verify-btn{
+  border:0;
+  min-height:58px;
+  padding:10px 16px;
+  border-radius:20px;
+  background:linear-gradient(135deg,#1266f1 0%,#13c8a6 100%);
+  color:#fff;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  font-weight:1000;
+  letter-spacing:.02em;
+  box-shadow:0 16px 34px rgba(18,102,241,.24);
+  cursor:pointer;
+}
+.vision-verify-btn .vision-verify-icon{
+  width:36px;
+  height:36px;
+  border-radius:14px;
+  display:grid;
+  place-items:center;
+  background:rgba(255,255,255,.18);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.22);
+}
+.vision-verify-btn span:not(.vision-verify-icon){
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  line-height:1.05;
+}
+.vision-verify-btn b{font-size:.92rem}
+.vision-verify-btn small{font-size:.64rem;opacity:.88;font-weight:850;margin-top:3px}
+.vision-verify-btn.large{
+  min-width:190px;
+  min-height:64px;
+}
+.vision-resume-card{
+  margin:18px 0;
+  padding:18px;
+  border-radius:28px;
+  border:1px solid rgba(18,102,241,.14);
+  background:
+    radial-gradient(circle at 16% 20%,rgba(18,102,241,.16),transparent 34%),
+    linear-gradient(135deg,#f8fbff 0%,#ffffff 48%,#effff9 100%);
+  box-shadow:0 18px 44px rgba(7,27,52,.075);
+  display:grid;
+  grid-template-columns:72px minmax(0,1fr) auto;
+  align-items:center;
+  gap:16px;
+}
+.vision-resume-orb{
+  width:72px;
+  height:72px;
+  border-radius:24px;
+  display:grid;
+  place-items:center;
+  background:linear-gradient(135deg,#1266f1,#13c8a6);
+  color:#fff;
+  font-size:1.8rem;
+  box-shadow:0 16px 34px rgba(18,102,241,.22);
+}
+.vision-resume-card small{
+  display:block;
+  color:#1266f1;
+  font-weight:1000;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+}
+.vision-resume-card h3{
+  margin:.15rem 0 .25rem;
+  color:#10233f;
+  font-size:1.35rem;
+  letter-spacing:-.02em;
+}
+.vision-resume-card p{
+  margin:0;
+  color:#5b6f8d;
+  font-weight:750;
+  line-height:1.25;
+}
+@media(max-width:760px){
+  .vision-resume-card{
+    grid-template-columns:56px minmax(0,1fr);
+  }
+  .vision-resume-orb{
+    width:56px;height:56px;border-radius:18px;font-size:1.35rem;
+  }
+  .vision-resume-card .vision-verify-btn{
+    grid-column:1/-1;
+    width:100%;
+  }
+}
+@media(max-width:520px){
+  .cta-row{
+    display:grid!important;
+    grid-template-columns:1fr!important;
+  }
+  .vision-verify-btn{
+    width:100%;
+  }
+}
+</style>
+
 </head>
 <body>
-  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.91-ACTION-IMAGE-PILLS-FINAL -->
+  <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.92-ACTION-IMAGE-PILLS-FINAL -->
   <div class="app-frame">
     <aside class="sidebar">
       <div class="side-brand">
@@ -2104,6 +2212,19 @@ body::after{content:'V27.91 SCANNER FINAL LAYER'!important}
           <article class="stat-card cloud"><span data-i18n="syncStatus">Stato sync</span><strong id="statSync">Offline</strong><small id="statSyncSub">local</small><i>☁</i></article>
         </section>
 
+        <section class="vision-resume-card" id="visionResumeCard">
+          <div class="vision-resume-orb">📷</div>
+          <div>
+            <small>CONTROLLO PRODOTTI</small>
+            <h3>Riprendi verifica Vision AI</h3>
+            <p>Hai saltato o rimandato la verifica? Puoi riaprire subito il menu Scansione Pro e completare il controllo.</p>
+          </div>
+          <button class="vision-verify-btn large" id="reopenVisionCheckBtn2" type="button">
+            <span class="vision-verify-icon">✨</span>
+            <span><b>RIAPRI VERIFICA</b><small>Scansione Pro</small></span>
+          </button>
+        </section>
+
         <div class="dashboard-grid">
           <section class="panel products-panel">
             <div class="panel-head">
@@ -2114,6 +2235,10 @@ body::after{content:'V27.91 SCANNER FINAL LAYER'!important}
               <div class="cta-row">
                 <button class="outline-btn" id="addProductBtn" type="button">＋ <span data-i18n="addArticle">Aggiungi articolo</span></button>
                 <button class="done-btn" id="shoppingDoneBtn" type="button">✓ <span data-i18n="shoppingDone">Ho fatto la spesa</span> ✨</button>
+                <button class="vision-verify-btn" id="reopenVisionCheckBtn" type="button">
+                  <span class="vision-verify-icon">📷</span>
+                  <span><b>VERIFICA VISION AI</b><small>Riapri controllo prodotti</small></span>
+                </button>
               </div>
             </div>
 

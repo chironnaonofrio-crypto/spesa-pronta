@@ -1768,6 +1768,16 @@ function addCustom(e){
   state.unshift(createItem(cryptoId(),'assets/illustrations/generic-item.png',$('#customCategory').value,names,1,6,2,['pz','pc','lt','kg'],{custom:true}));
   $('#productDialog').close(); $('#customProductForm').reset(); saveAll(); render(); toast(t('added'));
 }
+
+function reopenVisionCheck(){
+  settings.inventorySetupDone = true;
+  settings.inventoryStatus = settings.inventoryStatus || 'to_verify';
+  settings.inventoryUpdatedAt = Date.now();
+  saveAll();
+  render();
+  openGroceryScanner(true);
+}
+
 function shoppingDone(){ openGroceryScanner(true); }
 async function copyList(){ const txt=buyItems().map(i=>`- ${nameOf(i)} (${i.qty} ${i.unit})`).join('\n') || t('noBuy'); await navigator.clipboard.writeText(txt).catch(()=>{}); toast(t('copied')); }
 
