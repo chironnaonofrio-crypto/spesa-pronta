@@ -510,19 +510,33 @@
         </div>
         <button class="ai-close" id="scannerCloseBtn" type="button" aria-label="Chiudi">×</button>
       </header>
-      <div class="scanner-actions pro-actions">
-        <label class="scanner-capture primary-btn">
-          <span class="action-symbol camera"></span><span>SCATTA FOTO</span>
+      <div class="scanner-actions pro-actions scanner-actions-showcase">
+        <label class="scanner-capture primary-btn action-pill-card action-pill-photo">
+          <span class="action-pill-title">SCATTA FOTO</span>
+          <span class="action-pill-visual"><img src="assets/illustrations/scanner-actions/scatta-foto.png" alt="Scatta foto prodotto"></span>
+          <span class="action-pill-sub">SCATTA UNA FOTO E LASCIA CHE VISION LEGGA PRODOTTO, MARCA E SCADENZA.</span>
           <input id="groceryPhotoInput" type="file" accept="image/*" capture="environment">
         </label>
-        <label class="scanner-capture outline-btn">
-          <span class="action-symbol gallery"></span><span>CARICA FOTO</span>
+        <label class="scanner-capture outline-btn action-pill-card action-pill-upload">
+          <span class="action-pill-title">CARICA FOTO</span>
+          <span class="action-pill-visual"><img src="assets/illustrations/scanner-actions/carica-foto.png" alt="Carica foto da galleria"></span>
+          <span class="action-pill-sub">USA IMMAGINI GIÀ SALVATE NEL TELEFONO E CONTROLLALE CON L'AI.</span>
           <input id="groceryGalleryInput" type="file" accept="image/*" multiple>
         </label>
-        <button class="primary-btn" id="liveVisionBtn" type="button"><span class="action-symbol live"></span><span>DIRETTA AI</span></button>
+        <button class="primary-btn action-pill-card action-pill-live" id="liveVisionBtn" type="button">
+          <span class="action-pill-title">DIRETTA AI</span>
+          <span class="action-pill-visual"><img src="assets/illustrations/scanner-actions/diretta-ai.png" alt="Diretta AI"></span>
+          <span class="action-pill-sub">INQUADRA IN TEMPO REALE E FAI GUIDARE L'ANALISI DIRETTAMENTE ALL'ASSISTENTE.</span>
+        </button>
+        <button class="outline-btn fridge-btn action-pill-card action-pill-fridge" id="fridgeModeBtn" type="button">
+          <span class="action-pill-title">SCANSIONE FRIGO</span>
+          <span class="action-pill-visual"><img src="assets/illustrations/scanner-actions/scansione-frigo.png" alt="Scansione frigo"></span>
+          <span class="action-pill-sub">ANALIZZA IL FRIGO, RICONOSCI COSA C'È DENTRO E RIPARTI DAI PRODOTTI REALI.</span>
+        </button>
+      </div>
+      <div class="scanner-actions scanner-secondary-actions">
         <button class="outline-btn" id="scannerCaptureNowBtn" type="button"><span class="action-symbol zap"></span><span>SCATTA ORA</span></button>
-        <button class="outline-btn fridge-btn" id="fridgeModeBtn" type="button"><span class="action-symbol fridge"></span><span>SCANSIONE FRIGO</span></button>
-        <button class="outline-btn warning" id="markVerifyBtn" type="button">FATTA DA VERIFICARE</button>
+        <button class="outline-btn warning verify-action-btn" id="markVerifyBtn" type="button"><span class="verify-thumb"><img src="assets/illustrations/scanner-actions/fatta-verificare.png" alt="Fatta da verificare"></span><span>FATTA DA VERIFICARE</span></button>
       </div>
       <div class="seed-brain-proof scanner-seed-proof" id="scannerSeedBrainProof">
         <div class="seed-proof-head">
