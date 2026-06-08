@@ -1234,3 +1234,150 @@ body{color-scheme:light;}
   .action-pill-visual img{height:100px!important}
   .action-pill-title{font-size:.7rem!important}
 }
+
+
+/* V27.58 FIX - immagini come sfondo pieno delle pillole scanner */
+.scanner-actions-showcase{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:16px!important;
+  margin-top:18px!important;
+}
+.action-pill-card{
+  position:relative!important;
+  isolation:isolate!important;
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:flex-start!important;
+  justify-content:flex-start!important;
+  min-height:268px!important;
+  padding:16px!important;
+  border-radius:32px!important;
+  overflow:hidden!important;
+  background:#eef6ff!important;
+  border:1px solid rgba(13,110,253,.16)!important;
+  box-shadow:0 18px 42px rgba(12,45,94,.10)!important;
+  color:#12335f!important;
+  text-align:left!important;
+}
+.action-pill-card::before{
+  content:''!important;
+  position:absolute!important;
+  inset:0!important;
+  z-index:1!important;
+  background:
+    linear-gradient(180deg,rgba(255,255,255,.86) 0%,rgba(255,255,255,.42) 34%,rgba(255,255,255,.08) 64%,rgba(255,255,255,.22) 100%),
+    radial-gradient(circle at 18% 10%,rgba(255,255,255,.92),rgba(255,255,255,0) 42%)!important;
+  pointer-events:none!important;
+}
+.action-pill-card::after{
+  content:''!important;
+  position:absolute!important;
+  inset:10px!important;
+  z-index:1!important;
+  border-radius:26px!important;
+  border:1px solid rgba(255,255,255,.55)!important;
+  box-shadow:inset 0 0 0 1px rgba(13,110,253,.06)!important;
+  pointer-events:none!important;
+}
+.action-pill-card:hover{transform:translateY(-2px)!important}
+.action-pill-visual{
+  position:absolute!important;
+  inset:0!important;
+  z-index:0!important;
+  display:block!important;
+  width:100%!important;
+  height:100%!important;
+  border-radius:inherit!important;
+  overflow:hidden!important;
+  background:#eef6ff!important;
+  border:0!important;
+  box-shadow:none!important;
+}
+.action-pill-visual img{
+  display:block!important;
+  width:100%!important;
+  height:100%!important;
+  object-fit:cover!important;
+  object-position:center!important;
+  transform:scale(1.03)!important;
+}
+.action-pill-title{
+  position:relative!important;
+  z-index:3!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  max-width:calc(100% - 6px)!important;
+  padding:.58rem .86rem!important;
+  border-radius:999px!important;
+  background:rgba(255,255,255,.86)!important;
+  backdrop-filter:blur(10px)!important;
+  -webkit-backdrop-filter:blur(10px)!important;
+  border:1px solid rgba(13,110,253,.13)!important;
+  color:#143f76!important;
+  font-size:.92rem!important;
+  font-weight:1000!important;
+  letter-spacing:.025em!important;
+  line-height:1.05!important;
+  box-shadow:0 12px 26px rgba(12,45,94,.10)!important;
+  text-shadow:0 1px 0 rgba(255,255,255,.45)!important;
+}
+.action-pill-sub{display:none!important}
+.action-pill-card .action-symbol{display:none!important}
+.scanner-capture input{
+  position:absolute!important;
+  inset:0!important;
+  z-index:6!important;
+  opacity:0!important;
+  cursor:pointer!important;
+}
+.action-pill-live,.action-pill-fridge{cursor:pointer!important}
+.scanner-secondary-actions{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:12px!important;
+  margin-top:12px!important;
+}
+.scanner-secondary-actions .outline-btn{
+  min-height:74px!important;
+  border-radius:24px!important;
+  padding:14px 16px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:12px!important;
+  font-size:.95rem!important;
+  font-weight:950!important;
+  letter-spacing:.03em!important;
+  background:#fff!important;
+  border:1px solid var(--premium-line)!important;
+  color:#16427d!important;
+  box-shadow:0 14px 28px rgba(12,45,94,.05)!important;
+}
+.scanner-secondary-actions .outline-btn.warning{
+  background:linear-gradient(180deg,#fff9eb,#fff2c8)!important;
+  border-color:rgba(218,161,0,.26)!important;
+  color:#845900!important;
+}
+.verify-action-btn{justify-content:flex-start!important;text-align:left!important}
+.verify-thumb{display:flex!important;align-items:center!important;justify-content:center!important;width:62px!important;height:46px!important;flex:0 0 62px!important;border-radius:16px!important;overflow:hidden!important;background:#eef6ff!important;border:1px solid rgba(13,110,253,.10)!important;box-shadow:0 12px 22px rgba(12,45,94,.08)!important}
+.verify-thumb img{display:block!important;width:100%!important;height:100%!important;object-fit:cover!important}
+@media (max-width:820px){
+  .scanner-actions-showcase{gap:14px!important}
+  .action-pill-card{min-height:220px!important;border-radius:28px!important;padding:14px!important}
+  .action-pill-title{font-size:.84rem!important;padding:.52rem .78rem!important}
+}
+@media (max-width:640px){
+  .scanner-actions-showcase,.scanner-secondary-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .scanner-actions-showcase{gap:12px!important}
+  .action-pill-card{min-height:218px!important;border-radius:24px!important;padding:13px!important}
+  .action-pill-card::after{inset:8px!important;border-radius:20px!important}
+  .action-pill-title{font-size:.80rem!important;padding:.48rem .66rem!important;line-height:1.08!important}
+  .scanner-secondary-actions .outline-btn{min-height:62px!important;font-size:.82rem!important;padding:12px!important;border-radius:20px!important;gap:8px!important}
+  .verify-thumb{width:48px!important;height:38px!important;flex-basis:48px!important;border-radius:12px!important}
+}
+@media (max-width:390px){
+  .action-pill-card{min-height:204px!important;padding:12px!important}
+  .action-pill-title{font-size:.73rem!important;padding:.44rem .58rem!important}
+}
