@@ -2478,10 +2478,10 @@ body::after{content:'V27.73 ALEXA SKILL READY'!important}
 /* V27.74 UI POLISH CSS */
 
 
-/* V27.80 logout fix */
+/* V27.81 logout fix */
 
-/* V27.80 logout fix */
-body::after{content:'V27.80 SAFE SCAN FIX'!important}
+/* V27.81 logout fix */
+body::after{content:'V27.81 EMERGENCY STABLE'!important}
 .returning-account-box{
   grid-column:1/-1;
   padding:14px;
