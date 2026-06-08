@@ -614,7 +614,16 @@ function serveStatic(req,res,url){
   if(!target.startsWith(STATIC_DIR)) return false;
   let file = target;
   if(fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, 'index.html');
-  if(!fs.existsSync(file)) file = path.join(STATIC_DIR, 'index.html');
+  if(!fs.existsSync(file)){
+    const looksLikeAsset = /\.[a-zA-Z0-9]+$/.test(pathname) && !pathname.endsWith('.html');
+    if(looksLikeAsset){
+      res.writeHead(404, {'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'});
+      if(req.method === 'HEAD') return res.end();
+      res.end('Not found');
+      return true;
+    }
+    file = path.join(STATIC_DIR, 'index.html');
+  }
   try{
     const data = fs.readFileSync(file);
     const isHardNoCache = /(?:index\.html|clear-cache\.html|service-worker\.js|app\.|styles\.|\.js$|\.css$)/.test(file);
