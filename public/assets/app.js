@@ -170,7 +170,7 @@ let captcha = newCaptcha();
 let syncTimer = null;
 let aiMemory = loadAiMemory();
 let aiRecognition = null;
-let liveScanStream = null, liveScanTimer = null, liveScanBusy = false, liveScanActive = false, liveScanStableCount = 0, liveScanLastHint = '', liveScanLastMetrics = null, liveScanPrevSample = null, liveScanLastSpeechKey='', liveScanLastSpeechAt=0, liveScanSpeechEnabled=true, scannerMicEnabled=true, scannerMicListening=false, scannerMicRecognition=null, scannerMicShouldRestart=false, scannerMicCurrentResultId='', scannerMicStep='', scannerMicLastPrompt='', liveScanReadySince=0, liveScanCooldownUntil=0, liveScanPendingResult=false, liveScanAwaitNextOk=false, liveScanLastAcceptedSig='', liveScanLastAcceptedName='', liveScanNeedObjectChange=false, liveScanSameObjectWarnings=0;
+let liveScanStream = null, liveScanTimer = null, liveScanBusy = false, liveScanActive = false, liveScanStableCount = 0, liveScanLastHint = '', liveScanLastMetrics = null, liveScanPrevSample = null, liveScanLastSpeechKey='', liveScanLastSpeechAt=0, liveScanSpeechEnabled=true, scannerMicEnabled=true, scannerMicListening=false, scannerMicRecognition=null, scannerMicShouldRestart=false, scannerMicCurrentResultId='', scannerMicStep='', scannerMicLastPrompt='', liveScanReadySince=0, liveScanCooldownUntil=0, liveScanPendingResult=false, liveScanAwaitNextOk=false, liveScanLastAcceptedSig='', liveScanLastAcceptedName='', liveScanNeedObjectChange=false, liveScanSameObjectWarnings=0, scannerMicEchoBlockUntil=0, liveScanCaptureLockUntil=0;
 let aiListening = false;
 let accountPendingAction = null;
 
@@ -1446,13 +1446,16 @@ function preferredItalianVoice(){
 }
 function speakNatural(text, opts={}){
   if(!liveScanSpeechEnabled || !('speechSynthesis' in window) || !text) return;
-  const utter=new SpeechSynthesisUtterance(String(text));
+  const spokenText=String(text);
+  scannerMicEchoBlockUntil=Math.max(scannerMicEchoBlockUntil, Date.now()+Math.min(8500, 1400 + spokenText.length*42));
+  const utter=new SpeechSynthesisUtterance(spokenText);
   utter.lang='it-IT';
   const voice=preferredItalianVoice();
   if(voice) utter.voice=voice;
   utter.rate=opts.rate || 1.01;
   utter.pitch=opts.pitch || 1.02;
   utter.volume=opts.volume || 1;
+  utter.onend=()=>{ scannerMicEchoBlockUntil=Math.max(scannerMicEchoBlockUntil, Date.now()+650); };
   if(opts.flush) speechSynthesis.cancel();
   speechSynthesis.speak(utter);
 }
@@ -1534,6 +1537,62 @@ function parseQuantityUnitFromSpeech(text=''){
   else if(/pezz|pezzo|pezzi|\bpz\b|pacch|confezion/.test(n)) unit='pz';
   return {quantity, unit};
 }
+
+function normalizeExpiryYearPart(y=''){
+  y=String(y||'').trim();
+  if(!y) return '';
+  if(/^\d{2}$/.test(y)) return '20'+y;
+  if(/^\d{4}$/.test(y)) return y;
+  return '';
+}
+function italianSmallNumberValue(word=''){
+  const w=normalizeText(word).replace(/\s+/g,'');
+  const map={zero:0,uno:1,una:1,un:1,due:2,tre:3,quattro:4,cinque:5,sei:6,sette:7,otto:8,nove:9,dieci:10,undici:11,dodici:12,tredici:13,quattordici:14,quindici:15,sedici:16,diciassette:17,diciotto:18,diciannove:19,venti:20,ventuno:21,ventidue:22,ventitre:23,ventiquattro:24,venticinque:25,ventisei:26,ventisette:27,ventotto:28,ventinove:29,trenta:30,trentuno:31};
+  if(/^\d{1,2}$/.test(w)) return Number(w);
+  return map[w] ?? null;
+}
+function parseItalianYearFromTokens(tokens=[], idx=0){
+  const t=String(tokens[idx]||'');
+  if(/^\d{4}$/.test(t)) return {year:t, used:1};
+  if(/^\d{2}$/.test(t)) return {year:'20'+t, used:1};
+  if(t==='duemila'){
+    const n=italianSmallNumberValue(tokens[idx+1]||'');
+    if(n!=null) return {year:String(2000+n), used:2};
+    return {year:'2000', used:1};
+  }
+  if(t==='venti'){
+    const n=italianSmallNumberValue(tokens[idx+1]||'');
+    if(n!=null) return {year:String(2000+n), used:2};
+  }
+  const n=italianSmallNumberValue(t);
+  if(n!=null && n>=20 && n<=40) return {year:String(2000+n), used:1};
+  return null;
+}
+function parseExpiryMonthYear(raw=''){
+  const text=String(raw||'').trim();
+  let m=text.match(/(?:scad(?:e|enza)?|entro|exp|tmc|bb)?\s*(\d{1,2})\s*[\/\-.]\s*(\d{2,4})(?!\s*[\/\-.]\s*\d)/i);
+  if(m){ const mo=Number(m[1]); const y=normalizeExpiryYearPart(m[2]); if(mo>=1 && mo<=12 && y) return `${String(mo).padStart(2,'0')}/${y}`; }
+  m=text.match(/(?:scad(?:e|enza)?|entro|exp|tmc|bb)?\s*(\d{1,2})\s+(\d{4}|\d{2})\b/i);
+  if(m){ const mo=Number(m[1]); const y=normalizeExpiryYearPart(m[2]); if(mo>=1 && mo<=12 && y) return `${String(mo).padStart(2,'0')}/${y}`; }
+  const n=normalizeText(text).replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
+  const monthYear=parseExpiryMonthYear(raw); if(monthYear) return monthYear;
+  const months={gennaio:'01',febbraio:'02',marzo:'03',aprile:'04',maggio:'05',giugno:'06',luglio:'07',agosto:'08',settembre:'09',ottobre:'10',novembre:'11',dicembre:'12'};
+  for(const [name,mo] of Object.entries(months)){
+    const idx=n.split(/\s+/).indexOf(name);
+    if(idx>=0){ const parts=n.split(/\s+/); const yr=parseItalianYearFromTokens(parts, idx+1); if(yr?.year) return `${mo}/${yr.year}`; }
+    const rx=new RegExp(name+'\\s+(\\d{2,4})');
+    const hit=n.match(rx); if(hit){ const y=normalizeExpiryYearPart(hit[1]); if(y) return `${mo}/${y}`; }
+  }
+  const tokens=n.split(/\s+/).filter(Boolean);
+  for(let i=0;i<tokens.length;i++){
+    let mo=null, used=1;
+    if(tokens[i]==='zero' && tokens[i+1]){ const v=italianSmallNumberValue(tokens[i+1]); if(v!=null && v>=1 && v<=9){ mo=v; used=2; } }
+    if(mo==null){ const v=italianSmallNumberValue(tokens[i]); if(v!=null && v>=1 && v<=12){ mo=v; used=1; } }
+    if(mo!=null){ const yr=parseItalianYearFromTokens(tokens, i+used); if(yr?.year) return `${String(mo).padStart(2,'0')}/${yr.year}`; }
+  }
+  return '';
+}
+
 function parseExpiryFromSpeech(text=''){
   const raw=String(text||'').trim();
   let m=raw.match(/(\d{1,2})[\/\-.\s](\d{1,2})[\/\-.\s](\d{2,4})/);
@@ -1541,6 +1600,7 @@ function parseExpiryFromSpeech(text=''){
     let d=m[1].padStart(2,'0'), mo=m[2].padStart(2,'0'), y=m[3]; if(y.length===2) y='20'+y;
     return `${d}/${mo}/${y}`;
   }
+  const monthYear=parseExpiryMonthYear(raw); if(monthYear) return monthYear;
   const months={gennaio:'01',febbraio:'02',marzo:'03',aprile:'04',maggio:'05',giugno:'06',luglio:'07',agosto:'08',settembre:'09',ottobre:'10',novembre:'11',dicembre:'12'};
   const n=normalizeText(raw);
   for(const [name,mo] of Object.entries(months)){
@@ -1626,7 +1686,7 @@ function parseExpiryLoose(raw=''){
   if(m){ let d=m[1].padStart(2,'0'), mo=m[2].padStart(2,'0'), y=m[3]; if(y.length===2) y='20'+y; return `${d}/${mo}/${y}`; }
   m=text.match(/(?:scad(?:e|enza)?|exp|bb|tmc).*?(\d{1,2})[\/\-.\s](\d{1,2})[\/\-.\s](\d{2,4})/i);
   if(m){ let d=m[1].padStart(2,'0'), mo=m[2].padStart(2,'0'), y=m[3]; if(y.length===2) y='20'+y; return `${d}/${mo}/${y}`; }
-  return '';
+  return parseExpiryMonthYear(text);
 }
 function isBottleLike(result={}, state={}){
   const text=normalizeText([result.productName,result.brand,result.variant,result.productType,result.packageType,result.estimatedSize,...(result.visibleEvidence||[]),...(result.detectedText||[])].join(' '));
@@ -1783,11 +1843,23 @@ function handleScannerMicText(text=''){
   const raw=String(text||'').trim(); if(!raw) return;
   learnVoiceLocally(raw,'scanner-heard');
   const norm=normalizeText(raw);
+  const nowMic=Date.now();
+  if(nowMic < scannerMicEchoBlockUntil && /(scatt|scatto|premi|inquadra|etichetta|scadenza|prodotto|analizz)/.test(norm)) return;
   if(/(ferma|disattiva).*(microfono|mic|voce)/.test(norm)){ scannerMicEnabled=false; stopScannerMic(); return; }
   if(/(attiva|riattiva).*(microfono|mic|voce)/.test(norm)){ scannerMicEnabled=true; setMicToggleUi(); startScannerMic(true); return; }
   if(/^(ripeti|aiuto|cosa devo fare)/.test(norm)){ const el=getActiveScannerResult(); if(el) promptScannerConversation(el, el._scanResult||{}, true); else if(liveScanAwaitNextOk && liveScanSpeechEnabled) speakNatural('Per continuare con il prossimo prodotto, dimmi okay oppure premi il pulsante dedicato.', {flush:true}); else if(liveScanSpeechEnabled) speakNatural('Mostrami un prodotto nel riquadro o scatta una foto, poi ti guiderò.', {flush:true}); return; }
   if(liveScanAwaitNextOk && /(ok|okay|va bene|continua|procedi|prossimo|vai avanti)/.test(norm)){ allowNextObjectScan(true); return; }
-  if(liveScanActive && /(scatta|acquisisci|analizza adesso|vai)/.test(norm)){ captureLiveFrame(true); return; }
+  if(liveScanActive && /(scatta|scatto|scatta ora|acquisisci|analizza adesso)/.test(norm)){
+    const labelTarget=getLiveLabelTarget();
+    if(liveScanBusy || Date.now()<liveScanCaptureLockUntil) return;
+    if((liveScanPendingResult || hasPendingUnconfirmedScan()) && !labelTarget){
+      const active=getActiveScannerResult();
+      if(active) promptScannerConversation(active, active._scanResult||{}, true);
+      return;
+    }
+    captureLiveFrame(true);
+    return;
+  }
   const el=getActiveScannerResult();
   if(!el){ if(liveScanAwaitNextOk && liveScanSpeechEnabled){ speakNatural('Sto aspettando il tuo okay per passare al prossimo oggetto.', {flush:true}); return; } if(liveScanSpeechEnabled) speakNatural('Ti ascolto. Inquadra un prodotto o scatta una foto per iniziare la compilazione.', {flush:true}); return; }
   setActiveScannerResult(el);
@@ -1801,13 +1873,20 @@ function handleScannerMicText(text=''){
 function applyScannerMicAnswer(el, result={}, raw=''){
   const norm=normalizeText(raw);
   const current=getNextScanMicStep(el,result);
+  const spokenExpiryCandidate=parseExpiryFromSpeech(raw) || parseExpiryLoose(raw);
   const explicitName = current==='name' || /(^|\b)(non e|non è|si chiama|nome|prodotto|correggi.*nome|metti nome|cambia in|metti|^e |^è )(\b|$)/.test(norm);
   const explicitBrand = current==='brand' || /(^|\b)(marca|brand|di marca)(\b)/.test(norm);
   const explicitSize = current==='size' || /capienz|formato|litri|litro|ml|millilitri|mezzo litro|bottiglia grande|bottiglia piccola/.test(norm);
   const explicitQty = current==='qty' || /quantit|pezz|bottigli|unit/.test(norm);
-  const explicitExpiry = current==='expiry' || /scad/.test(norm);
+  const explicitExpiry = current==='expiry' || /scad|exp|tmc|entro/.test(norm) || !!spokenExpiryCandidate;
   const explicitDamage = current==='damage' || /integr|rott|ammacc|apert|bucat|perdit|schiacci|rovinat|scadut|congelat|ghiacciat/.test(norm);
   const explicitCategory = current==='category' || /categori|bevand|aliment|frutt|verdur|animal|casa|farmac|acquar/.test(norm);
+
+  if(explicitExpiry){
+    if(/salta|non so|non la so|nessuna/.test(norm)){ el.dataset.voiceExpiryDone='1'; setScanVoiceHelper(el, 'Scadenza saltata per ora.', 'live'); refreshScanResultCard(el,result); return true; }
+    const expiry=spokenExpiryCandidate;
+    if(expiry){ setScanFieldFromVoice(el,'[data-scan-expiry]', expiry); rememberVoiceCorrection(raw,'expiry',expiry,result.expiryDate||''); el.dataset.voiceExpiryDone='1'; result.expiryDate=expiry; setScanVoiceHelper(el, `Scadenza aggiornata: ${expiry}.`, 'live'); refreshScanResultCard(el,result); return true; }
+  }
 
   if(explicitName){
     const cleaned=parseNameFromSpeech(raw);
@@ -1858,7 +1937,7 @@ function applyScannerMicAnswer(el, result={}, raw=''){
     return true;
   }
 
-  const expiry=parseExpiryFromSpeech(raw) || parseExpiryLoose(raw);
+  const expiry=spokenExpiryCandidate;
   if(explicitExpiry){
     if(/salta|non so|non la so|nessuna/.test(norm)){ el.dataset.voiceExpiryDone='1'; setScanVoiceHelper(el, 'Scadenza saltata per ora.', 'live'); refreshScanResultCard(el,result); return true; }
     if(expiry){ setScanFieldFromVoice(el,'[data-scan-expiry]', expiry); rememberVoiceCorrection(raw,'expiry',expiry,result.expiryDate||''); el.dataset.voiceExpiryDone='1'; result.expiryDate=expiry; setScanVoiceHelper(el, `Scadenza aggiornata: ${expiry}.`, 'live'); refreshScanResultCard(el,result); return true; }
@@ -2109,7 +2188,8 @@ async function startLiveVisionMode(mode='smart'){
 }
 function queueLiveScanLoop(){
   if(!liveScanActive) return;
-  liveScanTimer=setTimeout(runLiveScanLoop, 650);
+  if(liveScanTimer) return;
+  liveScanTimer=setTimeout(()=>{ liveScanTimer=null; runLiveScanLoop(); }, 650);
 }
 function hasPendingUnconfirmedScan(){
   return !!document.querySelector('#scannerResults .scan-result:not(.confirmed):not(.bad)');
@@ -2319,7 +2399,14 @@ function updateLiveHud(metrics, ready){
   if(liveScanLastHint!==hint){ liveScanLastHint=hint; if(voice) speakLiveGuidance(key, voice, key==='ready'); }
 }
 async function captureLiveFrame(manual=false){
-  if(liveScanBusy) return;
+  if(liveScanBusy || Date.now()<liveScanCaptureLockUntil){ if(liveScanActive) queueLiveScanLoop(); return; }
+  const existingLabelTarget = manual && liveScanActive ? getLiveLabelTarget() : null;
+  if(liveScanActive && hasPendingUnconfirmedScan() && !existingLabelTarget){
+    const active=getActiveScannerResult();
+    if(active) promptScannerConversation(active, active._scanResult||{}, true);
+    return;
+  }
+  liveScanCaptureLockUntil=Date.now()+2600;
   const video=$('#liveScanVideo'); if(!video || video.readyState<2){ if(manual) toast('Videocamera non pronta'); return; }
   liveScanBusy=true;
   liveScanReadySince=0; liveScanStableCount=0;
