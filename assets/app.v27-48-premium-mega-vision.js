@@ -860,6 +860,78 @@ async function copyCloudId(){
   }
 }
 
+
+let pendingVoiceAssistant = 'alexa';
+function voiceAssistantLabel(kind){
+  return kind === 'google' ? 'Google Assistant' : 'Alexa';
+}
+function voiceAssistantIcon(kind){
+  return kind === 'google' ? 'G' : 'A';
+}
+function updateVoiceConnectDialog(kind='alexa'){
+  pendingVoiceAssistant = kind;
+  const label = voiceAssistantLabel(kind);
+  const endpoint = voiceEndpoint(kind === 'google' ? 'google-assistant' : 'alexa');
+  const title = $('#voiceConnectTitle'); if(title) title.textContent = `Collega ${label}`;
+  const kicker = $('#voiceConnectKicker'); if(kicker) kicker.textContent = kind === 'google' ? 'Google Assistant' : 'Amazon Alexa';
+  const sub = $('#voiceConnectSubtitle'); if(sub) sub.textContent = 'Userà la stessa lista cloud di Spesa Pronta.';
+  const icon = $('#voiceConnectIcon'); if(icon) icon.textContent = voiceAssistantIcon(kind);
+  const ep = $('#voiceConnectEndpoint'); if(ep) ep.textContent = endpoint;
+  const st = $('#voiceConnectStatusTitle'); if(st) st.textContent = settings[kind === 'google' ? 'googleAssistantConnected' : 'alexaConnected'] ? 'Configurato' : (kind === 'google' ? 'Webhook da configurare' : 'Skill da creare');
+  const tx = $('#voiceConnectStatusText'); if(tx) tx.textContent = kind === 'google' ? 'Copia questo webhook nel tuo progetto Google/Dialogflow.' : 'Copia questo endpoint nella tua Skill Alexa custom.';
+  const step1 = $('#voiceConnectStep1'); if(step1) step1.textContent = kind === 'google' ? 'Apri il progetto Google Assistant/Dialogflow.' : 'Crea la Skill Alexa “Spesa Pronta” nel pannello Amazon Developer.';
+  const step2 = $('#voiceConnectStep2'); if(step2) step2.textContent = 'Incolla l’endpoint generato come HTTPS endpoint della Skill/Action.';
+  const step3 = $('#voiceConnectStep3'); if(step3) step3.textContent = 'La lista resta aggiornata perché ogni modifica viene sincronizzata sullo stesso cloud.';
+}
+function openVoiceConnect(kind){
+  updateVoiceConnectDialog(kind);
+  const d = $('#voiceConnectDialog');
+  if(d?.showModal) d.showModal(); else d?.setAttribute('open','open');
+}
+function closeVoiceConnect(){
+  const d = $('#voiceConnectDialog');
+  if(d?.close) d.close(); else d?.removeAttribute('open');
+}
+async function copyVoiceEndpoint(kind=pendingVoiceAssistant){
+  const endpoint = voiceEndpoint(kind === 'google' ? 'google-assistant' : 'alexa');
+  try{ await navigator.clipboard.writeText(endpoint); toast('Endpoint copiato ✅'); }
+  catch{ toast(endpoint); }
+}
+async function confirmVoiceConnect(){
+  const kind = pendingVoiceAssistant || 'alexa';
+  if(!settings.apiEndpoint) settings.apiEndpoint = '/api';
+  if(!settings.householdId) settings.householdId = `home_${Math.random().toString(16).slice(2,14)}`;
+  if(!settings.token) settings.token = `local_${Math.random().toString(36).slice(2,18)}`;
+  settings.cloudEnabled = true;
+  saveAll();
+  updateVoiceConnectDialog(kind);
+  await copyVoiceEndpoint(kind);
+  toast(kind === 'google' ? 'Webhook Google copiato ✅' : 'Endpoint Skill Alexa copiato ✅');
+}
+
+function markVoiceAssistantConfigured(kind=pendingVoiceAssistant){
+  if(kind === 'google') settings.googleAssistantConnected = true;
+  else settings.alexaConnected = true;
+  settings.cloudEnabled = true;
+  if(!settings.apiEndpoint) settings.apiEndpoint = '/api';
+  if(!settings.householdId) settings.householdId = `home_${Math.random().toString(16).slice(2,14)}`;
+  if(!settings.token) settings.token = `local_${Math.random().toString(36).slice(2,18)}`;
+  saveAll();
+  updateVoiceSyncPanel();
+  updateVoiceConnectDialog(kind);
+  syncCloud(false);
+  toast(kind === 'google' ? 'Google segnato come configurato ✅' : 'Alexa Skill segnata come configurata ✅');
+}
+
+function bindVoiceConnectDialog(){
+  $('#voiceConnectCloseBtn')?.addEventListener('click', closeVoiceConnect);
+  $('#voiceConnectDialog')?.addEventListener('click', e => { if(e.target?.id === 'voiceConnectDialog') closeVoiceConnect(); });
+  $('#voiceConnectConfirmBtn')?.addEventListener('click', confirmVoiceConnect);
+  $('#voiceConnectCopyBtn')?.addEventListener('click', () => copyVoiceEndpoint());
+  $('#voiceConnectSyncBtn')?.addEventListener('click', () => syncCloud(true));
+  $('#voiceConnectDoneBtn')?.addEventListener('click', () => markVoiceAssistantConfigured());
+}
+
 function updateVoiceSyncPanel(){
   const alexa = !!settings.alexaConnected;
   const google = !!settings.googleAssistantConnected;
@@ -869,8 +941,8 @@ function updateVoiceSyncPanel(){
   const googleState = $('#cloudGoogleState');
   if(alexaBtn) alexaBtn.classList.toggle('connected', alexa);
   if(googleBtn) googleBtn.classList.toggle('connected', google);
-  if(alexaState) alexaState.textContent = alexa ? 'Collegata' : 'Tocca per collegare';
-  if(googleState) googleState.textContent = google ? 'Collegato' : 'Tocca per collegare';
+  if(alexaState) alexaState.textContent = alexa ? 'Collegata' : 'Configura skill';
+  if(googleState) googleState.textContent = google ? 'Collegato' : 'Configura webhook';
 }
 async function connectVoiceAssistant(kind){
   if(kind === 'alexa') settings.alexaConnected = true;
@@ -888,13 +960,14 @@ async function connectVoiceAssistant(kind){
   toast(kind === 'alexa' ? 'Alexa collegata ✅' : 'Google collegato ✅');
 }
 function bindVoiceSyncPanel(){
-  $('#cloudAlexaBtn')?.addEventListener('click', () => connectVoiceAssistant('alexa'));
-  $('#cloudGoogleBtn')?.addEventListener('click', () => connectVoiceAssistant('google'));
+  $('#cloudAlexaBtn')?.addEventListener('click', () => openVoiceConnect('alexa'));
+  $('#cloudGoogleBtn')?.addEventListener('click', () => openVoiceConnect('google'));
   updateVoiceSyncPanel();
 }
 
 function bindCloudPanel(){
   bindVoiceSyncPanel();
+  bindVoiceConnectDialog();
   $('#cloudCloseBtn')?.addEventListener('click', closeCloudPanel);
   $('#cloudDialog')?.addEventListener('click', e => { if(e.target?.id==='cloudDialog') closeCloudPanel(); });
   $('#cloudSyncNowBtn')?.addEventListener('click', cloudSyncNow);

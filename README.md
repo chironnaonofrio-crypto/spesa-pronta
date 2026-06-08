@@ -149,3 +149,25 @@ Nel pannello cloud sono stati aggiunti due pulsanti puliti con immagini:
 
 Quando l'utente clicca un assistente, l'app lo collega nelle impostazioni, salva lo stato e sincronizza automaticamente la stessa lista cloud.
 Non vengono più mostrati dettagli tecnici come `/api`, token o household nel pannello utente.
+
+
+## V27.73 - UI Alexa/Google corretta
+
+Le card Alexa e Google ora sono compatte, affiancate e dimensionate.
+Il click non finge un collegamento automatico: apre un pannello che spiega che l'utente deve collegare la propria Skill Alexa o il proprio progetto Google Assistant usando l'endpoint generato. Dopo la conferma l'app salva lo stato e sincronizza la lista cloud.
+
+
+## V27.73 - Skill Alexa pronta
+
+Aggiunta cartella `alexa-skill-package` con:
+- manifest skill
+- interaction model italiano
+- guida rapida
+
+Il backend `/api/alexa` ora gestisce:
+- LaunchRequest
+- Help/Stop/Cancel
+- lettura lista
+- conteggio prodotti
+- aggiunta prodotto
+- prodotto comprato

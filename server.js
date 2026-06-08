@@ -1,4 +1,4 @@
-// Spesa Pronta V27.71 - backend cloud reale per /api
+// Spesa Pronta V27.73 - backend cloud reale per /api
 // Avvio: npm install && npm start
 const express = require('express');
 const fs = require('fs');
@@ -69,7 +69,7 @@ function authPayload(db, user, householdId, rawToken){
 }
 
 app.get('/api/health', (req,res) => {
-  res.json({ ok:true, app:'Spesa Pronta', version:'V27.71 VOICE SYNC', time:new Date().toISOString() });
+  res.json({ ok:true, app:'Spesa Pronta', version:'V27.73 ALEXA SKILL READY', time:new Date().toISOString() });
 });
 
 app.post('/api/auth/register', (req,res) => {
@@ -200,19 +200,109 @@ app.post('/api/google-assistant', (req,res) => {
   res.json({ ok:true, fulfillmentText:text, speech:text });
 });
 
+
+function alexaSpeech(text, end=true){
+  return {
+    version:'1.0',
+    response:{
+      outputSpeech:{ type:'PlainText', text },
+      shouldEndSession:end
+    }
+  };
+}
+function itemName(i){
+  return i?.names?.it || i?.name || i?.id || 'prodotto';
+}
+function shoppingItems(items=[]){
+  return items.filter(i => !i.inStock || i.buy || Number(i.qty||0) <= Number(i.baseThreshold||0));
+}
 app.post('/api/alexa', (req,res) => {
   const db = readDb();
   const householdId = String(req.query.householdId || req.body?.householdId || '');
   const h = db.households[householdId];
-  const items = h ? (h.items || []).filter(i => !i.inStock || i.buy || Number(i.qty||0) <= Number(i.baseThreshold||0)) : [];
-  const speech = items.length ? `Devi comprare: ${items.map(i => i.names?.it || i.name || i.id).join(', ')}` : 'Non hai niente da comprare.';
-  res.json({ version:'1.0', response:{ outputSpeech:{ type:'PlainText', text:speech }, shouldEndSession:true } });
+  if(!h) return res.json(alexaSpeech('Non trovo il cloud di Spesa Pronta. Controlla il collegamento della Skill.'));
+  const request = req.body?.request || {};
+  const intent = request.intent || {};
+  const intentName = intent.name || request.type || 'LaunchRequest';
+
+  if(request.type === 'LaunchRequest'){
+    return res.json(alexaSpeech('Benvenuto in Spesa Pronta. Puoi chiedermi cosa devi comprare, oppure dirmi aggiungi acqua.'));
+  }
+
+  if(intentName === 'AMAZON.HelpIntent'){
+    return res.json(alexaSpeech('Puoi dire: cosa devo comprare, aggiungi acqua, oppure segna latte comprato.'));
+  }
+  if(intentName === 'AMAZON.CancelIntent' || intentName === 'AMAZON.StopIntent'){
+    return res.json(alexaSpeech('Va bene, a presto.'));
+  }
+
+  const items = Array.isArray(h.items) ? h.items : [];
+  const buy = shoppingItems(items);
+
+  if(intentName === 'ReadShoppingListIntent'){
+    const speech = buy.length
+      ? `Devi comprare: ${buy.map(itemName).join(', ')}.`
+      : 'Non hai niente da comprare.';
+    return res.json(alexaSpeech(speech));
+  }
+
+  if(intentName === 'CountShoppingListIntent'){
+    return res.json(alexaSpeech(buy.length ? `Hai ${buy.length} prodotti da comprare.` : 'Non hai prodotti da comprare.'));
+  }
+
+  if(intentName === 'AddItemIntent'){
+    const name = String(intent.slots?.item?.value || '').trim();
+    if(!name) return res.json(alexaSpeech('Dimmi quale prodotto vuoi aggiungere.'));
+    const found = items.find(i => itemName(i).toLowerCase() === name.toLowerCase());
+    if(found){
+      found.inStock = false;
+      found.buy = true;
+      found.qty = Math.max(0, Number(found.qty || 0));
+    }else{
+      items.unshift({
+        id:`alexa_${Date.now()}`,
+        names:{it:name,en:name,es:name,de:name},
+        name,
+        category:'food',
+        qty:0,
+        unit:'pz',
+        baseThreshold:1,
+        maxQty:6,
+        inStock:false,
+        buy:true,
+        custom:true,
+        image:'assets/illustrations/generic-item.png'
+      });
+    }
+    h.items = items;
+    h.updatedAt = Date.now();
+    writeDb(db);
+    return res.json(alexaSpeech(`${name} aggiunto alla lista della spesa.`));
+  }
+
+  if(intentName === 'MarkBoughtIntent'){
+    const name = String(intent.slots?.item?.value || '').trim();
+    if(!name) return res.json(alexaSpeech('Dimmi quale prodotto hai comprato.'));
+    const found = items.find(i => itemName(i).toLowerCase().includes(name.toLowerCase()));
+    if(found){
+      found.inStock = true;
+      found.buy = false;
+      found.qty = Math.max(Number(found.qty || 0), Number(found.baseThreshold || 1) + 1);
+      h.updatedAt = Date.now();
+      writeDb(db);
+      return res.json(alexaSpeech(`${itemName(found)} segnato come comprato.`));
+    }
+    return res.json(alexaSpeech(`Non ho trovato ${name} nella lista.`));
+  }
+
+  return res.json(alexaSpeech('Non ho capito. Puoi dire cosa devo comprare, oppure aggiungi acqua.'));
 });
+
 
 app.use(express.static(PUBLIC_DIR, { maxAge: '0' }));
 app.get('*', (req,res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
 
 app.listen(PORT, () => {
   ensureDb();
-  console.log(`Spesa Pronta cloud backend V27.71 attivo su http://localhost:${PORT}`);
+  console.log(`Spesa Pronta cloud backend V27.73 attivo su http://localhost:${PORT}`);
 });

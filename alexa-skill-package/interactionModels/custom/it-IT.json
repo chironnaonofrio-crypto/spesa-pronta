@@ -1,0 +1,72 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "spesa pronta",
+      "intents": [
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "ReadShoppingListIntent",
+          "slots": [],
+          "samples": [
+            "cosa devo comprare",
+            "leggi la lista",
+            "dimmi la lista della spesa",
+            "quali prodotti devo comprare",
+            "cosa manca in casa"
+          ]
+        },
+        {
+          "name": "CountShoppingListIntent",
+          "slots": [],
+          "samples": [
+            "quanti prodotti devo comprare",
+            "quanti articoli mancano",
+            "quanti prodotti ci sono in lista"
+          ]
+        },
+        {
+          "name": "AddItemIntent",
+          "slots": [
+            {
+              "name": "item",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "aggiungi {item}",
+            "aggiungi {item} alla lista",
+            "metti {item} nella lista",
+            "segna {item} da comprare"
+          ]
+        },
+        {
+          "name": "MarkBoughtIntent",
+          "slots": [
+            {
+              "name": "item",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "segna {item} comprato",
+            "ho comprato {item}",
+            "rimuovi {item} dalla lista",
+            "togli {item} dalla spesa"
+          ]
+        }
+      ],
+      "types": []
+    }
+  }
+}
