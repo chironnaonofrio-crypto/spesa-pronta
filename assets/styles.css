@@ -1596,3 +1596,70 @@ body{color-scheme:light;}
   .scanner-title-block > #scannerSeedBrainProof h3{font-size:.88rem!important}
   .scanner-title-block > #scannerSeedBrainProof p{font-size:.68rem!important}
 }
+
+
+/* V27.63 - Vision intro full width + live product eligibility flow */
+.scanner-title-block > #scannerSeedBrainProof{
+  width:100%!important;
+  max-width:none!important;
+  box-sizing:border-box!important;
+  align-self:stretch!important;
+}
+.scanner-title-block > #scannerSeedBrainProof .seed-proof-head{
+  width:100%!important;
+  box-sizing:border-box!important;
+}
+.scanner-title-block > #scannerSeedBrainProof .seed-proof-visual-wrap{
+  flex:0 0 auto!important;
+}
+.live-scan-pill.wait{
+  background:rgba(255,255,255,.92)!important;
+  color:#16427d!important;
+  border:1px solid rgba(13,110,253,.16)!important;
+}
+.live-scan-guides.wait .aim-box{
+  border-color:rgba(13,110,253,.28)!important;
+  box-shadow:0 0 0 9999px rgba(6,17,30,.10),0 0 28px rgba(13,110,253,.16)!important;
+}
+.scanner-live-active .scanner-actions-showcase{display:none!important}
+.scanner-live-active .secondary-pill-verify{display:none!important}
+.scanner-live-active .scanner-secondary-actions{grid-template-columns:1fr!important}
+.scanner-live-active .scanner-secondary-actions #scannerCaptureNowBtn{display:flex!important;width:100%!important}
+@media(max-width:640px){
+  .scanner-title-block > #scannerSeedBrainProof{margin-left:0!important;margin-right:0!important}
+  .scanner-title-block > #scannerSeedBrainProof .seed-proof-head{grid-template-columns:92px minmax(0,1fr)!important}
+  .scanner-title-block > #scannerSeedBrainProof .seed-proof-visual-wrap{width:92px!important;height:76px!important}
+  .scanner-title-block > #scannerSeedBrainProof h3{font-size:.90rem!important;line-height:1.06!important}
+  .scanner-title-block > #scannerSeedBrainProof p{font-size:.68rem!important;line-height:1.24!important}
+}
+
+
+/* V27.64 - pulizia errori cloud e fallback utente */
+.scan-cloud-debug,.cloud-error{display:none!important}
+.scanner-card-premium .scanner-seed-proof{width:100%!important;max-width:100%!important;box-sizing:border-box!important}
+
+
+/* V27.65 - stato docente OpenAI chiaro */
+.scan-mini-badges .teacher-offline,
+.teacher-offline{
+  display:inline-flex!important;
+  align-items:center!important;
+  gap:6px!important;
+  background:#fff4d6!important;
+  color:#835600!important;
+  border:1px solid rgba(226,166,35,.28)!important;
+  border-radius:999px!important;
+  padding:.45rem .72rem!important;
+  font-weight:950!important;
+}
+.teacher-offline::before{content:'●';font-size:.72em;color:#e09a00!important;}
+.teacher-offline-note{
+  margin:.7rem 0 0!important;
+  padding:.85rem 1rem!important;
+  border-radius:18px!important;
+  background:linear-gradient(180deg,#fff9e8,#fff4d5)!important;
+  border:1px solid rgba(226,166,35,.24)!important;
+  color:#704b00!important;
+  font-weight:850!important;
+  line-height:1.35!important;
+}

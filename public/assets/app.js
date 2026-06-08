@@ -1409,14 +1409,14 @@ async function getVisionBackendStatus(force=false){
   return visionBackendStatus;
 }
 function visionStatusLabel(st){
-  if(st?.connected && st?.visionReady) return `Cloud OpenAI attiva (${st.visionModel||st.model||'Vision'})`;
-  if(st?.reachable) return 'Cloud raggiunta ma OPENAI_API_KEY mancante';
-  return 'Cloud AI non raggiungibile';
+  if(st?.connected && st?.visionReady) return `Docente OpenAI attivo (${st.visionModel||st.model||'Vision'})`;
+  if(st?.reachable) return 'Docente OpenAI non attivo: chiave API mancante o non valida';
+  return 'Docente OpenAI non attivo: server AI non raggiungibile';
 }
 async function updateAiBackendStatus(){
   const el=$('#aiStatusText'); if(!el) return;
   const data=await getVisionBackendStatus(true);
-  el.textContent = data.connected && data.visionReady ? `AI vera collegata: chat + Vision AI attive (${data.visionModel||data.model}).` : `${visionStatusLabel(data)}: il riconoscimento foto userà solo una stima locale, quindi va sempre corretto.`;
+  el.textContent = data.connected && data.visionReady ? `Docente OpenAI attivo: chat + Vision AI attive (${data.visionModel||data.model}).` : `${visionStatusLabel(data)}. Il riconoscimento foto userà la visione locale prudente e chiederà conferma.`;
 }
 function closeAiPanel(){ $('#aiPanel').classList.add('hidden'); }
 function addAiMessage(role,text){
@@ -2405,6 +2405,27 @@ function presentVisionResults(result,dataUrl){
   return {count:rows.length, autoCount, manualCount};
 }
 
+
+function teacherInactiveMessage(statusOrError=null){
+  const st=statusOrError?.visionError || statusOrError || visionBackendStatus || {};
+  const detail=String(st.detail||st.error||st.message||'').toLowerCase();
+  if(st.connected===false && st.reachable===true) return 'Docente OpenAI non attivo: chiave API mancante o non valida sul server.';
+  if(detail.includes('missing_openai_key')) return 'Docente OpenAI non attivo: chiave API mancante sul server.';
+  if(detail.includes('cloud_vision_not_ready')) return 'Docente OpenAI non attivo: server raggiunto ma Vision non pronta.';
+  if(detail.includes('cloud_vision_unreachable') || st.reachable===false) return 'Docente OpenAI non attivo: server AI non raggiungibile.';
+  return 'Docente OpenAI non attivo: uso visione locale prudente.';
+}
+function markTeacherInactive(result={}, statusOrError=null){
+  const msg=teacherInactiveMessage(statusOrError);
+  return Object.assign({}, result||{}, {
+    teacherInactive:true,
+    teacherInactiveReason:msg,
+    cloudVision:false,
+    cloudOffline:true,
+    cloudFallback:true,
+    cloudError:''
+  });
+}
 async function analyzeGroceryDataUrl(dataUrl,fileName='photo.jpg', visualSignature=''){
   const liveStage=$('#scannerPreview')?.querySelector('.live-scan-stage');
   if(!liveStage) $('#scannerPreview').innerHTML=`<img src="${dataUrl}" alt="Foto articolo"><p>Vision AI sta leggendo prodotto, etichetta, marca, formato, scadenza, quantità e stato del prodotto...</p>`;
@@ -2826,8 +2847,8 @@ async function guessScanFallback(fileName='',dataUrl='',previous=null){
   const visual=await guessProductFromImage(dataUrl);
   if(visual) return {...previous,...visual, needsManual:true, shouldAskConfirmation:true, cloudOffline:false, cloudFallback:true, confidence:Math.min(Number(visual.confidence||0),.58)};
   const fromName=cleanFileProductName(fileName);
-  if(fromName) return {...previous, needsManual:true, productName:fromName, quantity:1, unit:'pz', category:'food', confidence:.32, productPlaceholder:'Nome prodotto', cloudOffline:false, cloudFallback:true, reason:'Cloud OpenAI chiamata ma risposta non utilizzabile: stima locale da controllare.'};
-  return {...previous, needsManual:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.18, productPlaceholder:'Es. Coca-Cola, latte, acqua...', cloudOffline:false, cloudFallback:true, reason:'Cloud OpenAI chiamata ma non ha prodotto un risultato utilizzabile: inserisci manualmente nome e quantità. Non userò nomi tecnici tipo manual-live.'};
+  if(fromName) return {...previous, needsManual:true, productName:fromName, quantity:1, unit:'pz', category:'food', confidence:.32, productPlaceholder:'Nome prodotto', cloudOffline:false, cloudFallback:true, reason:'Riconoscimento locale prudente: stima da controllare.'};
+  return {...previous, needsManual:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.18, productPlaceholder:'Es. Coca-Cola, latte, acqua...', cloudOffline:false, cloudFallback:true, reason:'Riconoscimento locale prudente: inserisci manualmente nome e quantità. Non userò nomi tecnici tipo manual-live.'};
 }
 function visionApiBase(){
   const raw=(settings.apiEndpoint || '/api').trim() || '/api';

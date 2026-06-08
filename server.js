@@ -1223,6 +1223,17 @@ function normalizeVisionResult(obj={}){
     result.items=obj.items.slice(0,8).map(it=>normalizeVisionResult(Object.assign({},it,{items:undefined}))).filter(it=>!it.needsRetake || it.productName || it.reason);
     if(result.items.length) result.multipleItems = result.items.length>1;
   }
+  const nonConsumableText=normalizeVisionText([obj.notConsumable?'notConsumable':'', obj.objectType||'', obj.reason||'', result.productName, result.category].join(' '));
+  if(obj.notConsumable || /\b(cane|gatto|persona|volto|vestiti|pantaloni|maglia|telecomando|tv|televisore|schermo|mobile|sedia|tavolo|letto|scarpe|porta|pavimento|muro)\b/.test(nonConsumableText)){
+    result.needsRetake=true;
+    result.needsManual=false;
+    result.shouldAskConfirmation=false;
+    result.productName='';
+    result.brand='';
+    result.category='food';
+    result.confidence=0;
+    result.reason=result.reason || 'Oggetto non idoneo: non è un prodotto alimentare, casa, farmacia, animali o acquario.';
+  }
   if(!Number.isFinite(result.quantity) || result.quantity<=0) result.quantity=1;
   if(!allowedCats.has(result.category)) result.category='food';
   if(!allowedUnits.has(result.unit)) result.unit='pz';
@@ -1234,7 +1245,7 @@ function normalizeVisionResult(obj={}){
 }
 async function visionAnalyze({image,catalog,settings,memory}){
   if(!aiConnected()){
-    return { needsManual:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.25, shouldAskConfirmation:true, cloudVision:false, cloudOffline:true, cloudError:'missing_openai_key', reason:'AI Vision reale non collegata: aggiungi OPENAI_API_KEY nelle variabili Render.' };
+    return { needsManual:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.25, shouldAskConfirmation:true, cloudVision:false, cloudOffline:true, cloudError:'missing_openai_key', teacherInactive:true, teacherInactiveReason:'Docente OpenAI non attivo: chiave API mancante sul server.', reason:'Docente OpenAI non attivo: uso riconoscimento locale prudente.' };
   }
   const compact=(catalog||[]).map(i=>({id:i.id,name:itemName(i,settings?.lang||'it'),names:i.names,unit:i.unit,category:i.category,qty:i.qty})).slice(0,80);
   const learned=summarizeLearnedProducts(memory).slice(0,35);
@@ -1242,6 +1253,8 @@ async function visionAnalyze({image,catalog,settings,memory}){
   const oneShotPrompt=`Sei la Vision AI cloud di Spesa Pronta. Analizza la foto reale e rispondi SOLO con JSON valido.
 OBIETTIVO: riconoscere prodotto, marca, formato/capienza, scadenza e stato con massima prudenza.
 Regole severe anti-errore:
+- Analizza SOLO prodotti idonei alla spesa/casa: alimentari, bevande, frutta/verdura, prodotti casa, farmacia, animali, acquario.
+- Se vedi cane, gatto, persona, vestiti/pantaloni, telecomando, TV, mobili, pavimento, strumenti o oggetti non consumabili, NON creare un prodotto: rispondi con {"needsRetake":true,"notConsumable":true,"reason":"Oggetto non idoneo: aspetto un prodotto di consumo","productName":"","confidence":0}.
 - NON inventare mai. Se non leggi un dettaglio, lascia il campo vuoto o scrivi "da confermare" e metti needsManual true.
 - Il testo dell'etichetta vale più della forma e più della memoria.
 - Per bottiglie/bevande devi distinguere capienza: 500 ml, 750 ml, 1 L, 1,5 L, 2 L, 2000 ml. Non mettere 500 ml se non lo leggi o se non sei certo che sia una bottiglia piccola.
@@ -1271,7 +1284,7 @@ JSON: {"productName":"","brand":"","variant":"","estimatedSize":"","sizeDetected
         visionJsonCall('Rispondi solo con JSON valido. Fai OCR mirato su capienza e scadenza. Non inventare.', detailPrompt, image)
       ]);
     }catch(firstErr){
-      const shortPrompt=`Analizza la foto. Rispondi SOLO JSON. Riconosci prodotto, marca, testo etichetta, capienza, categoria, scadenza, danni. Non inventare. Se capienza non leggibile lascia estimatedSize "Capienza da confermare". Se è bottiglia d'acqua, productName acqua naturale o acqua in bottiglia, category drinks, unit bt. Schema: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","variant":"","estimatedSize":"","sizeDetectedRaw":"","sizeConfidence":0,"quantity":1,"unit":"pz","category":"food","confidence":0.1,"isLiquid":false,"isDamaged":false,"damageType":"","expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"detectedText":[],"visibleEvidence":[],"detailQuestion":"","reason":""}`;
+      const shortPrompt=`Analizza la foto. Rispondi SOLO JSON. Riconosci solo prodotti alimentari/casa/farmacia/animali/acquario. Se vedi cane, vestiti, telecomando, TV, mobili o oggetti non consumabili rispondi {"needsRetake":true,"notConsumable":true,"reason":"Oggetto non idoneo","productName":"","confidence":0}. Riconosci prodotto, marca, testo etichetta, capienza, categoria, scadenza, danni. Non inventare. Se capienza non leggibile lascia estimatedSize "Capienza da confermare". Se è bottiglia d'acqua, productName acqua naturale o acqua in bottiglia, category drinks, unit bt. Schema: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","variant":"","estimatedSize":"","sizeDetectedRaw":"","sizeConfidence":0,"quantity":1,"unit":"pz","category":"food","confidence":0.1,"isLiquid":false,"isDamaged":false,"damageType":"","expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"detectedText":[],"visibleEvidence":[],"detailQuestion":"","reason":""}`;
       primaryRaw = await visionJsonCall('Solo JSON valido.', shortPrompt, image);
       detailRaw = null;
     }
@@ -1285,8 +1298,7 @@ JSON: {"productName":"","brand":"","variant":"","estimatedSize":"","sizeDetected
     if(!result.reason) result.reason='Cloud OpenAI ha analizzato la foto.';
     return result;
   }catch(err){
-    const msg=String(err?.message||err||'openai_unknown_error').slice(0,220);
-    return {needsManual:true, shouldAskConfirmation:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.16, cloudVision:false, cloudOffline:true, cloudError:msg, reason:'Cloud OpenAI chiamata ma risposta non utilizzabile: '+msg};
+    return {needsManual:true, shouldAskConfirmation:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.16, cloudVision:false, cloudOffline:true, cloudError:'', cloudFallback:true, teacherInactive:true, teacherInactiveReason:'Docente OpenAI non attivo: risposta non disponibile dal server.', reason:'Docente OpenAI non attivo: Vision locale prudente, controlla e completa i dati prima di salvare.'};
   }
 }
 
@@ -1312,6 +1324,9 @@ const server = http.createServer(async (req,res)=>{
         model: OPENAI_MODEL,
         visionModel: OPENAI_VISION_MODEL,
         visionReady: aiConnected(),
+        teacherActive: aiConnected(),
+        teacherStatus: aiConnected() ? 'active' : 'inactive',
+        teacherMessage: aiConnected() ? 'Docente OpenAI attivo' : 'Docente OpenAI non attivo: OPENAI_API_KEY mancante o non valida',
         dbMode,
         databaseConnected: dbMode !== 'file',
         memoryReady: dbMode !== 'file',
