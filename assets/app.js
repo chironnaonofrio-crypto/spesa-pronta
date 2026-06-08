@@ -4860,3 +4860,288 @@ if(openGroceryScannerOriginalV98){
 window.addEventListener('online',()=>{ logAiDiagnosticV98('network',{online:true}); flushLearningQueueV98(true).then(()=>runPreflightV98(false)); });
 window.addEventListener('offline',()=>{ logAiDiagnosticV98('network',{online:false}); setPreflightPanelV98({status:'warn',message:'Offline: sync in coda ⚠️',teacher:'non verificato',memory:'in attesa rete',queue:pendingLearningQueueCount?.()||0}); });
 setTimeout(()=>{ try{ ensurePreflightPanelV98(); runPreflightV98(false); }catch(_){} },1200);
+
+
+// =============================================================
+// V27.99 Server Sync Handshake Fix
+// Obiettivo: se preflight dice Supabase OK, anche il salvataggio articolo
+// deve usare lo stesso endpoint corretto, con retry e motivo errore reale.
+// =============================================================
+window.SPESA_PRONTA_VERSION='v28.00-final-test-tools';
+window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V27.99', brain:'Ultra Error Reduction Core + Sync Handshake Fix', syncHandshake:'v27_99'});
+function v2799CleanBase(raw=''){
+  let b=String(raw||'/api').trim()||'/api';
+  if(b==='/'||b==='.') b='/api';
+  return b.replace(/\/+$/,'');
+}
+function v2799ApiCandidates(){
+  const raw=v2799CleanBase(settings?.apiEndpoint||'/api');
+  const c=[];
+  const add=x=>{ if(x && !c.includes(x)) c.push(x); };
+  add(raw);
+  if(!/\/api$/i.test(raw)) add(raw + '/api');
+  if(raw==='/api') add('/api');
+  try{
+    const origin=location?.origin;
+    if(origin){ add(origin + '/api'); add(origin); }
+  }catch(_){ }
+  return c;
+}
+function v2799Endpoint(base,path){
+  const p=String(path||'').startsWith('/') ? String(path) : '/'+String(path||'');
+  const b=v2799CleanBase(base);
+  if(/\/api$/i.test(b)) return b + p;
+  if(p.startsWith('/ai/') || p.startsWith('/auth/') || p.startsWith('/households/') || p.startsWith('/assistant/')) return b + '/api' + p;
+  return b + p;
+}
+function v2799SyncReasonLabel(reason=''){
+  const r=String(reason||'');
+  if(r.includes('401')||r.includes('unauthorized')) return 'Account cloud non autorizzato: rifai login o salva impostazioni cloud';
+  if(r.includes('404')||r.includes('not_found')) return 'Endpoint sync non trovato: base API errata';
+  if(r.includes('timeout')||r.includes('abort')) return 'Timeout server: ritenta sync';
+  if(r.includes('payload')) return 'Payload prodotto non valido';
+  if(r.includes('missing')) return 'Impostazioni cloud mancanti';
+  if(r.includes('offline')) return 'Internet assente';
+  if(r.includes('network')||r.includes('fetch')) return 'Rete/server non raggiungibile';
+  return r || 'Sync non confermato';
+}
+async function v2799FetchJson(url, options={}, ms=8500){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),ms);
+  try{
+    const res=await fetch(url,Object.assign({},options,{signal:controller.signal,cache:'no-store'}));
+    const text=await res.text().catch(()=>'');
+    let data=null; try{ data=text?JSON.parse(text):null; }catch(_){ data={raw:text}; }
+    return {ok:res.ok,status:res.status,data,text,url};
+  }finally{ clearTimeout(timer); }
+}
+function v2799BuildLearningBody(payload={}){
+  return {
+    householdId:settings.householdId||'',
+    token:settings.token||'',
+    payload,
+    clientMemorySummary:{
+      learnedProducts:(aiMemory.learnedProducts||[]).length,
+      deepProducts:(aiMemory.productDeepMemory||[]).length,
+      queued:pendingLearningQueueCount?.()||0,
+      appVersion:'v27.99',
+      brain:window.SPESA_PRONTA_BUILD?.brain||'Ultra Error Reduction Core',
+      syncHandshake:'v27_99'
+    }
+  };
+}
+async function v2799SyncLearningDirect(payload={}, quiet=true, fromQueue=false){
+  if(!settings.householdId || !settings.token){
+    const reason='missing_cloud_settings';
+    if(!fromQueue && payload?.confirmed) queueLearningPayload(payload,reason);
+    if(typeof logAiDiagnosticV98==='function') logAiDiagnosticV98('sync-failed',{reason, reasonLabel:v2799SyncReasonLabel(reason), productName:payload?.confirmed?.productName||''});
+    return false;
+  }
+  const candidates=v2799ApiCandidates();
+  const body=v2799BuildLearningBody(payload);
+  let lastReason='endpoint_not_confirmed';
+  for(const base of candidates){
+    const url=v2799Endpoint(base,'/ai/learn/autonomy');
+    let out=null;
+    try{
+      out=await v2799FetchJson(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token||''}`},body:JSON.stringify(body)},9000);
+      if(out.ok && out.data?.ok){
+        try{
+          ensureVisionBrain().serverSyncs=Number(ensureVisionBrain().serverSyncs||0)+1;
+          ensureVisionBrain().serverLastSyncAt=Date.now();
+          ensureVoiceProfile().serverSyncs=Number(ensureVoiceProfile().serverSyncs||0)+1;
+          mergeServerLearning(out.data);
+          if(out.data.audit) pushLearningAudit(Object.assign({source:'server'}, out.data.audit));
+          if(out.data.globalProductMemory) aiMemory.globalProductMemory=out.data.globalProductMemory;
+          if(out.data.knowledgeFeeder) aiMemory.lastKnowledgeFeeder=out.data.knowledgeFeeder;
+          saveAiMemory(); refreshVisionBrainPanel?.();
+        }catch(_){ }
+        if(typeof logAiDiagnosticV98==='function') logAiDiagnosticV98('sync-ok',{productName:payload?.confirmed?.productName||'', brand:payload?.confirmed?.brand||'', endpoint:url, globalCount:out.data?.globalProductMemory?.count, knowledgeFeeder:out.data?.knowledgeFeeder||null});
+        return out.data;
+      }
+      lastReason=`http_${out.status}_${out.data?.error||out.data?.raw||'not_confirmed'}`.slice(0,220);
+      if(typeof logAiDiagnosticV98==='function') logAiDiagnosticV98('sync-endpoint-failed',{endpoint:url,status:out.status,reason:lastReason,body:(out.text||'').slice(0,220)});
+      if(out.status===401 || out.status===403) break;
+    }catch(e){
+      lastReason=(e?.name==='AbortError')?'timeout':('network_'+(e?.message||String(e))).slice(0,220);
+      if(typeof logAiDiagnosticV98==='function') logAiDiagnosticV98('sync-endpoint-error',{endpoint:url,reason:lastReason});
+    }
+  }
+  if(!fromQueue && payload?.confirmed) queueLearningPayload(payload,lastReason);
+  if(typeof logAiDiagnosticV98==='function') logAiDiagnosticV98('sync-failed',{productName:payload?.confirmed?.productName||'', brand:payload?.confirmed?.brand||'', reason:lastReason, reasonLabel:v2799SyncReasonLabel(lastReason)});
+  return false;
+}
+syncAutonomyLearningToServer=async function(payload={}, quiet=true, fromQueue=false){
+  if(!navigator.onLine && !fromQueue){
+    if(payload?.confirmed) queueLearningPayload(payload,'offline');
+    if(typeof logAiDiagnosticV98==='function') logAiDiagnosticV98('sync-failed',{reason:'offline', reasonLabel:v2799SyncReasonLabel('offline'), productName:payload?.confirmed?.productName||''});
+    return false;
+  }
+  return await v2799SyncLearningDirect(payload, quiet, fromQueue);
+};
+if(typeof v2798PreflightEndpoint==='function'){
+  v2798PreflightEndpoint=function(path){ return v2799Endpoint(v2799ApiCandidates()[0]||'/api', path); };
+}
+if(typeof setCardMemorySyncState==='function'){
+  const setCardMemorySyncStateV2799=setCardMemorySyncState;
+  setCardMemorySyncState=function(el,state='pending',text=''){
+    let label=text;
+    if(state==='queued' && !label){
+      const last=ensureAiDiagnosticsV98?.().lastSync||{};
+      label='Memoria in coda: '+v2799SyncReasonLabel(last.reason||'sync_failed')+' ⚠️';
+    }
+    return setCardMemorySyncStateV2799(el,state,label);
+  };
+}
+try{ document.dispatchEvent(new CustomEvent('spesa-pronta:v2799-sync-ready')); }catch(_){ }
+
+
+// =============================================================
+// V28.00 Final Test Tools
+// Diagnosi più pulita, test sync manuale, contatore memoria server,
+// avviso cache/build e report copiabile per debug rapido.
+// =============================================================
+window.SPESA_PRONTA_VERSION='v28.00-final-test-tools';
+window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.00', brain:'Ultra Error Reduction Core + Final Test Tools', finalTestTools:'v28_00'});
+function v2800BuildAgeWarning(){
+  try{
+    const key='spesaProntaLastBuildVersion';
+    const prev=localStorage.getItem(key)||'';
+    localStorage.setItem(key, window.SPESA_PRONTA_BUILD.version||'V28.00');
+    if(prev && prev!==window.SPESA_PRONTA_BUILD.version){
+      logAiDiagnosticV98?.('build-updated',{from:prev,to:window.SPESA_PRONTA_BUILD.version,note:'Se vedi grafica vecchia apri clear-cache.html'});
+    }
+  }catch(_){ }
+}
+function v2800AiReportCompact(){
+  const d=ensureAiDiagnosticsV98?.()||{events:[]};
+  const pf=d.lastPreflight||{};
+  const sync=d.lastSync||{};
+  const ev=(d.events||[]).slice(0,12).map(x=>{
+    const time=new Date(x.at||Date.now()).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    const data=x.data||{};
+    const short=JSON.stringify(data).slice(0,240);
+    return `${time} | ${x.type} | ${short}`;
+  }).join('\n');
+  return [
+    'SPESA PRONTA - DIAGNOSI AI',
+    `Versione: ${window.SPESA_PRONTA_BUILD?.version||'V28.00'}`,
+    `Brain: ${window.SPESA_PRONTA_BUILD?.brain||''}`,
+    `Queue sync: ${pendingLearningQueueCount?.()||0}`,
+    `Docente OpenAI: ${pf.teacherActive===false?'non attivo':(pf.teacherActive?'attivo':'non verificato')}`,
+    `Database: ${pf.dbMode||'non verificato'} / connected=${!!pf.databaseConnected}`,
+    `Memory ready: ${!!pf.memoryReady}`,
+    `Prodotti globali: ${pf.globalCount ?? pf.globalProductMemory?.count ?? 'n/d'}`,
+    `Knowledge cache: ${pf.knowledgeCache?JSON.stringify(pf.knowledgeCache):'n/d'}`,
+    `Barcode brain: ${pf.barcodeBrain?JSON.stringify({version:pf.barcodeBrain.version,hits:pf.barcodeBrain.hits,misses:pf.barcodeBrain.misses}):'n/d'}`,
+    `Ultimo sync: ${sync.type||'nessuno'} ${sync.reasonLabel||sync.reason||''}`,
+    `Ultima categoria: ${d.lastCategory?JSON.stringify(d.lastCategory).slice(0,300):'nessuna'}`,
+    '',
+    'Eventi recenti:',
+    ev || 'Nessun evento.'
+  ].join('\n');
+}
+async function v2800CopyDiagnostics(){
+  const txt=v2800AiReportCompact();
+  try{ await navigator.clipboard.writeText(txt); toast('Diagnosi AI copiata ✅'); }
+  catch(_){ toast('Non riesco a copiare: tieni premuto sul testo diagnosi'); }
+  return txt;
+}
+async function v2800TestSync(){
+  if(!settings?.householdId || !settings?.token){ toast('Test sync: fai login cloud prima ⚠️'); logAiDiagnosticV98?.('test-sync-failed',{reason:'missing_cloud_settings'}); return false; }
+  const bases=(typeof v2799ApiCandidates==='function'?v2799ApiCandidates():[(settings.apiEndpoint||'/api')]);
+  let last=null;
+  for(const base of bases){
+    const url=(typeof v2799Endpoint==='function'?v2799Endpoint(base,'/ai/test-sync'):(String(base).replace(/\/$/,'')+'/ai/test-sync'));
+    try{
+      const out=await (typeof v2799FetchJson==='function'
+        ? v2799FetchJson(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token}`},body:JSON.stringify({householdId:settings.householdId,clientVersion:window.SPESA_PRONTA_BUILD?.version||'V28.00'})},7500)
+        : fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token}`},body:JSON.stringify({householdId:settings.householdId})}).then(async r=>({ok:r.ok,status:r.status,data:await r.json().catch(()=>null),url})) );
+      last=out;
+      if(out.ok && out.data?.ok){
+        logAiDiagnosticV98?.('test-sync-ok',{endpoint:url,dbMode:out.data.dbMode,globalCount:out.data.globalProductMemory?.count});
+        toast('Test sync riuscito ✅');
+        await runPreflightV98?.(true);
+        renderDiagnosticsV98?.();
+        return true;
+      }
+      logAiDiagnosticV98?.('test-sync-endpoint-failed',{endpoint:url,status:out.status,error:out.data?.error||out.data?.message||'not_confirmed'});
+    }catch(e){ last={error:e?.message||String(e),url}; logAiDiagnosticV98?.('test-sync-error',{endpoint:url,error:last.error}); }
+  }
+  toast('Test sync fallito ⚠️');
+  logAiDiagnosticV98?.('test-sync-failed',{last});
+  renderDiagnosticsV98?.();
+  return false;
+}
+function v2800UpgradePreflightPanel(){
+  const panel=document.getElementById('preflightPanelV98') || ensurePreflightPanelV98?.();
+  if(!panel || panel.dataset.v2800Ready==='1') return panel;
+  panel.dataset.v2800Ready='1';
+  const actions=panel.querySelector('.preflight-actions-v98');
+  if(actions){
+    const test=document.createElement('button');
+    test.className='preflight-mini-btn-v98 v2800-test-sync';
+    test.type='button'; test.textContent='Test Sync ora';
+    test.addEventListener('click',()=>v2800TestSync());
+    const copy=document.createElement('button');
+    copy.className='preflight-mini-btn-v98 v2800-copy-diag';
+    copy.type='button'; copy.textContent='Copia diagnosi';
+    copy.addEventListener('click',()=>v2800CopyDiagnostics());
+    actions.append(test,copy);
+  }
+  const body=panel.querySelector('.preflight-body-v98');
+  if(body && !panel.querySelector('[data-pf-global]')){
+    const pill=document.createElement('div');
+    pill.className='preflight-pill-v98';
+    pill.innerHTML='<b>Prodotti server</b><span data-pf-global>—</span>';
+    body.appendChild(pill);
+  }
+  const version=panel.querySelector('[data-pf-version]'); if(version) version.textContent='V28.00';
+  return panel;
+}
+const ensurePreflightPanelV98_v2800 = typeof ensurePreflightPanelV98==='function' ? ensurePreflightPanelV98 : null;
+if(ensurePreflightPanelV98_v2800){
+  ensurePreflightPanelV98=function(){ const p=ensurePreflightPanelV98_v2800(); setTimeout(v2800UpgradePreflightPanel,0); return p; };
+}
+const setPreflightPanelV98_v2800 = typeof setPreflightPanelV98==='function' ? setPreflightPanelV98 : null;
+if(setPreflightPanelV98_v2800){
+  setPreflightPanelV98=function(data={}){
+    const out=setPreflightPanelV98_v2800(data);
+    const panel=v2800UpgradePreflightPanel();
+    const g=panel?.querySelector?.('[data-pf-global]');
+    if(g){
+      const d=ensureAiDiagnosticsV98?.()||{};
+      const pf=d.lastPreflight||{};
+      g.textContent=String(data.globalCount ?? pf.globalCount ?? pf.globalProductMemory?.count ?? '—');
+    }
+    return out;
+  };
+}
+const renderDiagnosticsV98_v2800 = typeof renderDiagnosticsV98==='function' ? renderDiagnosticsV98 : null;
+if(renderDiagnosticsV98_v2800){
+  renderDiagnosticsV98=function(){
+    const panel=v2800UpgradePreflightPanel();
+    const box=panel?.querySelector?.('[data-pf-diagnostics]');
+    if(!box) return renderDiagnosticsV98_v2800();
+    box.textContent=v2800AiReportCompact();
+  };
+}
+const runPreflightV98_v2800 = typeof runPreflightV98==='function' ? runPreflightV98 : null;
+if(runPreflightV98_v2800){
+  runPreflightV98=async function(manual=false){
+    const ok=await runPreflightV98_v2800(manual);
+    try{
+      const d=ensureAiDiagnosticsV98?.();
+      const pf=d?.lastPreflight||{};
+      const panel=v2800UpgradePreflightPanel();
+      const g=panel?.querySelector?.('[data-pf-global]');
+      if(g) g.textContent=String(pf.globalCount ?? pf.globalProductMemory?.count ?? '—');
+      const title=panel?.querySelector?.('[data-pf-title]');
+      if(title && pendingLearningQueueCount?.()>0 && ok) title.textContent='Sistema pronto, sync in coda ⚠️';
+    }catch(_){ }
+    return ok;
+  };
+}
+v2800BuildAgeWarning();
+setTimeout(()=>{ try{ v2800UpgradePreflightPanel(); runPreflightV98?.(false); }catch(_){} },1300);
+try{ document.dispatchEvent(new CustomEvent('spesa-pronta:v2800-final-test-tools-ready')); }catch(_){ }

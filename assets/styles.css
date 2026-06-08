@@ -1777,3 +1777,11 @@ body{color-scheme:light;}
 .memory-sync-state.ok{background:#f1fbf4!important;border-color:#bdeccb!important;color:#176b38!important}.memory-sync-state.queued{background:#fff8e6!important;border-color:#ffdf9a!important;color:#7a5200!important}.memory-sync-state.bad{background:#fff1f2!important;border-color:#ffc6cc!important;color:#9f1d2b!important}.memory-sync-state.pending{background:#eef6ff!important;border-color:#cfe4ff!important;color:#174070!important}
 @media(max-width:720px){.preflight-body-v98{grid-template-columns:repeat(2,minmax(0,1fr))}.preflight-head-v98{align-items:flex-start}.preflight-title-v98{line-height:1.15}.preflight-pill-v98{min-height:44px}.preflight-actions-v98 .preflight-mini-btn-v98{flex:1 1 calc(50% - 8px)}}
 @media(max-width:390px){.preflight-body-v98{grid-template-columns:1fr}.preflight-actions-v98 .preflight-mini-btn-v98{flex:1 1 100%}}
+
+
+/* V28.00 Final Test Tools */
+.preflight-actions-v98 .v2800-test-sync{background:linear-gradient(135deg,#0f7bff,#1266f1)!important;color:#fff!important;border-color:rgba(18,102,241,.25)!important}
+.preflight-actions-v98 .v2800-copy-diag{background:#fff!important;color:#143f76!important;border-color:rgba(13,110,253,.18)!important}
+.preflight-pill-v98 [data-pf-global]{font-weight:1000;color:#0b2b55}
+.ai-diagnostics-v98{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace!important;font-size:.78rem!important;max-height:320px!important}
+@media(max-width:560px){.preflight-actions-v98{grid-template-columns:1fr 1fr!important}.preflight-actions-v98 .preflight-mini-btn-v98{min-height:48px!important}}

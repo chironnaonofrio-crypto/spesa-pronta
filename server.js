@@ -2568,7 +2568,7 @@ function preflightSnapshotV98(){
   const gpm = publicGlobalProductMemory ? publicGlobalProductMemory(12) : {count:0,confirmations:0,products:[]};
   const queueInfo={serverQueue:false};
   const kCache=db.assistantBrain?.knowledgeCache||{};
-  const brain={version:'V27.98',name:'Preflight Stability Check',base:'Ultra Error Reduction Core V27.97',categoryEngine:'ultra_error_reduction_core_v27_97',barcodePriority:'barcode > label > user correction > server memory > teacher',syncPolicy:'single item confirm + retry queue'};
+  const brain={version:'V28.00',name:'Final Test Tools',base:'Ultra Error Reduction Core V27.97 + Sync Handshake V27.99',categoryEngine:'ultra_error_reduction_core_v27_97',barcodePriority:'barcode > label > user correction > server memory > teacher',syncPolicy:'single item confirm + retry queue',testTools:'diagnostics_copy + server_sync_test'};
   const checks=[
     {id:'openai_teacher',label:'Docente OpenAI',ok:aiConnected(),message:aiConnected()?'Docente OpenAI attivo':'OPENAI_API_KEY mancante o non valida'},
     {id:'vision_backend',label:'Vision backend',ok:aiConnected(),message:aiConnected()?'Vision pronta dal backend':'Vision docente non disponibile'},
@@ -2580,7 +2580,7 @@ function preflightSnapshotV98(){
   ];
   const ok=checks.filter(c=>c.ok).length;
   const status= ok===checks.length ? 'ready' : (ok>=4?'warn':'bad');
-  return {ok:true,version:'V27.98',status,ready:status==='ready',brain,checks,teacherActive:aiConnected(),teacherMessage:aiConnected()?'Docente OpenAI attivo':'Docente OpenAI non attivo',dbMode,databaseConnected:dbMode!=='file',memoryReady:dbMode!=='file',globalProductMemory:gpm,knowledgeCache:{entries:Object.keys(kCache.entries||{}).length,hits:kCache.hits||0,barcodeHits:kCache.barcodeHits||0,updatedAt:kCache.updatedAt||0},barcodeBrain:db.assistantBrain?.barcodeBrain||null,errorLearning:{corrections:(db.assistantBrain?.errorLearning?.corrections||[]).length,patterns:Object.keys(db.assistantBrain?.errorLearning?.patterns||{}).length,updatedAt:db.assistantBrain?.errorLearning?.updatedAt||0},learningAudit:(db.assistantBrain.learningAudit||[]).slice(0,15),generatedAt:Date.now()};
+  return {ok:true,version:'V28.00',status,ready:status==='ready',brain,checks,teacherActive:aiConnected(),teacherMessage:aiConnected()?'Docente OpenAI attivo':'Docente OpenAI non attivo',dbMode,databaseConnected:dbMode!=='file',memoryReady:dbMode!=='file',globalProductMemory:gpm,knowledgeCache:{entries:Object.keys(kCache.entries||{}).length,hits:kCache.hits||0,barcodeHits:kCache.barcodeHits||0,updatedAt:kCache.updatedAt||0},barcodeBrain:db.assistantBrain?.barcodeBrain||null,errorLearning:{corrections:(db.assistantBrain?.errorLearning?.corrections||[]).length,patterns:Object.keys(db.assistantBrain?.errorLearning?.patterns||{}).length,updatedAt:db.assistantBrain?.errorLearning?.updatedAt||0},learningAudit:(db.assistantBrain.learningAudit||[]).slice(0,15),generatedAt:Date.now()};
 }
 
 const server = http.createServer(async (req,res)=>{
@@ -2599,15 +2599,30 @@ const server = http.createServer(async (req,res)=>{
 
 
 
-    if(req.method === 'GET' && pathName === '/api/ai/preflight') {
+
+
+    if(req.method === 'POST' && (pathName === '/api/ai/test-sync' || pathName === '/ai/test-sync')){
+      const householdId=String(body.householdId||'').trim();
+      const bearer=(req.headers.authorization||'').replace(/^Bearer\s+/,'').trim();
+      const h=(householdId && db.households[householdId] && db.households[householdId].token===bearer) ? db.households[householdId] : null;
+      if(!h) return send(res,401,{ok:false,error:'unauthorized_household',message:'Account cloud non autorizzato'});
+      const before=publicGlobalProductMemory(3);
+      db.assistantBrain.diagnosticsTestSync=db.assistantBrain.diagnosticsTestSync||[];
+      db.assistantBrain.diagnosticsTestSync.unshift({at:Date.now(),householdId,dbMode,globalCount:before.count||0,app:'v28.00-final-test-tools'});
+      db.assistantBrain.diagnosticsTestSync=db.assistantBrain.diagnosticsTestSync.slice(0,40);
+      await saveDb();
+      return send(res,200,{ok:true,type:'test-sync',message:'Test sync riuscito: server, auth e database scrivono correttamente',dbMode,databaseConnected:dbMode!=='file',memoryReady:dbMode!=='file',globalProductMemory:before,generatedAt:Date.now()});
+    }
+
+    if(req.method === 'GET' && (pathName === '/api/ai/preflight' || pathName === '/ai/preflight')) {
       return send(res, 200, preflightSnapshotV98());
     }
 
-    if(req.method === 'GET' && pathName === '/api/ai/diagnostics') {
+    if(req.method === 'GET' && (pathName === '/api/ai/diagnostics' || pathName === '/ai/diagnostics')) {
       return send(res, 200, Object.assign(preflightSnapshotV98(), { diagnostics:{ learningAudit:(db.assistantBrain.learningAudit||[]).slice(0,120), globalProducts:publicGlobalProductMemory(30), knowledgeFeeder:db.assistantBrain.knowledgeFeeder||null, monsterBrainV96:db.assistantBrain.monsterBrainV96||null, ultraBrainV97:db.assistantBrain.ultraBrainV97||null } }));
     }
 
-    if(req.method === 'GET' && pathName === '/api/ai/status') {
+    if(req.method === 'GET' && (pathName === '/api/ai/status' || pathName === '/ai/status')) {
       return send(res, 200, {
         ok:true,
         preflight:preflightSnapshotV98(),
@@ -2622,7 +2637,7 @@ const server = http.createServer(async (req,res)=>{
         dbMode,
         databaseConnected: dbMode !== 'file',
         memoryReady: dbMode !== 'file',
-        globalLearning: 'server_global_product_memory', globalProductMemory: publicGlobalProductMemory(10), knowledgeFeeder: db.assistantBrain.knowledgeFeeder||null, knowledgeCache:{entries:Object.keys(db.assistantBrain?.knowledgeCache?.entries||{}).length,hits:db.assistantBrain?.knowledgeCache?.hits||0,barcodeHits:db.assistantBrain?.knowledgeCache?.barcodeHits||0,updatedAt:db.assistantBrain?.knowledgeCache?.updatedAt||0}, barcodeBrain:db.assistantBrain?.barcodeBrain||null, categoryBrainV95:db.assistantBrain?.categoryBrainV95||null, monsterBrainV96:db.assistantBrain?.monsterBrainV96||null, ultraBrainV97:db.assistantBrain?.ultraBrainV97||null, errorLearning:{corrections:(db.assistantBrain?.errorLearning?.corrections||[]).length,patterns:Object.keys(db.assistantBrain?.errorLearning?.patterns||{}).length,updatedAt:db.assistantBrain?.errorLearning?.updatedAt||0}, learningQuality:{dedupe:'canonical_key_plus_barcode_conflict_guard', teacherBypass:'after_confirmations_barcode_and_field_confidence', knowledgeFeeder:'open_facts_family_with_barcode_and_cache_after_user_confirmation', storesPhotos:false, storesVisualSignature:true, categoryEngine:'ultra_error_reduction_core_v27_97', ultraErrorReduction:'active', preflightStability:'v27_98', barcodePriority:'barcode > label > memory > teacher', fieldConfidence:'per_field_v97'},
+        globalLearning: 'server_global_product_memory', globalProductMemory: publicGlobalProductMemory(10), knowledgeFeeder: db.assistantBrain.knowledgeFeeder||null, knowledgeCache:{entries:Object.keys(db.assistantBrain?.knowledgeCache?.entries||{}).length,hits:db.assistantBrain?.knowledgeCache?.hits||0,barcodeHits:db.assistantBrain?.knowledgeCache?.barcodeHits||0,updatedAt:db.assistantBrain?.knowledgeCache?.updatedAt||0}, barcodeBrain:db.assistantBrain?.barcodeBrain||null, categoryBrainV95:db.assistantBrain?.categoryBrainV95||null, monsterBrainV96:db.assistantBrain?.monsterBrainV96||null, ultraBrainV97:db.assistantBrain?.ultraBrainV97||null, errorLearning:{corrections:(db.assistantBrain?.errorLearning?.corrections||[]).length,patterns:Object.keys(db.assistantBrain?.errorLearning?.patterns||{}).length,updatedAt:db.assistantBrain?.errorLearning?.updatedAt||0}, learningQuality:{dedupe:'canonical_key_plus_barcode_conflict_guard', teacherBypass:'after_confirmations_barcode_and_field_confidence', knowledgeFeeder:'open_facts_family_with_barcode_and_cache_after_user_confirmation', storesPhotos:false, storesVisualSignature:true, categoryEngine:'ultra_error_reduction_core_v27_97', ultraErrorReduction:'active', preflightStability:'v28_00_final_test_tools', barcodePriority:'barcode > label > memory > teacher', fieldConfidence:'per_field_v97'},
         smsReady: PHONE_VERIFY_READY,
         seedMemory:{version:VISION_SEED_MEMORY.version||'', products:(VISION_SEED_MEMORY.products||[]).length, totalProfiles:Number(VISION_MEGA_INDEX.totalProfiles||1000000), megaVersion:VISION_MEGA_INDEX.version||'', categories:(VISION_SEED_MEMORY.categories||[]).length, loaded:(VISION_SEED_MEMORY.products||[]).length>0},
         twilioVerifyReady: TWILIO_VERIFY_ENABLED,
@@ -2927,7 +2942,7 @@ const server = http.createServer(async (req,res)=>{
     }
 
 
-    if(req.method === 'POST' && pathName === '/api/ai/learn/autonomy'){
+    if(req.method === 'POST' && (pathName === '/api/ai/learn/autonomy' || pathName === '/ai/learn/autonomy')){
       const householdId=String(body.householdId||'').trim();
       const bearer=(req.headers.authorization||'').replace(/^Bearer\s+/,'').trim();
       const h=(householdId && db.households[householdId] && db.households[householdId].token===bearer) ? db.households[householdId] : null;
@@ -2947,7 +2962,7 @@ const server = http.createServer(async (req,res)=>{
 
 
 
-    if(req.method === 'POST' && pathName === '/api/ai/product-knowledge/lookup'){
+    if(req.method === 'POST' && (pathName === '/api/ai/product-knowledge/lookup' || pathName === '/ai/product-knowledge/lookup')){
       const householdId=String(body.householdId||'').trim();
       const bearer=(req.headers.authorization||'').replace(/^Bearer\s+/,'').trim();
       const h=(householdId && db.households[householdId] && db.households[householdId].token===bearer) ? db.households[householdId] : null;
@@ -2957,12 +2972,12 @@ const server = http.createServer(async (req,res)=>{
       return send(res,200,{ok:true, confirmed:lookup.confirmed, knowledge:lookup.knowledge, skipped:!!lookup.skipped, knowledgeFeeder:lookup.confirmed?.knowledgeFeeder||null});
     }
 
-    if(req.method === 'POST' && pathName === '/api/ai/global-products/match'){
+    if(req.method === 'POST' && (pathName === '/api/ai/global-products/match' || pathName === '/ai/global-products/match')){
       const match=matchGlobalProductMemory(body||{});
       return send(res,200,{ok:true, match:match?.product||null, score:match?.score||0, globalProductMemory:publicGlobalProductMemory(10)});
     }
 
-    if(req.method === 'GET' && pathName === '/api/ai/global-memory'){
+    if(req.method === 'GET' && (pathName === '/api/ai/global-memory' || pathName === '/ai/global-memory')){
       return send(res, 200, { ok:true, globalExperience: publicGlobalBrain(), privacy:'aggregated_anonymous_only' });
     }
 
