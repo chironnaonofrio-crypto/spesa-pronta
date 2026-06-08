@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v27.69-memory-format-guard';
+window.SPESA_PRONTA_VERSION='v27.72-label-memory-safe';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -1575,7 +1575,6 @@ function parseExpiryMonthYear(raw=''){
   m=text.match(/(?:scad(?:e|enza)?|entro|exp|tmc|bb)?\s*(\d{1,2})\s+(\d{4}|\d{2})\b/i);
   if(m){ const mo=Number(m[1]); const y=normalizeExpiryYearPart(m[2]); if(mo>=1 && mo<=12 && y) return `${String(mo).padStart(2,'0')}/${y}`; }
   const n=normalizeText(text).replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
-  const monthYear=parseExpiryMonthYear(raw); if(monthYear) return monthYear;
   const months={gennaio:'01',febbraio:'02',marzo:'03',aprile:'04',maggio:'05',giugno:'06',luglio:'07',agosto:'08',settembre:'09',ottobre:'10',novembre:'11',dicembre:'12'};
   for(const [name,mo] of Object.entries(months)){
     const idx=n.split(/\s+/).indexOf(name);
@@ -2175,14 +2174,19 @@ function mergeLabelVisionIntoResultCard(el,base={},extra={},dataUrl=''){
     }
   };
   const expiry=extra.expiryDate || extra.expiry || extra.expirationDate || extra.expiration || extra.expiryText || extra.expiryDetectedRaw || parseExpiryLoose([...(extra.detectedText||[]), ...(extra.visibleEvidence||[])].join(' '));
-  setField('[data-scan-name]', extra.productName, !base.productName || isBadScanName(base.productName));
-  setField('[data-scan-brand]', extra.brand, false);
-  setField('[data-scan-size]', extra.estimatedSize || extra.size, false);
-  setField('[data-scan-expiry]', expiry, false);
+  const labelConflicts=labelResultConflictsWithBase(base, extra);
+  if(labelConflicts){
+    base=clearRejectedMemoryPrediction(base,'Etichetta attuale più affidabile della memoria locale precedente.');
+  }
+  setField('[data-scan-name]', extra.productName, !base.productName || isBadScanName(base.productName) || labelConflicts);
+  setField('[data-scan-brand]', extra.brand, labelConflicts && !!extra.brand);
+  setField('[data-scan-size]', extra.estimatedSize || extra.size, labelConflicts && !!(extra.estimatedSize||extra.size));
+  setField('[data-scan-expiry]', expiry, !!expiry && !base.expiryDate);
   if(extra.quantity && Number(extra.quantity)>0) setField('[data-scan-qty]', extra.quantity, false);
   setField('[data-scan-unit]', extra.unit, false);
   if(extra.category) setField('[data-scan-cat]', extra.category, false);
   if(extra.isDamaged && extra.damageType) setField('[data-scan-damage]', extra.damageType, true);
+  base.productName = el.querySelector('[data-scan-name]')?.value?.trim() || base.productName || extra.productName || '';
   base.brand = el.querySelector('[data-scan-brand]')?.value?.trim() || base.brand || extra.brand || '';
   base.estimatedSize = el.querySelector('[data-scan-size]')?.value?.trim() || base.estimatedSize || extra.estimatedSize || '';
   base.expiryDate = el.querySelector('[data-scan-expiry]')?.value?.trim() || base.expiryDate || expiry || '';
@@ -3328,8 +3332,66 @@ function strictLabelFormatFromEvidence(result={}){
   for(const p of patterns){ const m=raw.match(p); if(m) return String(m[1]).replace(/\s+/g,' ').trim().replace(/\bgr\b/i,'g').replace(/\blt\b/i,'L'); }
   return '';
 }
+
+function specificProductTokens(text=''){
+  const stop=new Set(['prodotto','confezione','barattolo','bottiglia','vetro','plastica','formato','marca','tipo','variante','squeeze','etichetta','frontale','visibile','testo','grande','contenuto','colore','colori','chiaro','scuro','verde','rosso','blu','bianco','nero','giallo','marrone','centrato','immagine','tenuta','mano','centro','salsa']);
+  return normalizeLearnText(text).split(/\s+/).filter(t=>t.length>=3 && !stop.has(t) && !/^\d+$/.test(t));
+}
+function tokenOverlapCount(a=[], b=[]){
+  const bs=new Set(b); let n=0; a.forEach(t=>{ if(bs.has(t)) n++; }); return n;
+}
+function hasStrongCurrentLabelEvidence(result={}){
+  const txt=[result.productName,result.brand,result.variant,...(result.detectedText||[]),...(result.visibleEvidence||[])].join(' ');
+  const toks=specificProductTokens(txt);
+  const hasText=(Array.isArray(result.detectedText)&&result.detectedText.join(' ').trim().length>4) || (Array.isArray(result.visibleEvidence)&&result.visibleEvidence.join(' ').trim().length>4);
+  return hasText && toks.length>=1;
+}
+function localPredictionAgreesWithCurrent(local={}, result={}){
+  if(!local || !result) return false;
+  const current=[result.productName,result.brand,result.variant,...(result.detectedText||[]),...(result.visibleEvidence||[])].join(' ');
+  const localText=[local.productName,local.brand,local.variant,local.productType,local.packageType].join(' ');
+  const c=specificProductTokens(current);
+  const l=specificProductTokens(localText);
+  if(!c.length || !l.length) return false;
+  return tokenOverlapCount(c,l)>0 || normalizeLearnText(current).includes(normalizeLearnText(local.productName||'')) || normalizeLearnText(current).includes(normalizeLearnText(local.brand||''));
+}
+function labelResultConflictsWithBase(base={}, extra={}){
+  const extraText=[extra.productName,extra.brand,extra.variant,...(extra.detectedText||[]),...(extra.visibleEvidence||[])].join(' ');
+  const baseText=[base.productName,base.brand,base.variant,base.bestMatchName].join(' ');
+  const e=specificProductTokens(extraText);
+  const b=specificProductTokens(baseText);
+  if(!e.length || !b.length) return false;
+  const extraHasLabel=(Array.isArray(extra.detectedText)&&extra.detectedText.join(' ').trim().length>3) || (Array.isArray(extra.visibleEvidence)&&extra.visibleEvidence.join(' ').trim().length>3) || !!extra.cloudVision;
+  return extraHasLabel && tokenOverlapCount(e,b)===0;
+}
+function clearRejectedMemoryPrediction(result={}, reason='Memoria locale ignorata: non coerente con etichetta attuale.'){
+  if(!result) return result;
+  result.bestMatchName='';
+  result.bestMatchSource='';
+  result.bestMatchScore=0;
+  result.memoryVision=false;
+  result.seedVision=false;
+  result.modelVision=false;
+  result.autonomousVision=false;
+  result.localPredictionRejected=true;
+  result.matchRejected=true;
+  result.matchRejectedReason=reason;
+  return result;
+}
+function explicitExpiryFromEvidence(result={}){
+  const raw=[result.expiryDate,result.expiry,result.expirationDate,result.expiration,result.expiryText,result.expiryDetectedRaw,...(Array.isArray(result.detectedText)?result.detectedText:[]),...(Array.isArray(result.visibleEvidence)?result.visibleEvidence:[])].join(' ');
+  return parseExpiryLoose(raw);
+}
+function sanitizeExpiryFromEvidence(result={}){
+  if(!result) return result;
+  const exp=explicitExpiryFromEvidence(result);
+  if(exp && !String(result.expiryDate||'').trim()) result.expiryDate=exp;
+  return result;
+}
+
 function purgeContradictoryMemoryAndFormat(result={}){
   if(!result) return result;
+  result=sanitizeExpiryFromEvidence(result);
   const evidence=strictEvidenceText(result);
   const productFamily=productFamilyForStrictMemory(evidence);
   const matchFamily=productFamilyForStrictMemory([result.bestMatchName,result.bestMatchSource,result.bestMatchCategory,result.bestMatchProductType].join(' '));
@@ -3337,22 +3399,20 @@ function purgeContradictoryMemoryAndFormat(result={}){
   const matchName=normalizeLearnText(result.bestMatchName||'');
   const evidenceNorm=normalizeLearnText(evidence);
   const contradictoryFamily=productFamily && matchFamily && productFamily!==matchFamily;
+  const currentTokens=specificProductTokens([result.productName,result.brand,result.variant,...(result.detectedText||[]),...(result.visibleEvidence||[])].join(' '));
+  const matchTokens=specificProductTokens([result.bestMatchName,result.bestMatchSource,result.bestMatchProductType].join(' '));
+  const strongLabel=hasStrongCurrentLabelEvidence(result);
+  const tokenContradiction=strongLabel && currentTokens.length && matchTokens.length && tokenOverlapCount(currentTokens, matchTokens)===0;
   const nameContradiction=currentName && matchName && currentName.length>=4 && matchName.length>=4 && !evidenceNorm.includes(matchName) && !matchName.includes(currentName) && !currentName.includes(matchName);
-  if(contradictoryFamily || (nameContradiction && /\b(acqua|naturale|frizzante|cola|bibita)\b/.test(matchName))){
-    result.bestMatchName='';
-    result.bestMatchSource='';
-    result.bestMatchScore=0;
-    result.memoryVision=false;
-    result.seedVision=false;
-    result.matchRejected=true;
-    result.matchRejectedReason='Memoria ignorata: non coerente con nome/marca/testo letto.';
+  if(contradictoryFamily || tokenContradiction || nameContradiction){
+    result=clearRejectedMemoryPrediction(result,'Memoria/AI locale ignorata: etichetta attuale non coerente con il prodotto imparato.');
   }
   const labelFormat=strictLabelFormatFromEvidence(result);
   const est=String(result.estimatedSize||'').trim();
-  const estIsLiters=/\b\d{1,4}(?:[,.]\d+)?\s*(?:l|lt|litri)\b/i.test(est);
-  const jarFood=productFamily==='jar_food' || /\b(pesto|pistacch|salsa|crema|condimento|sugo|vasetto|barattolo)\b/.test(normalizeLearnText(evidence));
+  const estIsLiters=/\d{1,4}(?:[,.]\d+)?\s*(?:l|lt|litri)/i.test(est);
+  const jarFood=productFamily==='jar_food' || /(pesto|pistacch|salsa|crema|condimento|sugo|vasetto|barattolo)/.test(normalizeLearnText(evidence));
   if(labelFormat){
-    const lfIsLiters=/\b\d{1,4}(?:[,.]\d+)?\s*(?:l|lt|litri)\b/i.test(labelFormat);
+    const lfIsLiters=/\d{1,4}(?:[,.]\d+)?\s*(?:l|lt|litri)/i.test(labelFormat);
     if(!(jarFood && lfIsLiters)){
       result.estimatedSize=labelFormat;
       result.sizeConfidence=Math.max(Number(result.sizeConfidence||0),.88);
@@ -3483,10 +3543,37 @@ async function improveVisionWithLocalLearning(dataUrl='', result={}){
   result=normalizeBottleSizeResult(result, features);
   result=sanitizeFormatAgainstProduct(result);
   const local=features ? predictFromVisionBrain(features) : null;
-  if(local && (!result.productName || Number(local.confidence||0)>Number(result.confidence||0)+.08 || result.needsManual)){
-    result=Object.assign({}, result, local, {cloudVision:!!result.cloudVision, cloudFallback:!!result.cloudFallback, localEnhanced:true, needsManual: Number(local.confidence||0)<.91 || result.needsManual, shouldAskConfirmation: Number(local.confidence||0)<.93});
+  if(local){
+    const missingName=!result.productName || isBadScanName(result.productName);
+    const agrees=localPredictionAgreesWithCurrent(local,result);
+    const strongLabel=hasStrongCurrentLabelEvidence(result);
+    if(missingName || agrees){
+      if(missingName){
+        result=Object.assign({}, result, local, {cloudVision:!!result.cloudVision, cloudFallback:!!result.cloudFallback, localEnhanced:true, needsManual: Number(local.confidence||0)<.91 || result.needsManual, shouldAskConfirmation: Number(local.confidence||0)<.93});
+      }else{
+        // Etichetta/OCR attuale vince sempre: la memoria locale può solo completare campi mancanti.
+        const keep=Object.assign({}, result);
+        if(!keep.brand && local.brand) keep.brand=local.brand;
+        if(!keep.variant && local.variant) keep.variant=local.variant;
+        if(!keep.estimatedSize && local.estimatedSize) keep.estimatedSize=local.estimatedSize;
+        if((!keep.unit || keep.unit==='pz') && local.unit) keep.unit=local.unit;
+        if(!keep.category && local.category) keep.category=local.category;
+        keep.localEnhanced=true;
+        keep.autonomousVision=!!local.autonomousVision;
+        keep.localVision=true;
+        keep.confidence=Math.max(Number(keep.confidence||0), Math.min(Number(local.confidence||0), .86));
+        if(agrees){ keep.bestMatchName=local.bestMatchName||local.productName||''; keep.bestMatchSource=local.bestMatchSource||'AI locale imparata'; keep.bestMatchScore=local.bestMatchScore||Math.round((local.confidence||0)*100); }
+        result=keep;
+      }
+    }else if(strongLabel){
+      result.localPredictionRejected=true;
+      result.rejectedLocalPrediction=local.productName||local.bestMatchName||'';
+      result.matchRejectedReason='AI locale ignorata: l’etichetta attuale indica un prodotto diverso.';
+      result=clearRejectedMemoryPrediction(result,result.matchRejectedReason);
+    }
   }
   if(features) result.visualFeatures=features;
+  result=sanitizeExpiryFromEvidence(result);
   result=purgeContradictoryMemoryAndFormat(result);
   return result;
 }
