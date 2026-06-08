@@ -2478,10 +2478,10 @@ body::after{content:'V27.73 ALEXA SKILL READY'!important}
 /* V27.74 UI POLISH CSS */
 
 
-/* V27.78 logout fix */
+/* V27.79 logout fix */
 
-/* V27.78 logout fix */
-body::after{content:'V27.78 HARD SCAN FIX'!important}
+/* V27.79 logout fix */
+body::after{content:'V27.79 DIRECT SCAN FIX'!important}
 .returning-account-box{
   grid-column:1/-1;
   padding:14px;
@@ -2495,7 +2495,7 @@ body::after{content:'V27.78 HARD SCAN FIX'!important}
 .returning-account-box p{margin:6px 0 0;color:#58708f;font-weight:800;line-height:1.25;font-size:.84rem}
 
 
-/* V27.78 scanner modal alignment + media fit */
+/* V27.79 scanner modal alignment + media fit */
 .scanner-dialog[open]{
   position:fixed!important;
   inset:auto!important;
