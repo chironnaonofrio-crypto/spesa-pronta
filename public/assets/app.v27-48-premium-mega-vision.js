@@ -2004,6 +2004,12 @@ function refreshVisionBrainPanel(){
 }
 
 
+
+function setScannerLiveUi(active){
+  const dlg=$('#groceryScannerDialog');
+  if(dlg) dlg.classList.toggle('scanner-live-active', !!active);
+}
+
 function ensureScannerLiveButtons(){
   const bar=document.querySelector('#groceryScannerDialog .scanner-actions');
   if(!bar || $('#liveVisionBtn')) return;
@@ -2018,6 +2024,7 @@ function ensureScannerLiveButtons(){
 function openGroceryScanner(afterShopping=false){
   const dlg=$('#groceryScannerDialog'); if(!dlg) return;
   ensureScannerLiveButtons();
+  setScannerLiveUi(false);
   dlg.dataset.afterShopping = afterShopping ? '1' : '0';
   refreshVisionBrainPanel();
   setScannerStatus(!settings.inventorySetupDone ? 'Scansiona un prodotto per volta: controlla foto, nome, formato, scadenza e stato prima di salvare.' : (afterShopping ? 'Controllo spesa: conferma la scheda, poi dai OK per passare al prossimo prodotto.' : 'Scatta o avvia la diretta. La Vision legge dettagli e ti fa correggere prima del salvataggio.'));
@@ -2025,6 +2032,7 @@ function openGroceryScanner(afterShopping=false){
   openAiPanel();
 }
 function stopLiveVisionMode(keepMessage=false){
+  setScannerLiveUi(false);
   liveScanActive=false; liveScanStableCount=0; liveScanLastHint=''; liveScanPrevSample=null; liveScanLastSpeechKey=''; liveScanReadySince=0; liveScanCooldownUntil=0; liveScanPendingResult=false; liveScanAwaitNextOk=false, visionBackendStatus=null, visionBackendStatusAt=0; stopScannerMic(true); if('speechSynthesis' in window) try{ speechSynthesis.cancel(); }catch{}
   if(liveScanTimer){ clearTimeout(liveScanTimer); liveScanTimer=null; }
   if(liveScanStream){ try{ liveScanStream.getTracks().forEach(t=>t.stop()); }catch{} liveScanStream=null; }
@@ -2090,6 +2098,7 @@ async function startLiveVisionMode(mode='smart'){
   ensureScannerLiveButtons();
   stopLiveVisionMode(true);
   renderLiveScanStage(mode==='fridge' ? 'Frigo: mostra etichetta e data; se non leggo la scadenza ti chiedo di avvicinarla.' : 'Diretta: centra etichetta e formato; se la capienza non è certa te la chiedo prima di salvare.');
+  setScannerLiveUi(true);
   const video=$('#liveScanVideo');
   if(!video) return;
   try{

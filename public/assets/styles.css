@@ -1417,3 +1417,132 @@ body{color-scheme:light;}
   color:#143f76!important;
   text-shadow:0 2px 10px rgba(255,255,255,.96),0 0 2px rgba(255,255,255,.9)!important;
 }
+
+
+/* V27.60 FINAL - scritte centrate e pulsanti live intelligenti */
+.scanner-actions-showcase .action-pill-card{
+  align-items:center!important;
+  justify-content:center!important;
+  text-align:center!important;
+  padding:10px!important;
+}
+.scanner-actions-showcase .action-pill-card .action-pill-title,
+.scanner-actions-showcase label.action-pill-card .action-pill-title,
+.scanner-actions-showcase button.action-pill-card .action-pill-title{
+  width:100%!important;
+  max-width:100%!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  text-align:center!important;
+  margin:0 auto!important;
+  padding:0!important;
+  background:transparent!important;
+  background-color:transparent!important;
+  background-image:none!important;
+  border:0!important;
+  box-shadow:none!important;
+  border-radius:0!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+  color:#143f76!important;
+  text-shadow:0 2px 10px rgba(255,255,255,.98),0 0 3px rgba(255,255,255,.94)!important;
+}
+.scanner-secondary-actions{
+  display:grid!important;
+  grid-template-columns:1fr!important;
+  gap:12px!important;
+  margin-top:12px!important;
+}
+.scanner-secondary-actions #scannerCaptureNowBtn{display:none!important}
+.secondary-pill-bg{
+  position:relative!important;
+  isolation:isolate!important;
+  min-height:78px!important;
+  border-radius:24px!important;
+  overflow:hidden!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  text-align:center!important;
+  padding:10px!important;
+  border:1px solid rgba(13,110,253,.14)!important;
+  box-shadow:0 14px 30px rgba(12,45,94,.06)!important;
+  background:#eef6ff!important;
+  color:#143f76!important;
+}
+.secondary-pill-bg::before{
+  content:''!important;
+  position:absolute!important;
+  inset:0!important;
+  z-index:1!important;
+  background:linear-gradient(180deg,rgba(255,255,255,.72),rgba(255,255,255,.18) 55%,rgba(255,255,255,.28))!important;
+  pointer-events:none!important;
+}
+.secondary-pill-bg::after{
+  content:''!important;
+  position:absolute!important;
+  inset:7px!important;
+  z-index:1!important;
+  border-radius:20px!important;
+  border:1px solid rgba(255,255,255,.55)!important;
+  pointer-events:none!important;
+}
+.secondary-pill-visual{
+  position:absolute!important;
+  inset:0!important;
+  z-index:0!important;
+  display:block!important;
+  width:100%!important;
+  height:100%!important;
+  border-radius:inherit!important;
+  overflow:hidden!important;
+  background:#eef6ff!important;
+  border:0!important;
+  box-shadow:none!important;
+}
+.secondary-pill-visual img{
+  display:block!important;
+  width:100%!important;
+  height:100%!important;
+  object-fit:cover!important;
+  object-position:center!important;
+  transform:scale(1.04)!important;
+}
+.secondary-pill-title{
+  position:relative!important;
+  z-index:3!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  text-align:center!important;
+  width:100%!important;
+  max-width:100%!important;
+  margin:0 auto!important;
+  padding:0!important;
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+  border-radius:0!important;
+  color:#143f76!important;
+  font-weight:1000!important;
+  font-size:.95rem!important;
+  line-height:1.08!important;
+  letter-spacing:.025em!important;
+  text-shadow:0 2px 10px rgba(255,255,255,.98),0 0 3px rgba(255,255,255,.94)!important;
+}
+.secondary-pill-verify{background:#fff3c8!important;border-color:rgba(218,161,0,.26)!important;color:#845900!important}
+.secondary-pill-verify .secondary-pill-title{color:#845900!important;text-shadow:0 2px 10px rgba(255,248,221,.98),0 0 3px rgba(255,255,255,.9)!important}
+.scanner-live-active .scanner-actions-showcase{display:none!important}
+.scanner-live-active .scanner-secondary-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.scanner-live-active .scanner-secondary-actions #scannerCaptureNowBtn{display:flex!important}
+@media(max-width:640px){
+  .scanner-actions-showcase .action-pill-card{min-height:98px!important;border-radius:22px!important}
+  .scanner-actions-showcase .action-pill-card .action-pill-title{font-size:.88rem!important;line-height:1.08!important}
+  .secondary-pill-bg{min-height:72px!important;border-radius:22px!important}
+  .secondary-pill-title{font-size:.86rem!important}
+}
+@media(max-width:390px){
+  .scanner-actions-showcase .action-pill-card .action-pill-title{font-size:.80rem!important}
+  .secondary-pill-title{font-size:.78rem!important}
+}
