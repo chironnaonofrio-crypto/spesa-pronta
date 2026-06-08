@@ -612,6 +612,7 @@ function init(){
   applyLang();
   ensureSeedVisionMemory();
   render();
+  bindReopenVisionButtons();
   showView(initialView());
   renderCaptcha();
   applyInlineImages();
@@ -978,6 +979,24 @@ function bindCloudPanel(){
   $('#cloudSettingsBtn')?.addEventListener('click', () => { closeCloudPanel(); showView('settings'); });
 }
 
+
+function bindReopenVisionButtons(){
+  if(document.body?.dataset.reopenVisionBound === '1') return;
+  if(document.body) document.body.dataset.reopenVisionBound = '1';
+
+  const handler = (e) => {
+    const btn = e.target?.closest?.('#reopenVisionCheckBtn,#reopenVisionCheckBtn2,.vision-verify-btn');
+    if(!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    reopenVisionCheck();
+  };
+
+  document.addEventListener('click', handler, true);
+  $('#reopenVisionCheckBtn')?.addEventListener('click', (e)=>{ e.preventDefault(); reopenVisionCheck(); });
+  $('#reopenVisionCheckBtn2')?.addEventListener('click', (e)=>{ e.preventDefault(); reopenVisionCheck(); });
+}
+
 function bind(){
   $all('.nav-item').forEach(b => b.addEventListener('click', () => showView(b.dataset.view)));
   $('#mobileMenuBtn')?.addEventListener('click', () => { closeLangMenu?.(); toggleMobileMenu(true); });
@@ -987,6 +1006,7 @@ function bind(){
   $('#languageSelect')?.addEventListener('change', e => { settings.lang=e.target.value; saveAll(); applyLang(); render(); });
   bindLanguagePicker();
   bindCloudPanel();
+  bindReopenVisionButtons();
   $('#settingsLanguage').addEventListener('change', e => { settings.lang=e.target.value; saveAll(); applyLang(); render(); });
   $('#searchInput').addEventListener('input', e => { searchTerm=e.target.value.toLowerCase(); renderProducts(); });
   $('#categorySelect').addEventListener('change', e => { categoryFilter=e.target.value; renderProducts(); });
@@ -1775,7 +1795,8 @@ function reopenVisionCheck(){
   settings.inventoryUpdatedAt = Date.now();
   saveAll();
   render();
-  openGroceryScanner(true);
+  toast('Apro Scansione Pro ✅');
+  setTimeout(() => openGroceryScanner(true), 60);
 }
 
 function shoppingDone(){ openGroceryScanner(true); }

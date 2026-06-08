@@ -1,6 +1,6 @@
 {
   "name": "spesa-pronta-v27-cloud",
-  "version": "27.92.0",
+  "version": "27.93.0",
   "private": true,
   "description": "Spesa Pronta frontend + backend cloud Express",
   "main": "server.js",
