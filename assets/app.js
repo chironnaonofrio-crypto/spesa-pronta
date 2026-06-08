@@ -428,6 +428,8 @@ function pushLearningAudit(event={}){
 function scanLearningAuditBadges(result={}, confirmed=false){
   const out=[];
   if(result.cloudVision) out.push({cls:'teacher', text:'Nuovo prodotto: docente usato'});
+  if(result.teacherSkipped) out.push({cls:'server', text:'Docente non usato: prodotto già imparato'});
+  if(result.learningReliability) out.push({cls:'server', text:'Affidabilità memoria: '+String(result.learningReliability)});
   if(result.localFirst || result.autonomousVision || result.memoryVision || result.serverMemoryVision) out.push({cls:'server', text:'Riconosciuto da memoria locale/server'});
   if(result.teacherInactive) out.push({cls:'off', text:'Docente OpenAI non attivo'});
   if(confirmed) out.push({cls:'updated', text:'Prodotto confermato: memoria aggiornata'});
@@ -1762,60 +1764,84 @@ function detectDamageState(text=''){
   if(/congelat|ghiacciat/.test(n)) return 'Congelato';
   return '';
 }
+
+function categoryTextEvidence(result={}){
+  return [result.productName,result.brand,result.variant,result.productType,result.packageType,result.category,result.estimatedSize,result.sizeDetectedRaw,result.unit,...(result.detectedText||[]),...(result.visibleEvidence||[])].filter(Boolean).join(' ');
+}
+function scoreRealityCategoryFromText(text='', fallback='food'){
+  const n=normalizeLearnText(text||'');
+  const scores={};
+  const evidence=[];
+  const add=(cat,pts,rx,label)=>{ if(rx.test(n)){ scores[cat]=(scores[cat]||0)+pts; evidence.push(label||cat); } };
+  if(!n) return {category:fallback||'food', score:0, evidence:[]};
+  add('water',9,/(acqua|minerale|naturale|frizzante|oligominerale|san benedetto|sant anna|levissima|lete|uliveto|ferrarelle|rocchetta|vera)/,'acqua');
+  add('soft_drinks',8,/(coca cola|coca-cola|pepsi|fanta|sprite|cola|aranciata|gassata|bibita|energy drink|red bull|tonica|chinotto)/,'bibita');
+  add('juice',8,/(succo|nettare|the freddo|t[eè] freddo|estat[h]?e|bevanda alla frutta|spremuta)/,'succo/tea');
+  add('milk_drinks',7,/(latte|bevanda al latte|latte intero|parzialmente scremato|scremato|latte uht|milk drink)/,'latte');
+  add('yogurt',9,/(yogurt|yoghurt|greco|skyr|kefir|ayo kefir)/,'yogurt/kefir');
+  add('dairy',8,/(mozzarella|formaggio|parmigiano|grana|ricotta|burro|panna|mascarpone|stracchino|latticini|galbanino|philadelphia)/,'latticini');
+  add('sauces_condiments',12,/(pesto|salsa|bbq|barbecue|ketchup|maionese|senape|condimento|sugo|passata|rag[uù]|pat[eè]|hummus|besciamella|dado|brodo|glassa|aceto|olio evo|olio extra vergine)/,'salsa/condimento');
+  add('spreads',9,/(nutella|crema spalmabile|crema nocciole|crema al pistacchio|spalmabile|burro d arachidi|miele)/,'crema spalmabile');
+  add('preserves_jars',7,/(marmellata|confettura|tonno|legumi|fagioli|ceci|piselli|mais|pelati|conserva|sottolio|sottaceto|barattolo|vasetto|vetro|lattina alimentare)/,'conserva/barattolo');
+  add('chocolate_sweets',9,/(cioccolat|cacao|tavoletta|pralina|merendina|caramell|dolce|cremino|biscotto farcito|torta|crostatina)/,'dolce/cioccolata');
+  add('pasta_rice',9,/(pasta|spaghetti|penne|fusilli|rigatoni|riso|risotto|farina|semola|cous cous|gnocchi|lasagne)/,'pasta/riso');
+  add('bakery',8,/(pane|panino|piadina|cracker|grissini|taralli|fette biscottate|cornetto|brioche|forno|toast)/,'pane/forno');
+  add('breakfast_snacks',7,/(biscott|cereali|snack|patatine|pop corn|barretta|wafer|corn flakes|colazione|chips|crackers snack)/,'snack/colazione');
+  add('frozen',9,/(surgelat|congelat|gelato|pizza surgelata|minestrone surgelato|frozen|findus)/,'surgelato');
+  add('meat_deli',9,/(prosciutto|salame|mortadella|wurstel|carne|pollo|hamburger|salsiccia|bresaola|speck|tacchino)/,'carne/salumi');
+  add('fish',9,/(pesce|salmone|merluzzo|gamber|tonno fresco|orata|branzino|frutti di mare|sgombro)/,'pesce');
+  add('fruit',8,/(mela|banana|arancia|limone|fragola|uva|pera|frutta|kiwi|pesca|albicocca|ciliegia)/,'frutta');
+  add('veg',8,/(insalata|lattuga|pomodoro|zucchina|melanzana|verdura|ortaggi|carota|cipolla|patata|broccoli|spinaci)/,'verdura');
+  add('pets',9,/(crocchette|umido cane|umido gatto|lettiera|mangime|pet food|cane|gatto|monge|trainer)/,'animali');
+  add('house',9,/(detersivo|ammorbidente|candeggina|sgrassatore|pulizia|lavatrice|piatti|scottex|carta igienica|sacchetti|casa|napisan|ace)/,'casa/pulizia');
+  add('personal_care',9,/(shampoo|bagnoschiuma|sapone|dentifricio|deodorante|igiene|crema corpo|assorbenti|rasoio)/,'igiene persona');
+  add('pharmacy',9,/(farmaco|medicina|tachipirina|oki|brufen|cerotti|disinfettante|farmacia|integratore|paracetamolo)/,'farmacia');
+  add('aquarium',9,/(acquario|pesci|mangime pesci|biocondizionatore|filtro acquario|tetra|sera)/,'acquario');
+  // confezione e stato fisico danno punti solo di supporto, non comandano da soli
+  add('drinks',2,/(bevanda|drink|bottiglia|lattina|brick|brik|liquido da bere)/,'confezione bevanda');
+  const solidCats=['yogurt','dairy','sauces_condiments','spreads','preserves_jars','chocolate_sweets','pasta_rice','bakery','breakfast_snacks','frozen','meat_deli','fish','fruit','veg'];
+  const drinkCats=['water','soft_drinks','juice','milk_drinks','drinks'];
+  const solidScore=solidCats.reduce((a,c)=>a+(scores[c]||0),0);
+  const drinkScore=drinkCats.reduce((a,c)=>a+(scores[c]||0),0);
+  // salsa/pesto/yogurt/cioccolata non sono bevande anche se in bottiglia o liquidi/cremosi
+  if(solidScore>=7 && (scores.drinks||0)<=3){ delete scores.drinks; }
+  if((scores.sauces_condiments||0)>0){ scores.preserves_jars=(scores.preserves_jars||0)*0.45; scores.drinks=0; }
+  if((scores.yogurt||0)>0){ scores.milk_drinks=(scores.milk_drinks||0)*0.45; scores.drinks=0; }
+  if((scores.spreads||0)>0){ scores.preserves_jars=(scores.preserves_jars||0)*0.55; scores.drinks=0; }
+  let best=fallback||'food', bestScore=-1;
+  for(const [cat,score] of Object.entries(scores)){ if(score>bestScore){ best=cat; bestScore=score; } }
+  if(bestScore<4) best=fallback||'food';
+  return {category:best, score:Math.max(0,bestScore), evidence:[...new Set(evidence)].slice(0,6), solidScore, drinkScore};
+}
 function inferRealityCategoryFromText(text='', currentCategory=''){
-  const n=normalizeLearnText(text);
-  if(!n) return currentCategory || 'food';
-  const has=(rx)=>rx.test(n);
-  let cat='';
-  if(has(/\b(acqua|minerale|naturale|frizzante|bottiglia d acqua|san benedetto|sant anna|levissima|lete|uliveto|ferrarelle|rocchetta|vera)\b/)) cat='water';
-  else if(has(/\b(coca cola|pepsi|fanta|sprite|cola|aranciata|gassata|bibita|energy drink|red bull|tonica|chinotto)\b/)) cat='soft_drinks';
-  else if(has(/\b(succo|nettare|the freddo|t[eè] freddo|estat[h]?e|bevanda alla frutta|spremuta)\b/)) cat='juice';
-  else if(has(/\b(latte|bevanda al latte|kefir da bere|latte intero|parzialmente scremato)\b/)) cat='milk_drinks';
-  else if(has(/\b(yogurt|yoghurt|greco|skyr|kefir)\b/)) cat='yogurt';
-  else if(has(/\b(mozzarella|formaggio|parmigiano|grana|ricotta|burro|panna|mascarpone|stracchino|latticini)\b/)) cat='dairy';
-  else if(has(/\b(cioccolat|cacao|tavoletta|pralina|merendina|caramell|dolce|cremino)\b/)) cat='chocolate_sweets';
-  else if(has(/\b(nutella|crema spalmabile|crema nocciole|crema pistacchio|spalmabile)\b/)) cat='spreads';
-  else if(has(/\b(pesto|salsa|bbq|barbecue|ketchup|maionese|senape|condimento|sugo|passata|rag[uù]|pat[eè]|hummus)\b/)) cat='sauces_condiments';
-  else if(has(/\b(marmellata|confettura|tonno|legumi|fagioli|ceci|piselli|mais|pelati|conserva|sottolio|sottaceto|barattolo|vasetto)\b/)) cat='preserves_jars';
-  else if(has(/\b(pasta|spaghetti|penne|fusilli|rigatoni|riso|risotto|farina|semola|cous cous|gnocchi)\b/)) cat='pasta_rice';
-  else if(has(/\b(pane|panino|piadina|cracker|grissini|taralli|fette biscottate|cornetto|brioche|forno)\b/)) cat='bakery';
-  else if(has(/\b(biscott|cereali|snack|patatine|pop corn|barretta|wafer|corn flakes|colazione)\b/)) cat='breakfast_snacks';
-  else if(has(/\b(surgelat|congelat|gelato|pizza surgelata|minestrone surgelato|frozen)\b/)) cat='frozen';
-  else if(has(/\b(prosciutto|salame|mortadella|wurstel|carne|pollo|hamburger|salsiccia|bresaola|speck)\b/)) cat='meat_deli';
-  else if(has(/\b(pesce|salmone|merluzzo|gamber|tonno fresco|orata|branzino|frutti di mare)\b/)) cat='fish';
-  else if(has(/\b(mela|banana|arancia|limone|fragola|uva|pera|frutta|kiwi|pesca)\b/)) cat='fruit';
-  else if(has(/\b(insalata|lattuga|pomodoro|zucchina|melanzana|verdura|ortaggi|carota|cipolla|patata|broccoli)\b/)) cat='veg';
-  else if(has(/\b(crocchette|umido cane|umido gatto|lettiera|mangime|pet food|cane|gatto)\b/)) cat='pets';
-  else if(has(/\b(detersivo|ammorbidente|candeggina|sgrassatore|pulizia|lavatrice|piatti|scottex|carta igienica|sacchetti|casa)\b/)) cat='house';
-  else if(has(/\b(shampoo|bagnoschiuma|sapone|dentifricio|deodorante|igiene|crema corpo|assorbenti)\b/)) cat='personal_care';
-  else if(has(/\b(farmaco|medicina|tachipirina|oki|brufen|cerotti|disinfettante|farmacia|integratore)\b/)) cat='pharmacy';
-  else if(has(/\b(acquario|pesci|mangime pesci|biocondizionatore|filtro acquario)\b/)) cat='aquarium';
-  else if(has(/\b(bevanda|drink|bottiglia|lattina|brick|brik|liquido da bere)\b/)) cat='drinks';
-  if(!cat) cat=currentCategory || 'food';
-  return cat;
+  return scoreRealityCategoryFromText(text,currentCategory||'food').category;
 }
 function applyRealityCategoryGuard(result={}, features=null){
   if(!result) return result;
-  const evidence=[result.productName,result.brand,result.variant,result.productType,result.packageType,result.category,result.estimatedSize,...(result.detectedText||[]),...(result.visibleEvidence||[])].join(' ');
-  const inferred=inferRealityCategoryFromText(evidence, result.category||'food');
+  const evidence=categoryTextEvidence(result);
+  const resolved=scoreRealityCategoryFromText(evidence, result.category||'food');
+  const oldCat=result.category||'';
+  if(resolved.category) result.category=resolved.category;
   const n=normalizeLearnText(evidence);
-  const beverageEvidence=/\b(acqua|bevanda|bibita|cola|aranciata|succo|t[eè] freddo|latte|drink|bottiglia da bere|lattina)\b/.test(n);
-  const solidEvidence=/\b(pesto|salsa|bbq|barbecue|cioccolat|yogurt|pasta|riso|biscott|snack|pane|formaggio|carne|salame|tonno|marmellata|barattolo|vasetto|surgelat|verdura|frutta)\b/.test(n);
-  if(inferred) result.category=inferred;
-  if(DRINK_CATEGORIES.has(result.category)){
-    result.isLiquid=true;
-    if(!result.unit || result.unit==='pz') result.unit = result.category==='soft_drinks' ? 'bt' : (result.category==='juice' ? 'conf' : 'bt');
-  }
-  if(solidEvidence && !beverageEvidence && DRINK_CATEGORIES.has(result.category)){
-    result.category=inferRealityCategoryFromText(evidence.replace(/\bbottiglia\b/g,''),'food');
+  const beverageReal=/(acqua|minerale|naturale|frizzante|cola|aranciata|bibita|succo|t[eè] freddo|latte intero|latte uht|bevanda da bere|lattina)/.test(n);
+  const notBeverage=/(pesto|salsa|bbq|barbecue|ketchup|maionese|yogurt|cioccolat|crema spalmabile|condimento|sugo|pasta|riso|snack|biscott|formaggio|barattolo|vasetto)/.test(n);
+  if(notBeverage && DRINK_CATEGORIES.has(result.category) && !beverageReal){
+    result.category=scoreRealityCategoryFromText(evidence.replace(/(bottiglia|liquido|squeeze)/g,''),'food').category;
     if(DRINK_CATEGORIES.has(result.category)) result.category='food';
-    result.isLiquid=false;
-    if(result.unit==='bt' || result.unit==='lt' || result.unit==='ml') result.unit='pz';
-    result.categoryGuardNote='Categoria corretta: non è una bevanda, sembra un prodotto alimentare/condimento.';
+  }
+  result.isLiquid=DRINK_CATEGORIES.has(result.category);
+  if(result.isLiquid){
+    if(!result.unit || result.unit==='pz') result.unit = result.category==='soft_drinks' ? 'bt' : (result.category==='juice' ? 'conf' : 'bt');
+  } else if(result.unit==='bt' && /(pesto|salsa|bbq|barbecue|condimento|yogurt|crema|barattolo|vasetto)/.test(n)){
+    result.unit=/(barattolo|vasetto|vetro|pesto|crema)/.test(n)?'vasetto':'pz';
   }
   result.categoryFamily=DRINK_CATEGORIES.has(result.category)?'beverage':(SOLID_FOOD_CATEGORIES.has(result.category)?'food':result.category);
+  result.categoryRuleSource='regole realtà v27.87';
+  result.categoryRuleEvidence=resolved.evidence||[];
+  if(oldCat && oldCat!==result.category) result.categoryGuardNote=`Categoria corretta da ${oldCat} a ${result.category}: ${resolved.evidence.join(', ')}`;
   return result;
 }
+
 function detectCategoryFromSpeech(text=''){
   return inferRealityCategoryFromText(text,'');
 }
@@ -1966,10 +1992,11 @@ function syncScanResultFromFields(el, result={}){
   if(name && !/^es\./i.test(name)) result.productName=name;
   if(brand) result.brand=brand;
   if(size) result.estimatedSize=size;
-  if(result.labelScanMerged && hasStrongCurrentLabelEvidence(result)){
+  if(hasStrongCurrentLabelEvidence(result)){
     if(trustedFromEvidence.productName && trustedFieldConflict(name, trustedFromEvidence.productName)) result.productName=trustedFromEvidence.productName;
     if(trustedFromEvidence.brand && trustedFieldConflict(brand, trustedFromEvidence.brand)) result.brand=trustedFromEvidence.brand;
     if(trustedFromEvidence.estimatedSize && (!size || /da confermare|capienza da confermare|1,5 l \/ 2 l|^0?5\s*l$/i.test(size))) result.estimatedSize=trustedFromEvidence.estimatedSize;
+    if(trustedFromEvidence.category && (!cat || trustedFieldConflict(cat, trustedFromEvidence.category))) result.category=trustedFromEvidence.category;
   }
   if(qty && Number(qty)>0) result.quantity=Number(qty);
   if(unit) result.unit=unit;
@@ -2386,8 +2413,21 @@ function markShoppingDoneToVerify(){
   addAiMessage('assistant','Ok, ho segnato la spesa come fatta ma da verificare. Quando puoi, riapri la diretta AI e controlliamo prodotto per prodotto.');
 }
 function startFridgeMode(){
-  setScannerStatus('Scansione frigo attiva: pensata per controllare prodotti mentre li riponi o li tiri fuori dal frigo. Priorità a scadenza, stato e quantità.', 'Scansione frigo attiva. Mostrami il prodotto vicino alla camera e, se puoi, porta in primo piano la zona scadenza.', true);
-  startLiveVisionMode('fridge');
+  showFridgeMaintenanceNotice();
+}
+function showFridgeMaintenanceNotice(){
+  stopLiveVisionMode(true);
+  setScannerStatus('Modalità frigo momentaneamente in manutenzione. Usa Scatta foto, Carica foto o Diretta AI per continuare la scansione prodotto.');
+  toast('Modalità frigo in manutenzione');
+  const results=$('#scannerResults');
+  if(results){
+    results.querySelectorAll('.fridge-maintenance-card').forEach(el=>el.remove());
+    const card=document.createElement('div');
+    card.className='fridge-maintenance-card';
+    card.innerHTML=`<div class="fridge-maintenance-icon">🛠️</div><div><strong>Modalità frigo in manutenzione</strong><p>Stiamo preparando un controllo frigo più intelligente. Per ora continua con Scatta foto, Carica foto o Diretta AI.</p></div>`;
+    results.prepend(card);
+  }
+  addAiMessage('assistant','Modalità frigo momentaneamente in manutenzione. Per ora possiamo continuare con Scatta foto, Carica foto o Diretta AI.');
 }
 function renderLiveScanStage(note='Metti il prodotto nel riquadro: quando è ben centrato provo a scattare da solo.'){
   const pv=$('#scannerPreview'); if(!pv) return;
@@ -2870,7 +2910,7 @@ async function analyzeGroceryDataUrl(dataUrl,fileName='photo.jpg', visualSignatu
   let result=null;
   if(localPre && localAutonomyReady(localPre)){
     const b=ensureVisionBrain(); b.localFirstDecisions=Number(b.localFirstDecisions||0)+1;
-    result=Object.assign({}, localPre, {cloudVision:false, cloudOffline:false, cloudFallback:false, localFirst:true, autonomousVision:true, reason:(localPre.reason||'')+' Autonomia locale: OpenAI non necessario per questo prodotto già imparato.'});
+    result=Object.assign({}, localPre, {cloudVision:false, cloudOffline:false, cloudFallback:false, localFirst:true, autonomousVision:true, teacherSkipped:true, reason:(localPre.reason||'')+' Autonomia locale/server: OpenAI non necessario per questo prodotto già imparato.'});
   }else{
     result=await askVisionAi(dataUrl,{stage:'product'}).catch((err)=>{ visionError=err; return null; });
     if(result && result.cloudVision) distillCloudTeacherSample(dataUrl,result);
@@ -3036,9 +3076,12 @@ function localAutonomyReady(pred={}){
   if(!pred || !pred.productName) return false;
   const count=productCountForLocal(pred.productName,pred.brand,pred.variant);
   const conf=Number(pred.confidence||0);
-  if(pred.modelVision && count>=2 && conf>=.84) return true;
-  if(pred.autonomousVision && count>=3 && conf>=.88) return true;
-  if(pred.memoryVision && count>=4 && conf>=.90) return true;
+  const specific=typeof specificProductTokens==='function' ? specificProductTokens([pred.productName,pred.brand,pred.variant].filter(Boolean).join(' ')).length>0 : String(pred.productName||'').trim().length>3;
+  // V27.87: dopo almeno 2 conferme coerenti lo stesso prodotto può lavorare local/server-first.
+  // OpenAI resta docente solo se la memoria non è abbastanza sicura o se l'etichetta attuale crea conflitto.
+  if(specific && pred.modelVision && count>=2 && conf>=.82) return true;
+  if(specific && pred.autonomousVision && count>=2 && conf>=.84) return true;
+  if(specific && pred.memoryVision && count>=2 && conf>=.86) return true;
   return false;
 }
 function compactFeatureVector(f={}){
@@ -3219,9 +3262,13 @@ function localPredictionTrustedForPrefill(pred={}){
   if(!pred || !pred.productName || isBadScanName(pred.productName)) return false;
   const count=productCountForLocal(pred.productName,pred.brand,pred.variant);
   const conf=Number(pred.confidence||0);
-  if(pred.modelVision && count>=2 && conf>=.88) return true;
-  if(pred.autonomousVision && count>=3 && conf>=.90) return true;
-  if(pred.memoryVision && count>=4 && conf>=.92) return true;
+  const specific=typeof specificProductTokens==='function' ? specificProductTokens([pred.productName,pred.brand,pred.variant].filter(Boolean).join(' ')).length>0 : String(pred.productName||'').trim().length>3;
+  // V27.87: precompilazione locale più veloce per prodotti già confermati più volte,
+  // ma solo se il nome è specifico. L'etichetta attuale, quando presente, resta l'autorità.
+  if(specific && count>=2 && conf>=.88) return true;
+  if(specific && pred.modelVision && count>=3 && conf>=.86) return true;
+  if(specific && pred.autonomousVision && count>=3 && conf>=.88) return true;
+  if(specific && pred.memoryVision && count>=3 && conf>=.90) return true;
   return false;
 }
 async function autonomousVisionGuess(dataUrl=''){
@@ -3304,35 +3351,40 @@ function titleCaseProductName(s=''){
 }
 function deriveTrustedLabelFields(extra={}){
   const raw=labelEvidenceText(extra);
+  const rawEvidence=[extra.variant,extra.productType,extra.packageType,...(Array.isArray(extra.detectedText)?extra.detectedText:[]),...(Array.isArray(extra.visibleEvidence)?extra.visibleEvidence:[])].filter(Boolean).join(' · ');
   const n=normalizeLearnText(raw);
+  const ev=normalizeLearnText(rawEvidence || raw);
   const out={};
-  if(extra.brand && String(extra.brand).trim()) out.brand=String(extra.brand).trim();
-  else if(/\bselex\b/.test(n)) out.brand='Selex';
-  else if(/\barborea\b/.test(n)) out.brand='Arborea';
-  else if(/\bsaper(?:e)?\s+di\s+sapori\b/.test(n)) out.brand='Saper di Sapori';
-  else if(/\bbarilla\b/.test(n)) out.brand='Barilla';
-  else if(/\bmutti\b/.test(n)) out.brand='Mutti';
-  else if(/\bmulino\s+bianco\b/.test(n)) out.brand='Mulino Bianco';
-  else if(/\bgalbani\b/.test(n)) out.brand='Galbani';
-  else if(/\bgranarolo\b/.test(n)) out.brand='Granarolo';
-  else if(/\bparmalat\b/.test(n)) out.brand='Parmalat';
+  // V27.87: l'etichetta/OCR attuale è autorità. Brand/name precompilati da memoria locale non possono vincere sul testo appena letto.
+  if(/\bselex\b/.test(ev)) out.brand='Selex';
+  else if(/\bsaper(?:e)?\s+di\s+sapori\b/.test(ev) || /\bsapere\s+sapori\b/.test(ev) || /\bsaperi\s+di\s+sapori\b/.test(ev)) out.brand='Saper di Sapori';
+  else if(/\barborea\b/.test(ev)) out.brand='Arborea';
+  else if(/\bpisti\b|\bpist[iì]\b/.test(ev)) out.brand='Pistì';
+  else if(/\bbarilla\b/.test(ev)) out.brand='Barilla';
+  else if(/\bmutti\b/.test(ev)) out.brand='Mutti';
+  else if(/\bmulino\s+bianco\b/.test(ev)) out.brand='Mulino Bianco';
+  else if(/\bgalbani\b/.test(ev)) out.brand='Galbani';
+  else if(/\bgranarolo\b/.test(ev)) out.brand='Granarolo';
+  else if(/\bparmalat\b/.test(ev)) out.brand='Parmalat';
+  else if(extra.brand && String(extra.brand).trim()) out.brand=String(extra.brand).trim();
   let name='';
-  const pieces=raw.split(/[·\n\|•]+/).map(x=>x.trim()).filter(Boolean);
+  const pieces=(rawEvidence||raw).split(/[·\n\|•]+/).map(x=>x.trim()).filter(Boolean);
   const foodRx=/(pesto|salsa|bbq|barbecue|ketchup|maionese|senape|yogurt|kefir|cioccolat|crema|pistacchi|pistacchio|latte|succo|acqua|pasta|riso|biscott|tonno|passata|sugo|condimento|marmellata|confettura)/i;
   const badPiece=/^(marca|testo|etichetta|confezione|bottiglia|barattolo|vasetto|formato|contenuto|prodotto|visibile|frontale|squeeze|tappo|colore|immagine)/i;
   const candidates=pieces.filter(p=>foodRx.test(p) && !badPiece.test(p) && !/^\d/.test(p));
-  if(extra.productName && !isBadScanName(extra.productName)) name=String(extra.productName).trim();
-  if(!name && /\bpesto\b/.test(n) && /\bpistacchi?\b/.test(n)) name='Pesto di Pistacchi';
-  if(!name && /\bsalsa\b/.test(n) && /\bbbq\b/.test(n)) name='Salsa BBQ'+(/\bsqueeze\b/.test(n)?' squeeze':'');
-  if(!name && /\bkefir\b/.test(n) && /\bmirtill/.test(n)) name='Kefir mirtillo in pezzi';
+  if(/\bsalsa\b/.test(ev) && /\bbbq\b/.test(ev)) name='Salsa BBQ'+(/\bsqueeze\b/.test(ev)?' squeeze':'');
+  else if(/\bpesto\b/.test(ev) && /\bpistacchi?\b/.test(ev)) name='Pesto di Pistacchi';
+  else if(/\bcondimento\b/.test(ev) && /\bpistacchi?\b/.test(ev)) name='Condimento a base di pistacchio';
+  else if(/\bkefir\b/.test(ev) && /\bmirtill/.test(ev)) name='Kefir mirtillo in pezzi';
+  else if(extra.productName && !isBadScanName(extra.productName) && (!ev || normalizeLearnText(rawEvidence).includes(normalizeLearnText(extra.productName)) || candidates.length===0)) name=String(extra.productName).trim();
   if(!name && candidates.length){
     name=candidates.sort((a,b)=>a.length-b.length)[0];
-    name=name.replace(/^(selex|arborea|saper(?:e)? di sapori|barilla|mutti)\s+/i,'').trim();
+    name=name.replace(/^(selex|arborea|saper(?:e)? di sapori|saperi di sapori|sapere sapori|barilla|mutti|pist[iì])\s+/i,'').trim();
   }
   if(name) out.productName=titleCaseProductName(name);
   const fmt=strictLabelFormatFromEvidence(extra);
   if(fmt) out.estimatedSize=fmt;
-  const cat=inferRealityCategoryFromText([raw,out.productName,out.brand].filter(Boolean).join(' '), extra.category||'');
+  const cat=inferRealityCategoryFromText([rawEvidence||raw,out.productName,out.brand].filter(Boolean).join(' '), extra.category||'');
   if(cat) out.category=cat;
   const exp=explicitExpiryFromEvidence(extra);
   if(exp) out.expiryDate=exp;
@@ -3357,7 +3409,9 @@ function applyTrustedLabelFieldsToExtra(base={}, extra={}){
 }
 
 function repairStaleScanFieldsFromLabelEvidence(el,result={}){
-  if(!el || !result?.labelScanMerged || !hasStrongCurrentLabelEvidence(result)) return result;
+  // V27.87: ripara anche scansioni prodotto/etichetta non marcate labelScanMerged.
+  // Se OCR/etichetta attuale legge nome/marca reali, quei dati vincono su memoria/modello locale.
+  if(!el || !hasStrongCurrentLabelEvidence(result)) return result;
   const trusted=deriveTrustedLabelFields(result);
   const write=(sel,val,force=false)=>{
     const node=el.querySelector(sel); const v=String(val||'').trim(); if(!node || !v) return;
@@ -3632,6 +3686,59 @@ function visionApiBase(){
   if(raw === '/' || raw === '.') return '/api';
   return raw.replace(/\/$/, '');
 }
+
+async function askServerGlobalMemoryForLocalPrediction(pred={}){
+  try{
+    if(!pred || !pred.productName || isBadScanName(pred.productName)) return null;
+    const count=productCountForLocal(pred.productName,pred.brand,pred.variant);
+    const conf=Number(pred.confidence||0);
+    if(count<1 && conf<.72) return null;
+    const endpoint=visionApiBase();
+    const payload={productName:pred.productName||'', brand:pred.brand||'', size:pred.estimatedSize||'', detectedText:[pred.variant,pred.productType,pred.packageType,pred.bestMatchName,pred.reason].filter(Boolean).join(' '), householdId:settings.householdId};
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),1600);
+    const res=await fetch(`${endpoint}/ai/global-products/match`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token||''}`},body:JSON.stringify(payload),signal:controller.signal});
+    clearTimeout(timer);
+    if(!res.ok) return null;
+    const data=await res.json().catch(()=>null);
+    const m=data?.match;
+    if(!m) return null;
+    const confirmations=Number(m.confirmations||0);
+    const reliable=!!m.teacherBypassEligible || confirmations>=2 || m.reliability==='media' || m.reliability==='alta';
+    if(!reliable) return null;
+    const serverName=String(m.productName||'').trim();
+    const serverBrand=String(m.brand||'').trim();
+    const txt=[pred.productName,pred.brand,pred.variant,pred.bestMatchName].join(' ');
+    const predTokens=typeof specificProductTokens==='function' ? specificProductTokens(txt) : [];
+    const memTokens=typeof specificProductTokens==='function' ? specificProductTokens([serverName,serverBrand,m.category].join(' ')) : [];
+    if(predTokens.length && memTokens.length && typeof tokenOverlapCount==='function' && tokenOverlapCount(predTokens,memTokens)===0) return null;
+    return Object.assign({}, pred, {
+      productName:serverName || pred.productName,
+      brand:serverBrand || pred.brand || '',
+      estimatedSize:m.format || pred.estimatedSize || '',
+      category:m.category || pred.category || 'food',
+      confidence:Math.max(Number(pred.confidence||0), Math.min(.94, .78 + confirmations*.04)),
+      memoryVision:true,
+      serverMemoryVision:true,
+      localFirst:true,
+      cloudVision:false,
+      cloudOffline:false,
+      cloudFallback:false,
+      teacherSkipped:true,
+      teacherSkipReason:m.matchReason ? `Prodotto riconosciuto da memoria server (${m.matchReason}) con ${confirmations} conferme: OpenAI non necessario.` : `Prodotto riconosciuto da memoria server con ${confirmations} conferme: OpenAI non necessario.`,
+      serverMatchReason:m.matchReason||'',
+      serverMatchedTokens:m.matchedTokens||[],
+      fieldConfidence:m.fieldConfidence||{},
+      learningReliability:m.reliability||'',
+      teacherBypassEligible:!!m.teacherBypassEligible,
+      bestMatchName:serverName || pred.productName,
+      bestMatchSource:'memoria server globale',
+      bestMatchScore:Math.max(Number(pred.bestMatchScore||0), Math.min(98, 82+confirmations*4)),
+      reason:`Memoria server globale: prodotto già confermato ${confirmations} volte. OpenAI usato solo se serve.`
+    });
+  }catch(_){ return null; }
+}
+
 async function askVisionAi(dataUrl, opts={}){
   const st=await getVisionBackendStatus(false);
   if(!(st.connected && st.visionReady)){

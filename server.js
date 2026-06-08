@@ -252,15 +252,97 @@ function updateGlobalBrain({message='', action='', productName='', category='', 
   brain.updatedAt=Date.now();
 }
 
+
+function productLearningStopTokens(){
+  return new Set(['prodotto','marca','formato','tipo','confezione','barattolo','vasetto','bottiglia','squeeze','etichetta','visibile','frontale','con','senza','di','del','della','delle','alla','allo','un','una','il','lo','la','gli','le','ml','g','gr','grammi','l','lt','pz','conf','pack']);
+}
+function productCoreTokens(...parts){
+  const stop=productLearningStopTokens();
+  return [...new Set(normalizeText(parts.filter(Boolean).join(' ')).split(/[^a-z0-9]+/).filter(t=>t.length>2 && !stop.has(t)))];
+}
+
+function productStrongTokens(...parts){
+  // V27.89: token identità più severi. Esclude parole di confezione/generiche così il server non impara "vasetto" come identità prodotto.
+  const generic=new Set(['salsa','pesto','crema','condimento','prodotto','alimento','gusto','base','tipo','squeeze','barattolo','vasetto','bottiglia','tappo','etichetta','frontale','verde','rosso','nero','bianco','classico','originale','pezzi','pezzo']);
+  return productCoreTokens(...parts).filter(t=>!generic.has(t) && t.length>2);
+}
+function tokenJaccard(a=[],b=[]){
+  const A=new Set(a||[]), B=new Set(b||[]); if(!A.size && !B.size) return 0;
+  let inter=0; for(const t of A){ if(B.has(t)) inter++; }
+  const union=new Set([...A,...B]).size||1; return inter/union;
+}
+function brandLooksConflicting(a='',b=''){
+  const A=productStrongTokens(a), B=productStrongTokens(b);
+  if(!A.length || !B.length) return false;
+  const overlap=tokenJaccard(A,B);
+  return overlap===0 && normalizeText(a)!==normalizeText(b);
+}
+function productIdentityConflict(existing={}, incoming={}){
+  // V27.89: evita fusioni tipo pesto/salsa/yogurt quando la memoria ha una categoria o marca diversa.
+  const eBrand=existing.brand||'', iBrand=incoming.brand||'';
+  if(brandLooksConflicting(eBrand,iBrand)) return {conflict:true, reason:'brand_conflict'};
+  const eName=existing.productName||'', iName=incoming.productName||'';
+  const eTokens=productStrongTokens(eName, existing.evidenceTokens?.join?.(' ')||'');
+  const iTokens=productStrongTokens(iName, incoming.visibleEvidence?.join?.(' ')||'', incoming.detectedText?.join?.(' ')||'');
+  const nameOverlap=tokenJaccard(eTokens,iTokens);
+  const eFamily=productCategoryFamily(existing.category||''), iFamily=productCategoryFamily(incoming.category||incoming.productMemory?.category||'');
+  if(eFamily && iFamily && eFamily!==iFamily && nameOverlap<0.34) return {conflict:true, reason:'category_family_conflict'};
+  if(eTokens.length>=2 && iTokens.length>=2 && nameOverlap===0 && !normalizeText(eName).includes(normalizeText(iName)) && !normalizeText(iName).includes(normalizeText(eName))) return {conflict:true, reason:'identity_tokens_conflict'};
+  return {conflict:false, reason:''};
+}
+function voteConfidence(map={}, topValue=''){
+  const entries=Object.entries(map||{}); const total=entries.reduce((s, [,v])=>s+Number(v||0),0);
+  if(!total || !topValue) return 0;
+  return Number((Number(map[topValue]||0)/total).toFixed(3));
+}
+function updateFieldConfidence(record={}){
+  record.fieldConfidence=record.fieldConfidence||{};
+  for(const [field,votes] of [['productName',record.nameVotes],['brand',record.brandVotes],['format',record.formatVotes],['category',record.categoryVotes],['unit',record.unitVotes]]){
+    const top=field==='format'?record.format:record[field];
+    record.fieldConfidence[field]=voteConfidence(votes||{},top||'');
+  }
+  record.teacherBypassEligible=Number(record.confirmations||0)>=2 && (record.reliability==='media'||record.reliability==='alta'||(record.fieldConfidence.productName>=0.66 && (!record.brand||record.fieldConfidence.brand>=0.55)));
+  return record;
+}
+
+function productCategoryFamily(category=''){
+  const c=normalizeText(category);
+  if(['water','soft_drinks','juice','milk_drinks','drinks'].includes(c)) return 'drinks';
+  if(['yogurt','dairy','milk_drinks'].includes(c)) return 'dairy';
+  if(['sauces_condiments','spreads','preserves_jars'].includes(c)) return 'condiments';
+  if(['chocolate_sweets','breakfast_snacks','bakery'].includes(c)) return 'snacks';
+  if(['house','personal_care','pets','pharmacy','aquarium'].includes(c)) return c;
+  return c || 'food';
+}
 function productMemoryGlobalKey(productName='', brand='', size=''){
-  return normalizeText([productName, brand, size].filter(Boolean).join(' ')).slice(0,140) || normalizeText(productName).slice(0,80);
+  const brandKey=normalizeText(brand).replace(/[^a-z0-9]+/g,' ').trim();
+  const tokens=productCoreTokens(productName).filter(t=>!['salsa','pesto','crema','condimento','base'].includes(t) || productCoreTokens(productName).length<=2).slice(0,7);
+  const nameKey=(tokens.join(' ') || normalizeText(productName)).slice(0,90);
+  const sizeKey=normalizeText(size).replace(/\s+/g,' ').trim().slice(0,24);
+  return normalizeText([brandKey,nameKey,sizeKey].filter(Boolean).join(' ')).slice(0,150) || normalizeText(productName).slice(0,80);
+}
+function productCanonicalKey(productName='', brand=''){
+  const brandKey=normalizeText(brand).replace(/[^a-z0-9]+/g,' ').trim();
+  const tokens=productCoreTokens(productName).slice(0,7).join(' ');
+  return normalizeText([brandKey,tokens].filter(Boolean).join(' ')).slice(0,130) || normalizeText(productName).slice(0,80);
+}
+function voteMapAdd(map={}, value=''){
+  const v=String(value||'').trim();
+  if(!v) return map||{};
+  map=map||{}; map[v]=Number(map[v]||0)+1; return map;
+}
+function voteMapTop(map={}){
+  return Object.entries(map||{}).sort((a,b)=>Number(b[1])-Number(a[1]))[0]?.[0] || '';
 }
 function compactGlobalProductRecord(record={}){
   return {
-    key:record.key||'', productName:record.productName||'', brand:record.brand||'', format:record.format||record.size||'', category:record.category||'',
-    confirmations:Number(record.confirmations||0), teacherHelp:Number(record.teacherHelp||0), localRecognitions:Number(record.localRecognitions||0),
+    key:record.key||'', canonicalKey:record.canonicalKey||'', productName:record.productName||'', brand:record.brand||'', format:record.format||record.size||'', category:record.category||'', categoryFamily:record.categoryFamily||productCategoryFamily(record.category||''),
+    confirmations:Number(record.confirmations||0), uniqueHouseholds:Object.keys(record.households||{}).length, teacherHelp:Number(record.teacherHelp||0), localRecognitions:Number(record.localRecognitions||0),
     confidence:Number(record.confidence||0), reliability:record.reliability||'bassa', updatedAt:record.updatedAt||0,
-    allergens:Array.isArray(record.allergens)?record.allergens.slice(0,10):[], ingredients:Array.isArray(record.ingredients)?record.ingredients.slice(0,12):[]
+    aliases:Array.isArray(record.aliases)?record.aliases.slice(0,8):[], brands:Array.isArray(record.brands)?record.brands.slice(0,8):[], formats:Object.keys(record.formatVotes||{}).slice(0,8),
+    evidenceTokens:Array.isArray(record.evidenceTokens)?record.evidenceTokens.slice(0,18):[],
+    allergens:Array.isArray(record.allergens)?record.allergens.slice(0,10):[], ingredients:Array.isArray(record.ingredients)?record.ingredients.slice(0,12):[],
+    fieldConfidence:record.fieldConfidence||{}, teacherBypassEligible:!!record.teacherBypassEligible, learningQuality:record.learningQuality||null, conflictRejects:Array.isArray(record.conflictRejects)?record.conflictRejects.slice(0,5):[]
   };
 }
 function updateGlobalLearningAudit(event={}){
@@ -277,36 +359,73 @@ function upsertGlobalProductMemory(confirmed={}){
   if(!name) return null;
   const brand=String(confirmed.brand||'').trim();
   const size=String(confirmed.size||confirmed.format||confirmed.estimatedSize||'').trim();
+  const canonicalKey=productCanonicalKey(name, brand);
   const key=productMemoryGlobalKey(name, brand, size);
   const gpm=db.assistantBrain.globalProductMemory;
-  const old=gpm.products[key]||{key, productName:name, brand, format:size, category:'', confirmations:0, teacherHelp:0, localRecognitions:0, sources:{}, firstSeenAt:Date.now(), updatedAt:0, confidence:0, allergens:[], ingredients:[], colors:[]};
-  old.productName=name || old.productName;
-  old.brand=brand || old.brand || '';
-  old.format=size || old.format || '';
-  old.category=confirmed.category || confirmed.productMemory?.category || old.category || '';
+  gpm.products = gpm.products || {};
+  let old=gpm.products[key];
+  if(!old){
+    // V27.89: se esiste già la stessa identità prodotto, unisci solo se non ci sono conflitti reali di marca/categoria/token.
+    const sameCanonical=Object.values(gpm.products).find(p=>p.canonicalKey===canonicalKey && canonicalKey && canonicalKey.length>3);
+    if(sameCanonical){
+      const conflict=productIdentityConflict(sameCanonical, confirmed);
+      if(!conflict.conflict && (!size || sameCanonical.format===size || (sameCanonical.aliases||[]).some(a=>normalizeText(a)===normalizeText(name)))) old=sameCanonical;
+      else {
+        sameCanonical.conflictRejects=sameCanonical.conflictRejects||[];
+        sameCanonical.conflictRejects.unshift({at:Date.now(), reason:conflict.reason, incoming:{productName:name,brand,size,category:confirmed.category||''}});
+        sameCanonical.conflictRejects=sameCanonical.conflictRejects.slice(0,30);
+      }
+    }
+  }
+  old=old||{key, canonicalKey, productName:name, brand, format:size, category:'', categoryFamily:'', confirmations:0, teacherHelp:0, localRecognitions:0, sources:{}, firstSeenAt:Date.now(), updatedAt:0, confidence:0, allergens:[], ingredients:[], colors:[], aliases:[], brands:[], households:{}, formatVotes:{}, categoryVotes:{}, unitVotes:{}, evidenceTokens:[]};
+  old.key=old.key||key; old.canonicalKey=old.canonicalKey||canonicalKey;
+  old.aliases=[...new Set([...(old.aliases||[]), name].filter(Boolean))].slice(0,25);
+  old.brands=[...new Set([...(old.brands||[]), brand].filter(Boolean))].slice(0,20);
+  old.productName=voteMapTop(voteMapAdd(old.nameVotes||{}, name)) || name || old.productName; old.nameVotes=voteMapAdd(old.nameVotes||{}, name);
+  old.brand=voteMapTop(voteMapAdd(old.brandVotes||{}, brand)) || brand || old.brand || '';
+  old.formatVotes=voteMapAdd(old.formatVotes||{}, size); old.format=voteMapTop(old.formatVotes)||size||old.format||'';
+  old.categoryVotes=voteMapAdd(old.categoryVotes||{}, confirmed.category || confirmed.productMemory?.category || ''); old.category=voteMapTop(old.categoryVotes)||old.category||''; old.categoryFamily=productCategoryFamily(old.category);
+  old.unitVotes=voteMapAdd(old.unitVotes||{}, confirmed.unit||''); old.unit=voteMapTop(old.unitVotes)||old.unit||'';
+  // V27.89: conserva esempi confermati minimali per audit/apprendimento senza salvare foto pesanti.
+  old.confirmedExamples=Array.isArray(old.confirmedExamples)?old.confirmedExamples:[];
+  old.confirmedExamples.unshift({at:Date.now(), productName:name, brand, size, category:confirmed.category||'', unit:confirmed.unit||'', source:confirmed.cloudVision?'openai_teacher':(confirmed.memoryVision||confirmed.localFirst?'server_memory':'user_confirmed'), confidence:confirmed.confidence||null, householdHash:confirmed.householdId?hash(String(confirmed.householdId)).slice(0,12):''});
+  old.confirmedExamples=old.confirmedExamples.slice(0,40);
   old.confirmations=Number(old.confirmations||0)+1;
   old.teacherHelp=Number(old.teacherHelp||0)+(confirmed.cloudVision?1:0);
   old.localRecognitions=Number(old.localRecognitions||0)+(confirmed.autonomousVision||confirmed.memoryVision||confirmed.localFirst?1:0);
+  old.households=old.households||{}; if(confirmed.householdId) old.households[String(confirmed.householdId)]={count:Number(old.households[String(confirmed.householdId)]?.count||0)+1,lastAt:Date.now()};
   old.sources=old.sources||{};
   old.sources.userConfirmations=Number(old.sources.userConfirmations||0)+1;
   if(confirmed.cloudVision) old.sources.openAiTeacher=Number(old.sources.openAiTeacher||0)+1;
   if(confirmed.autonomousVision||confirmed.memoryVision||confirmed.localFirst) old.sources.localServer=Number(old.sources.localServer||0)+1;
   const pm=confirmed.productMemory||{};
   const merged=(arr1=[], arr2=[])=>[...new Set([...(Array.isArray(arr1)?arr1:[]), ...(Array.isArray(arr2)?arr2:[])].map(x=>String(x||'').trim()).filter(Boolean))];
-  old.ingredients=merged(old.ingredients, pm.ingredients||confirmed.ingredients||[]).slice(0,40);
-  old.allergens=merged(old.allergens, pm.allergens||confirmed.allergens||[]).slice(0,25);
-  old.colors=merged(old.colors, pm.visualAppearance?.colors||confirmed.colors||[]).slice(0,16);
-  old.visibleEvidence=merged(old.visibleEvidence, confirmed.visibleEvidence||[]).slice(0,20);
+  old.ingredients=merged(old.ingredients, pm.ingredients||confirmed.ingredients||[]).slice(0,60);
+  old.allergens=merged(old.allergens, pm.allergens||confirmed.allergens||[]).slice(0,40);
+  old.colors=merged(old.colors, pm.visualAppearance?.colors||confirmed.colors||[]).slice(0,24);
+  old.visibleEvidence=merged(old.visibleEvidence, confirmed.visibleEvidence||[]).slice(0,35);
+  old.detectedText=merged(old.detectedText, confirmed.detectedText||[]).slice(0,35);
+  const tokenSource=[name,brand,size,confirmed.category,(confirmed.visibleEvidence||[]).join(' '),(confirmed.detectedText||[]).join(' '),old.ingredients.join(' ')].join(' ');
+  old.evidenceTokens=[...new Set([...(old.evidenceTokens||[]), ...productCoreTokens(tokenSource)])].slice(0,60);
   const c=Number(confirmed.confidence||0);
   if(c>0) old.confidence=Number((((Number(old.confidence||0)*(old.confirmations-1))+c)/old.confirmations).toFixed(3));
-  old.reliability=old.confirmations>=5?'alta':old.confirmations>=2?'media':'bassa';
+  const uniqueHouseholds=Object.keys(old.households||{}).length;
+  old.reliability=(old.confirmations>=6 || uniqueHouseholds>=3)?'alta':(old.confirmations>=2 || uniqueHouseholds>=2)?'media':'bassa';
+  updateFieldConfidence(old);
+  old.learningQuality={
+    fieldConfidence:old.fieldConfidence,
+    uniqueHouseholds,
+    teacherBypassEligible:!!old.teacherBypassEligible,
+    enoughForLocalRecognition:!!old.teacherBypassEligible,
+    lastSource: confirmed.cloudVision?'openai_teacher':(confirmed.memoryVision||confirmed.localFirst?'server_memory':'user_confirmed')
+  };
   old.updatedAt=Date.now();
-  gpm.products[key]=old;
+  gpm.products[old.key||key]=old;
   gpm.confirmations=Number(gpm.confirmations||0)+1;
   if(confirmed.cloudVision) gpm.teacherHelp=Number(gpm.teacherHelp||0)+1;
   if(confirmed.autonomousVision||confirmed.memoryVision||confirmed.localFirst) gpm.localRecognitions=Number(gpm.localRecognitions||0)+1;
   gpm.updatedAt=Date.now();
-  updateGlobalLearningAudit({type:'product-confirmed', key, productName:name, brand, format:size, category:old.category, teacherUsed:!!confirmed.cloudVision, memoryUpdated:true, reliability:old.reliability});
+  updateGlobalLearningAudit({type:'product-confirmed', key:old.key||key, canonicalKey:old.canonicalKey, productName:old.productName, brand:old.brand, format:old.format, category:old.category, teacherUsed:!!confirmed.cloudVision, memoryUpdated:true, reliability:old.reliability, confirmations:old.confirmations, uniqueHouseholds});
   return compactGlobalProductRecord(old);
 }
 function publicGlobalProductMemory(limit=20){
@@ -316,18 +435,44 @@ function publicGlobalProductMemory(limit=20){
   return {products, count:Object.keys(g.products||{}).length, confirmations:Number(g.confirmations||0), teacherHelp:Number(g.teacherHelp||0), localRecognitions:Number(g.localRecognitions||0), updatedAt:g.updatedAt||0};
 }
 function matchGlobalProductMemory(query={}){
-  const needle=normalizeText([query.productName,query.brand,query.size,query.detectedText].filter(Boolean).join(' '));
+  const qName=normalizeText(query.productName||'');
+  const qBrand=normalizeText(query.brand||'');
+  const qCategory=String(query.category||'');
+  const needle=normalizeText([query.productName,query.brand,query.size,query.category,query.detectedText].filter(Boolean).join(' '));
   if(!needle || needle.length<3) return null;
+  const qTokens=new Set(productCoreTokens(needle));
   const products=Object.values(db.assistantBrain?.globalProductMemory?.products||{});
   let best=null;
   for(const p of products){
-    const hay=normalizeText([p.productName,p.brand,p.format,p.category,(p.visibleEvidence||[]).join(' ')].filter(Boolean).join(' '));
-    let score=0;
-    for(const part of needle.split(' ').filter(x=>x.length>2)){ if(hay.includes(part)) score+=1; }
-    if(query.brand && normalizeText(p.brand).includes(normalizeText(query.brand))) score+=4;
-    if(query.productName && normalizeText(p.productName).includes(normalizeText(query.productName))) score+=5;
-    const normScore=score/Math.max(3, needle.split(' ').length);
-    if(normScore>=1.2 && (!best || normScore>best.score)) best={score:normScore, product:compactGlobalProductRecord(p)};
+    const confirmations=Number(p.confirmations||0);
+    const uniqueHouseholds=Object.keys(p.households||{}).length;
+    if(confirmations<2 && uniqueHouseholds<2 && p.reliability!=='media' && p.reliability!=='alta') continue;
+    const pName=normalizeText(p.productName||'');
+    const pBrand=normalizeText(p.brand||'');
+    const hayTokens=new Set(productCoreTokens(p.productName,p.brand,p.format,p.category,(p.evidenceTokens||[]).join(' '),(p.visibleEvidence||[]).join(' '),(p.detectedText||[]).join(' ')));
+    let overlap=0; for(const t of qTokens){ if(hayTokens.has(t)) overlap++; }
+    const brandMatch=!!(qBrand && pBrand && (pBrand.includes(qBrand)||qBrand.includes(pBrand)));
+    const nameMatch=!!(qName && pName && (pName.includes(qName)||qName.includes(pName)));
+    const categoryCompatible=!qCategory || !p.category || productCategoryFamily(qCategory)===productCategoryFamily(p.category);
+    const strongQuery=productStrongTokens(query.productName,query.brand,query.detectedText);
+    const strongProduct=productStrongTokens(p.productName,p.brand,(p.evidenceTokens||[]).join(' '));
+    const strongOverlap=strongQuery.filter(t=>strongProduct.includes(t));
+    const strongJaccard=tokenJaccard(strongQuery,strongProduct);
+    if(qBrand && pBrand && brandLooksConflicting(qBrand,pBrand)) continue;
+    if(!categoryCompatible && !brandMatch && strongJaccard<0.42) continue;
+    let score=overlap + strongOverlap.length*1.7;
+    if(brandMatch) score+=5;
+    if(nameMatch) score+=6;
+    if(categoryCompatible) score+=1.2; else score-=4;
+    if(p.reliability==='alta') score+=1.5; else if(p.reliability==='media') score+=.8;
+    if(p.teacherBypassEligible) score+=.8;
+    // V27.89: il server suggerisce senza docente solo con identità forte o apprendimento maturo.
+    const hasStrongIdentity=brandMatch || nameMatch || strongOverlap.length>=2 || strongJaccard>=0.42;
+    if(!hasStrongIdentity) continue;
+    if(!brandMatch && !nameMatch && !(strongOverlap.length>=2 && categoryCompatible)) continue;
+    const normScore=score/Math.max(3, qTokens.size||1);
+    const threshold=p.teacherBypassEligible ? 1.02 : 1.18;
+    if(normScore>=threshold && (!best || normScore>best.score)) best={score:normScore, product:Object.assign(compactGlobalProductRecord(p), {matchReason:brandMatch?'brand_match':nameMatch?'name_match':'strong_tokens', matchedTokens:strongOverlap.slice(0,10), strongJaccard:Number(strongJaccard.toFixed(3))})};
   }
   return best;
 }
@@ -370,7 +515,7 @@ function learnAutonomyOnServer(h, payload={}){
     if(confirmed.unit) prod.units[confirmed.unit]=Number(prod.units[confirmed.unit]||0)+1;
     db.assistantBrain.autonomousVision.products[key]=prod;
     db.assistantBrain.autonomousVision.samples=Number(db.assistantBrain.autonomousVision.samples||0)+1;
-    const globalProduct=upsertGlobalProductMemory(Object.assign({}, confirmed, {memoryVision:confirmed.memoryVision||confirmed.autonomousVision||false, localFirst:confirmed.localFirst||false}));
+    const globalProduct=upsertGlobalProductMemory(Object.assign({}, confirmed, {householdId:h.id, memoryVision:confirmed.memoryVision||confirmed.autonomousVision||false, localFirst:confirmed.localFirst||false}));
     payload.learningAudit=Object.assign({}, payload.learningAudit||{}, {teacherUsed:!!confirmed.cloudVision, memoryUpdated:!!globalProduct, recognizedByLocalOrServer:!!(confirmed.autonomousVision||confirmed.memoryVision||confirmed.localFirst), globalProduct});
   }
   const vp=payload.voiceProfile||{};
@@ -1090,47 +1235,64 @@ function uniqueStrings(list=[], limit=10){ return [...new Set((list||[]).map(x=>
 
 const REAL_ALLOWED_CATEGORIES=new Set(['food','drinks','water','soft_drinks','juice','milk_drinks','yogurt','dairy','pasta_rice','bakery','breakfast_snacks','chocolate_sweets','spreads','sauces_condiments','preserves_jars','frozen','meat_deli','fish','fruit','veg','house','personal_care','pets','pharmacy','aquarium']);
 const REAL_DRINK_CATEGORIES=new Set(['drinks','water','soft_drinks','juice','milk_drinks']);
+
+function categoryEvidenceServer(result={}){
+  return [result.productName,result.brand,result.variant,result.productType,result.packageType,result.category,result.estimatedSize,result.sizeDetectedRaw,result.unit,...(result.detectedText||[]),...(result.visibleEvidence||[])].filter(Boolean).join(' ');
+}
+function scoreRealityCategoryServer(text='', fallback='food'){
+  const n=normalizeVisionText(text||'');
+  const scores={}; const evidence=[];
+  const add=(cat,pts,rx,label)=>{ if(rx.test(n)){ scores[cat]=(scores[cat]||0)+pts; evidence.push(label||cat); } };
+  if(!n) return {category:fallback||'food', score:0, evidence:[]};
+  add('water',9,/(acqua|minerale|naturale|frizzante|oligominerale|san benedetto|sant anna|levissima|lete|uliveto|ferrarelle|rocchetta|vera)/,'acqua');
+  add('soft_drinks',8,/(coca cola|coca-cola|pepsi|fanta|sprite|cola|aranciata|gassata|bibita|energy drink|red bull|tonica|chinotto)/,'bibita');
+  add('juice',8,/(succo|nettare|the freddo|te freddo|estate|bevanda alla frutta|spremuta)/,'succo/tea');
+  add('milk_drinks',7,/(latte|bevanda al latte|latte intero|parzialmente scremato|scremato|latte uht|milk drink)/,'latte');
+  add('yogurt',9,/(yogurt|yoghurt|greco|skyr|kefir|ayo kefir)/,'yogurt/kefir');
+  add('dairy',8,/(mozzarella|formaggio|parmigiano|grana|ricotta|burro|panna|mascarpone|stracchino|latticini|galbanino|philadelphia)/,'latticini');
+  add('sauces_condiments',12,/(pesto|salsa|bbq|barbecue|ketchup|maionese|senape|condimento|sugo|passata|ragu|pate|hummus|besciamella|dado|brodo|glassa|aceto|olio evo|olio extra vergine)/,'salsa/condimento');
+  add('spreads',9,/(nutella|crema spalmabile|crema nocciole|crema al pistacchio|spalmabile|burro d arachidi|miele)/,'crema spalmabile');
+  add('preserves_jars',7,/(marmellata|confettura|tonno|legumi|fagioli|ceci|piselli|mais|pelati|conserva|sottolio|sottaceto|barattolo|vasetto|vetro|lattina alimentare)/,'conserva/barattolo');
+  add('chocolate_sweets',9,/(cioccolat|cacao|tavoletta|pralina|merendina|caramell|dolce|cremino|biscotto farcito|torta|crostatina)/,'dolce/cioccolata');
+  add('pasta_rice',9,/(pasta|spaghetti|penne|fusilli|rigatoni|riso|risotto|farina|semola|cous cous|gnocchi|lasagne)/,'pasta/riso');
+  add('bakery',8,/(pane|panino|piadina|cracker|grissini|taralli|fette biscottate|cornetto|brioche|forno|toast)/,'pane/forno');
+  add('breakfast_snacks',7,/(biscott|cereali|snack|patatine|pop corn|barretta|wafer|corn flakes|colazione|chips)/,'snack/colazione');
+  add('frozen',9,/(surgelat|congelat|gelato|pizza surgelata|minestrone surgelato|frozen|findus)/,'surgelato');
+  add('meat_deli',9,/(prosciutto|salame|mortadella|wurstel|carne|pollo|hamburger|salsiccia|bresaola|speck|tacchino)/,'carne/salumi');
+  add('fish',9,/(pesce|salmone|merluzzo|gamber|tonno fresco|orata|branzino|frutti di mare|sgombro)/,'pesce');
+  add('fruit',8,/(mela|banana|arancia|limone|fragola|uva|pera|frutta|kiwi|pesca|albicocca|ciliegia)/,'frutta');
+  add('veg',8,/(insalata|lattuga|pomodoro|zucchina|melanzana|verdura|ortaggi|carota|cipolla|patata|broccoli|spinaci)/,'verdura');
+  add('pets',9,/(crocchette|umido cane|umido gatto|lettiera|mangime|pet food|cane|gatto|monge|trainer)/,'animali');
+  add('house',9,/(detersivo|ammorbidente|candeggina|sgrassatore|pulizia|lavatrice|piatti|scottex|carta igienica|sacchetti|casa|napisan|ace)/,'casa/pulizia');
+  add('personal_care',9,/(shampoo|bagnoschiuma|sapone|dentifricio|deodorante|igiene|crema corpo|assorbenti|rasoio)/,'igiene persona');
+  add('pharmacy',9,/(farmaco|medicina|tachipirina|oki|brufen|cerotti|disinfettante|farmacia|integratore|paracetamolo)/,'farmacia');
+  add('aquarium',9,/(acquario|pesci|mangime pesci|biocondizionatore|filtro acquario|tetra|sera)/,'acquario');
+  add('drinks',2,/(bevanda|drink|bottiglia|lattina|brick|brik|liquido da bere)/,'confezione bevanda');
+  if(scores.sauces_condiments){ scores.preserves_jars=(scores.preserves_jars||0)*0.45; scores.drinks=0; }
+  if(scores.yogurt){ scores.milk_drinks=(scores.milk_drinks||0)*0.45; scores.drinks=0; }
+  if(scores.spreads){ scores.preserves_jars=(scores.preserves_jars||0)*0.55; scores.drinks=0; }
+  let best=fallback||'food', bestScore=-1;
+  for(const [cat,score] of Object.entries(scores)){ if(score>bestScore){ best=cat; bestScore=score; } }
+  if(bestScore<4) best=fallback||'food';
+  return {category:best, score:Math.max(0,bestScore), evidence:[...new Set(evidence)].slice(0,6)};
+}
 function inferRealityCategoryServer(text='', fallback='food'){
-  const n=normalizeVisionText(text);
-  if(!n) return fallback || 'food';
-  const has=(rx)=>rx.test(n);
-  if(has(/\b(acqua|minerale|naturale|frizzante|bottiglia d acqua|san benedetto|sant anna|levissima|lete|uliveto|ferrarelle|rocchetta|vera)\b/)) return 'water';
-  if(has(/\b(coca cola|pepsi|fanta|sprite|cola|aranciata|gassata|bibita|energy drink|red bull|tonica|chinotto)\b/)) return 'soft_drinks';
-  if(has(/\b(succo|nettare|the freddo|te freddo|estat[h]?e|bevanda alla frutta|spremuta)\b/)) return 'juice';
-  if(has(/\b(latte|bevanda al latte|kefir da bere|latte intero|parzialmente scremato)\b/)) return 'milk_drinks';
-  if(has(/\b(yogurt|yoghurt|greco|skyr|kefir)\b/)) return 'yogurt';
-  if(has(/\b(mozzarella|formaggio|parmigiano|grana|ricotta|burro|panna|mascarpone|stracchino|latticini)\b/)) return 'dairy';
-  if(has(/\b(cioccolat|cacao|tavoletta|pralina|merendina|caramell|dolce|cremino)\b/)) return 'chocolate_sweets';
-  if(has(/\b(nutella|crema spalmabile|crema nocciole|crema pistacchio|spalmabile)\b/)) return 'spreads';
-  if(has(/\b(pesto|salsa|bbq|barbecue|ketchup|maionese|senape|condimento|sugo|passata|ragu|pate|hummus)\b/)) return 'sauces_condiments';
-  if(has(/\b(marmellata|confettura|tonno|legumi|fagioli|ceci|piselli|mais|pelati|conserva|sottolio|sottaceto|barattolo|vasetto)\b/)) return 'preserves_jars';
-  if(has(/\b(pasta|spaghetti|penne|fusilli|rigatoni|riso|risotto|farina|semola|cous cous|gnocchi)\b/)) return 'pasta_rice';
-  if(has(/\b(pane|panino|piadina|cracker|grissini|taralli|fette biscottate|cornetto|brioche|forno)\b/)) return 'bakery';
-  if(has(/\b(biscott|cereali|snack|patatine|pop corn|barretta|wafer|corn flakes|colazione)\b/)) return 'breakfast_snacks';
-  if(has(/\b(surgelat|congelat|gelato|pizza surgelata|minestrone surgelato|frozen)\b/)) return 'frozen';
-  if(has(/\b(prosciutto|salame|mortadella|wurstel|carne|pollo|hamburger|salsiccia|bresaola|speck)\b/)) return 'meat_deli';
-  if(has(/\b(pesce|salmone|merluzzo|gamber|tonno fresco|orata|branzino|frutti di mare)\b/)) return 'fish';
-  if(has(/\b(mela|banana|arancia|limone|fragola|uva|pera|frutta|kiwi|pesca)\b/)) return 'fruit';
-  if(has(/\b(insalata|lattuga|pomodoro|zucchina|melanzana|verdura|ortaggi|carota|cipolla|patata|broccoli)\b/)) return 'veg';
-  if(has(/\b(crocchette|umido cane|umido gatto|lettiera|mangime|pet food|cane|gatto)\b/)) return 'pets';
-  if(has(/\b(detersivo|ammorbidente|candeggina|sgrassatore|pulizia|lavatrice|piatti|scottex|carta igienica|sacchetti|casa)\b/)) return 'house';
-  if(has(/\b(shampoo|bagnoschiuma|sapone|dentifricio|deodorante|igiene|crema corpo|assorbenti)\b/)) return 'personal_care';
-  if(has(/\b(farmaco|medicina|tachipirina|oki|brufen|cerotti|disinfettante|farmacia|integratore)\b/)) return 'pharmacy';
-  if(has(/\b(acquario|pesci|mangime pesci|biocondizionatore|filtro acquario)\b/)) return 'aquarium';
-  if(has(/\b(bevanda|drink|bottiglia|lattina|brick|brik|liquido da bere)\b/)) return 'drinks';
-  return fallback || 'food';
+  return scoreRealityCategoryServer(text,fallback||'food').category;
 }
 function applyRealityCategoryServer(result={}){
-  const evidence=[result.productName,result.brand,result.variant,result.productType,result.packageType,result.category,result.estimatedSize,...(result.detectedText||[]),...(result.visibleEvidence||[])].join(' ');
-  const inferred=inferRealityCategoryServer(evidence, result.category||'food');
-  if(inferred) result.category=inferred;
-  if(REAL_DRINK_CATEGORIES.has(result.category)) result.isLiquid=true;
+  const evidence=categoryEvidenceServer(result);
+  const resolved=scoreRealityCategoryServer(evidence, result.category||'food');
+  if(resolved.category) result.category=resolved.category;
   const n=normalizeVisionText(evidence);
-  const solid=/\b(pesto|salsa|bbq|barbecue|cioccolat|yogurt|pasta|riso|biscott|snack|pane|formaggio|carne|salame|tonno|marmellata|barattolo|vasetto|surgelat|verdura|frutta)\b/.test(n);
-  const beverage=/\b(acqua|bevanda|bibita|cola|aranciata|succo|te freddo|latte|drink|lattina)\b/.test(n);
-  if(solid && !beverage && REAL_DRINK_CATEGORIES.has(result.category)){ result.category=inferRealityCategoryServer(evidence.replace(/\bbottiglia\b/g,''),'food'); if(REAL_DRINK_CATEGORIES.has(result.category)) result.category='food'; result.isLiquid=false; }
+  const beverageReal=/(acqua|minerale|naturale|frizzante|cola|aranciata|bibita|succo|te freddo|latte intero|latte uht|bevanda da bere|lattina)/.test(n);
+  const notBeverage=/(pesto|salsa|bbq|barbecue|ketchup|maionese|yogurt|cioccolat|crema spalmabile|condimento|sugo|pasta|riso|snack|biscott|formaggio|barattolo|vasetto)/.test(n);
+  if(notBeverage && REAL_DRINK_CATEGORIES.has(result.category) && !beverageReal){ result.category=inferRealityCategoryServer(evidence.replace(/(bottiglia|liquido|squeeze)/g,''),'food'); if(REAL_DRINK_CATEGORIES.has(result.category)) result.category='food'; }
+  result.isLiquid=REAL_DRINK_CATEGORIES.has(result.category);
+  result.categoryRuleSource='regole realtà v27.87';
+  result.categoryRuleEvidence=resolved.evidence||[];
   return result;
 }
+
 
 
 function offCategoryToAppServer(text='', fallback=''){
@@ -1499,7 +1661,7 @@ Regole severe anti-errore:
 - Rileva colori dominanti e aspetto confezione per aiutare la memoria locale futura.
 - Rileva danni veri: aperto, rotto, bucato, perdita, tappo rotto, etichetta illeggibile. Per bottiglie in plastica schiacciate dalla mano o naturalmente deformate, NON segnarle danneggiate: chiedi conferma.
 - Non chiamare Coca-Cola se il rosso è solo sfondo: serve testo Coca-Cola o etichetta/prodotto centrale rosso.
-- Scegli categoria fra categorie reali: food, drinks, water, soft_drinks, juice, milk_drinks, yogurt, dairy, pasta_rice, bakery, breakfast_snacks, chocolate_sweets, spreads, sauces_condiments, preserves_jars, frozen, meat_deli, fish, fruit, veg, house, personal_care, pets, pharmacy, aquarium. Usa drinks solo per bevande da bere; salsa/pesto/cioccolata/yogurt non devono diventare bevande solo perché sono in confezione o semiliquidi.
+- Scegli categoria con regole realtà precise, non a caso. Prima parole chiave etichetta/nome, poi forma confezione, poi memoria/web come supporto. Scegli categoria fra categorie reali: food, drinks, water, soft_drinks, juice, milk_drinks, yogurt, dairy, pasta_rice, bakery, breakfast_snacks, chocolate_sweets, spreads, sauces_condiments, preserves_jars, frozen, meat_deli, fish, fruit, veg, house, personal_care, pets, pharmacy, aquarium. Usa drinks solo per bevande da bere; salsa/pesto/cioccolata/yogurt non devono diventare bevande solo perché sono in confezione o semiliquidi.
 Schema JSON: {"needsRetake":boolean,"needsManual":boolean,"multipleItems":boolean,"shouldAskConfirmation":boolean,"reason":"breve in italiano","productName":"nome prodotto","brand":"marca","variant":"variante/gusto/formato","productType":"tipo prodotto","packageType":"tipo confezione","estimatedSize":"formato/capienza","sizeDetectedRaw":"testo volume letto","sizeConfidence":number,"expiryDate":"data visibile o vuota","expiryDetectedRaw":"testo data letto","expiryConfidence":number,"detailQuestion":"domanda se mancano capienza/scadenza/ingredienti","isLiquid":boolean,"isDamaged":boolean,"damageType":"tipo danno o vuota","quantity":number,"unit":"pz|bt|lattina|conf|kg|g|lt|ml|busta|scatola","category":"food|drinks|water|soft_drinks|juice|milk_drinks|yogurt|dairy|pasta_rice|bakery|breakfast_snacks|chocolate_sweets|spreads|sauces_condiments|preserves_jars|frozen|meat_deli|fish|fruit|veg|house|personal_care|pets|pharmacy|aquarium","confidence":number,"ingredients":["ingredienti letti o chiaramente dedotti dall etichetta"],"allergens":["allergeni evidenti o obbligatori letti"],"possibleAllergens":["possibili tracce lette"],"colors":["colori dominanti confezione"],"nutrition":{"kcal":"","proteine":"","carboidrati":"","grassi":""},"ingredientsVerified":boolean,"detectedText":["testi letti"],"visibleEvidence":["prove visive"],"items":[]}
 Contesto utile, ma non deve sovrascrivere ciò che vedi nella foto:
 Catalogo ridotto: ${JSON.stringify(compact).slice(0,12000)}
@@ -1519,7 +1681,7 @@ JSON: {"productName":"","brand":"","variant":"","estimatedSize":"","sizeDetected
     try{
       const stageName=String(stage||'auto').toLowerCase();
       if(stageName==='product'){
-        const fastProductPrompt=`Analizza la foto prodotto. Rispondi SOLO JSON valido. Devi essere veloce: riconosci prodotto, marca, tipo, formato se leggibile e categoria reale. Non cercare di leggere tutta la tabella ingredienti se non è visibile. Se vedi cane, vestiti, telecomando, TV, mobili o oggetti non consumabili rispondi {"needsRetake":true,"notConsumable":true,"reason":"Oggetto non idoneo","productName":"","confidence":0}. Categoria: bevanda solo se è da bere; salsa/pesto/yogurt/cioccolata/condimento sono categorie alimentari specifiche, non bevande. Schema JSON: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","variant":"","productType":"","packageType":"","estimatedSize":"","sizeDetectedRaw":"","sizeConfidence":0,"quantity":1,"unit":"pz","category":"food","confidence":0.1,"isLiquid":false,"isDamaged":false,"damageType":"","expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"detectedText":[],"visibleEvidence":[],"detailQuestion":"","reason":""}`;
+        const fastProductPrompt=`Analizza la foto prodotto. Rispondi SOLO JSON valido. Devi essere veloce: riconosci prodotto, marca, tipo, formato se leggibile e categoria reale. Non cercare di leggere tutta la tabella ingredienti se non è visibile. Se vedi cane, vestiti, telecomando, TV, mobili o oggetti non consumabili rispondi {"needsRetake":true,"notConsumable":true,"reason":"Oggetto non idoneo","productName":"","confidence":0}. Categoria: usa regole realtà. Bevanda solo se è davvero da bere (acqua, bibita, succo, latte da bere). Pesto/salsa/BBQ/ketchup/maionese/condimento = sauces_condiments; yogurt/kefir = yogurt; cioccolata/dolci = chocolate_sweets; crema spalmabile = spreads; barattolo/vasetto è solo confezione, non categoria se leggi pesto/salsa/crema. Schema JSON: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","variant":"","productType":"","packageType":"","estimatedSize":"","sizeDetectedRaw":"","sizeConfidence":0,"quantity":1,"unit":"pz","category":"food","confidence":0.1,"isLiquid":false,"isDamaged":false,"damageType":"","expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"detectedText":[],"visibleEvidence":[],"detailQuestion":"","reason":""}`;
         primaryRaw = await visionJsonCall('Solo JSON valido. Analisi rapida prodotto.', fastProductPrompt, image);
         detailRaw = null;
       }else if(stageName==='expiry'){
@@ -1533,7 +1695,7 @@ JSON: {"productName":"","brand":"","variant":"","estimatedSize":"","sizeDetected
         ]);
       }
     }catch(firstErr){
-      const shortPrompt=`Analizza la foto. Rispondi SOLO JSON. Riconosci solo prodotti alimentari/casa/farmacia/animali/acquario. Se vedi cane, vestiti, telecomando, TV, mobili o oggetti non consumabili rispondi {"needsRetake":true,"notConsumable":true,"reason":"Oggetto non idoneo","productName":"","confidence":0}. Riconosci prodotto, marca, testo etichetta, capienza, categoria reale, scadenza, danni. Categoria: bevanda solo se è da bere; salsa/pesto/yogurt/cioccolata/condimento sono categorie alimentari specifiche, non bevande. Non inventare. Se capienza non leggibile lascia estimatedSize "Capienza da confermare". Se è bottiglia d'acqua, productName acqua naturale o acqua in bottiglia, category drinks, unit bt. Schema: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","variant":"","estimatedSize":"","sizeDetectedRaw":"","sizeConfidence":0,"quantity":1,"unit":"pz","category":"food","confidence":0.1,"isLiquid":false,"isDamaged":false,"damageType":"","expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"detectedText":[],"visibleEvidence":[],"detailQuestion":"","reason":""}`;
+      const shortPrompt=`Analizza la foto. Rispondi SOLO JSON. Riconosci solo prodotti alimentari/casa/farmacia/animali/acquario. Se vedi cane, vestiti, telecomando, TV, mobili o oggetti non consumabili rispondi {"needsRetake":true,"notConsumable":true,"reason":"Oggetto non idoneo","productName":"","confidence":0}. Riconosci prodotto, marca, testo etichetta, capienza, categoria reale, scadenza, danni. Categoria: usa regole realtà. Bevanda solo se è davvero da bere (acqua, bibita, succo, latte da bere). Pesto/salsa/BBQ/ketchup/maionese/condimento = sauces_condiments; yogurt/kefir = yogurt; cioccolata/dolci = chocolate_sweets; crema spalmabile = spreads; barattolo/vasetto è solo confezione, non categoria se leggi pesto/salsa/crema. Non inventare. Se capienza non leggibile lascia estimatedSize "Capienza da confermare". Se è bottiglia d'acqua, productName acqua naturale o acqua in bottiglia, category drinks, unit bt. Schema: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","variant":"","estimatedSize":"","sizeDetectedRaw":"","sizeConfidence":0,"quantity":1,"unit":"pz","category":"food","confidence":0.1,"isLiquid":false,"isDamaged":false,"damageType":"","expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"detectedText":[],"visibleEvidence":[],"detailQuestion":"","reason":""}`;
       primaryRaw = await visionJsonCall('Solo JSON valido.', shortPrompt, image);
       detailRaw = null;
     }
@@ -1579,7 +1741,7 @@ const server = http.createServer(async (req,res)=>{
         dbMode,
         databaseConnected: dbMode !== 'file',
         memoryReady: dbMode !== 'file',
-        globalLearning: 'server_global_product_memory', globalProductMemory: publicGlobalProductMemory(10),
+        globalLearning: 'server_global_product_memory', globalProductMemory: publicGlobalProductMemory(10), learningQuality:{dedupe:'canonical_key_plus_conflict_guard', teacherBypass:'after_confirmations_and_field_confidence', storesPhotos:false, storesVisualSignature:true},
         smsReady: PHONE_VERIFY_READY,
         seedMemory:{version:VISION_SEED_MEMORY.version||'', products:(VISION_SEED_MEMORY.products||[]).length, totalProfiles:Number(VISION_MEGA_INDEX.totalProfiles||1000000), megaVersion:VISION_MEGA_INDEX.version||'', categories:(VISION_SEED_MEMORY.categories||[]).length, loaded:(VISION_SEED_MEMORY.products||[]).length>0},
         twilioVerifyReady: TWILIO_VERIFY_ENABLED,

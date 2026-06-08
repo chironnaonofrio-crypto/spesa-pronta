@@ -1692,3 +1692,48 @@ body{color-scheme:light;}
 .guided-scan-summary{display:grid;gap:4px;background:#fff;border:1px solid rgba(13,110,253,.10);border-radius:18px;padding:11px 12px}.guided-scan-summary strong{color:#10233f;font-size:1rem}.guided-scan-summary span{color:#597189;font-weight:760;line-height:1.3}.guided-missing{min-height:0;margin-top:8px}.guided-missing span{display:inline-flex;padding:.38rem .62rem;border-radius:999px;background:#fff8e7;color:#8a5b00;border:1px solid rgba(218,161,0,.18);font-weight:900;font-size:.78rem}.guided-missing span.ok{background:#effbf3;color:#147346;border-color:rgba(20,115,70,.16)}
 .guided-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:10px}.guided-actions .primary-btn{grid-column:1/-1}.guided-actions button[hidden]{display:none!important}.scan-actions-row [data-confirm-scan]{font-weight:1000;box-shadow:0 14px 28px rgba(18,102,241,.18)}.scan-result.confirmed{opacity:.92}.scanner-status{font-size:.9rem!important;line-height:1.35!important;padding:10px 12px!important;margin:8px 0!important}
 @media(max-width:520px){.guided-scan-panel{padding:12px;border-radius:22px}.guided-stepper{gap:5px}.guided-stepper span{font-size:.66rem;padding:0 4px}.guided-scan-top h4{font-size:1.04rem}.guided-scan-top p{font-size:.86rem}.guided-actions{grid-template-columns:1fr}.guided-actions .primary-btn{grid-column:auto}}
+
+
+/* V27.90 - Fridge mode maintenance notice */
+.fridge-maintenance-card{
+  display:grid!important;
+  grid-template-columns:54px minmax(0,1fr)!important;
+  gap:14px!important;
+  align-items:center!important;
+  padding:16px!important;
+  border-radius:24px!important;
+  background:linear-gradient(135deg,#f7fbff,#eef6ff)!important;
+  border:1px solid rgba(13,110,253,.16)!important;
+  box-shadow:0 16px 34px rgba(12,45,94,.08)!important;
+  color:#153b6f!important;
+}
+.fridge-maintenance-icon{
+  width:54px!important;
+  height:54px!important;
+  border-radius:18px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  background:#fff!important;
+  box-shadow:0 12px 26px rgba(12,45,94,.08)!important;
+  font-size:1.45rem!important;
+}
+.fridge-maintenance-card strong{
+  display:block!important;
+  font-size:1rem!important;
+  font-weight:1000!important;
+  letter-spacing:.01em!important;
+  color:#102f5d!important;
+}
+.fridge-maintenance-card p{
+  margin:.25rem 0 0!important;
+  color:#58708b!important;
+  font-weight:760!important;
+  line-height:1.35!important;
+}
+@media(max-width:520px){
+  .fridge-maintenance-card{grid-template-columns:44px minmax(0,1fr)!important;padding:14px!important;border-radius:20px!important}
+  .fridge-maintenance-icon{width:44px!important;height:44px!important;border-radius:15px!important;font-size:1.2rem!important}
+  .fridge-maintenance-card strong{font-size:.94rem!important}
+  .fridge-maintenance-card p{font-size:.82rem!important}
+}
