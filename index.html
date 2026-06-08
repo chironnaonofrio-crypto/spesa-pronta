@@ -1070,9 +1070,9 @@ body::after{content:'V27.74 UI POLISH'!important}
 </style>
 
 
-<style id="v2781-header-controls-fix">
-/* V27.81 EMERGENCY STABLE FIX */
-body::after{content:'V27.81 EMERGENCY STABLE'!important}
+<style id="v2782-header-controls-fix">
+/* V27.82 SCAN VISUAL FIX FIX */
+body::after{content:'V27.82 SCAN VISUAL FIX'!important}
 
 .top-actions{
   display:grid!important;
@@ -1154,9 +1154,9 @@ body::after{content:'V27.81 EMERGENCY STABLE'!important}
 </style>
 
 
-<style id="v2781-logout-fix">
-/* V27.81 logout fix */
-body::after{content:'V27.81 EMERGENCY STABLE'!important}
+<style id="v2782-logout-fix">
+/* V27.82 logout fix */
+body::after{content:'V27.82 SCAN VISUAL FIX'!important}
 .returning-account-box{
   grid-column:1/-1;
   padding:14px;
@@ -1171,9 +1171,9 @@ body::after{content:'V27.81 EMERGENCY STABLE'!important}
 </style>
 
 
-<style id="v2781-emergency-stable">
-/* V27.81 EMERGENCY STABLE - no layout loops, no MutationObserver, no setInterval */
-body::after{content:'V27.81 EMERGENCY STABLE'!important}
+<style id="v2782-emergency-stable">
+/* V27.82 SCAN VISUAL FIX - no layout loops, no MutationObserver, no setInterval */
+body::after{content:'V27.82 SCAN VISUAL FIX'!important}
 
 /* Scanner: solo CSS leggero, nessun JS continuo */
 #groceryScannerDialog[open]{
@@ -1222,6 +1222,136 @@ body::after{content:'V27.81 EMERGENCY STABLE'!important}
   #groceryScannerDialog .scanner-quick-cards img.quick-card-art{
     width:72px!important;
     height:72px!important;
+  }
+}
+</style>
+
+
+<style id="v2782-scan-visual-fix">
+/* V27.82 SCAN VISUAL FIX - solo CSS, niente script pesanti */
+body::after{content:'V27.82 SCAN VISUAL FIX'!important}
+
+/* Finestra scanner centrata e stabile */
+#groceryScannerDialog[open]{
+  width:min(94vw,760px)!important;
+  max-width:760px!important;
+  max-height:calc(100dvh - 18px)!important;
+  margin:auto!important;
+}
+#groceryScannerDialog .scanner-card-premium{
+  max-height:calc(100dvh - 18px)!important;
+  overflow:auto!important;
+  border-radius:30px!important;
+  padding:18px!important;
+}
+
+/* 4 riquadri: centrati, 2x2, con immagini leggibili */
+#groceryScannerDialog .scanner-quick-cards{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:12px!important;
+  max-width:660px!important;
+  margin:14px auto 0!important;
+}
+#groceryScannerDialog .scanner-quick-cards > span{
+  display:grid!important;
+  grid-template-columns:104px minmax(0,1fr)!important;
+  align-items:center!important;
+  gap:12px!important;
+  min-height:132px!important;
+  padding:12px!important;
+  text-align:left!important;
+  border-radius:24px!important;
+}
+
+/* immagini più grandi: non microscopiche, ma senza tagli pesanti */
+#groceryScannerDialog .scanner-quick-cards img.quick-card-art{
+  width:96px!important;
+  height:96px!important;
+  max-width:96px!important;
+  max-height:96px!important;
+  object-fit:cover!important;
+  object-position:center!important;
+  padding:0!important;
+  box-sizing:border-box!important;
+  border-radius:18px!important;
+}
+#groceryScannerDialog .scanner-quick-cards .quick-copy{
+  display:flex!important;
+  flex-direction:column!important;
+  justify-content:center!important;
+  min-width:0!important;
+  overflow:visible!important;
+  text-align:left!important;
+}
+#groceryScannerDialog .scanner-quick-cards .quick-copy b{
+  font-size:1rem!important;
+  line-height:1.06!important;
+}
+#groceryScannerDialog .scanner-quick-cards .quick-copy em{
+  font-size:.80rem!important;
+  line-height:1.14!important;
+}
+
+/* Pulsanti allineati alla stessa larghezza del blocco immagini */
+#groceryScannerDialog .scanner-actions.pro-actions{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:12px!important;
+  max-width:660px!important;
+  margin:16px auto 0!important;
+}
+#groceryScannerDialog .scanner-actions.pro-actions > *{
+  min-height:78px!important;
+}
+
+/* Tutto il resto allineato al centro */
+#groceryScannerDialog .scanner-seed-proof,
+#groceryScannerDialog .scanner-status,
+#groceryScannerDialog .scanner-preview,
+#groceryScannerDialog .scanner-results,
+#groceryScannerDialog .scanner-footer{
+  max-width:660px!important;
+  margin-left:auto!important;
+  margin-right:auto!important;
+}
+
+/* Mobile stretto: mantiene 2 colonne ma con immagini decenti */
+@media(max-width:430px){
+  #groceryScannerDialog[open]{
+    width:calc(100vw - 12px)!important;
+    max-height:calc(100dvh - 12px)!important;
+  }
+  #groceryScannerDialog .scanner-card-premium{
+    padding:14px!important;
+  }
+  #groceryScannerDialog .scanner-quick-cards{
+    gap:9px!important;
+  }
+  #groceryScannerDialog .scanner-quick-cards > span{
+    grid-template-columns:82px minmax(0,1fr)!important;
+    min-height:116px!important;
+    gap:9px!important;
+    padding:9px!important;
+  }
+  #groceryScannerDialog .scanner-quick-cards img.quick-card-art{
+    width:78px!important;
+    height:78px!important;
+    border-radius:16px!important;
+  }
+  #groceryScannerDialog .scanner-quick-cards .quick-copy b{
+    font-size:.86rem!important;
+    line-height:1.02!important;
+  }
+  #groceryScannerDialog .scanner-quick-cards .quick-copy em{
+    font-size:.68rem!important;
+    line-height:1.08!important;
+  }
+  #groceryScannerDialog .scanner-actions.pro-actions{
+    gap:9px!important;
+  }
+  #groceryScannerDialog .scanner-actions.pro-actions > *{
+    min-height:72px!important;
   }
 }
 </style>
