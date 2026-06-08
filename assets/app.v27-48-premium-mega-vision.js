@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v27.72-label-memory-safe';
+window.SPESA_PRONTA_VERSION='v27.73-scan-isolation';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -170,7 +170,7 @@ let captcha = newCaptcha();
 let syncTimer = null;
 let aiMemory = loadAiMemory();
 let aiRecognition = null;
-let liveScanStream = null, liveScanTimer = null, liveScanBusy = false, liveScanActive = false, liveScanStableCount = 0, liveScanLastHint = '', liveScanLastMetrics = null, liveScanPrevSample = null, liveScanLastSpeechKey='', liveScanLastSpeechAt=0, liveScanSpeechEnabled=true, scannerMicEnabled=true, scannerMicListening=false, scannerMicRecognition=null, scannerMicShouldRestart=false, scannerMicCurrentResultId='', scannerMicStep='', scannerMicLastPrompt='', liveScanReadySince=0, liveScanCooldownUntil=0, liveScanPendingResult=false, liveScanAwaitNextOk=false, liveScanLastAcceptedSig='', liveScanLastAcceptedName='', liveScanNeedObjectChange=false, liveScanSameObjectWarnings=0, scannerMicEchoBlockUntil=0, liveScanCaptureLockUntil=0;
+let liveScanStream = null, liveScanTimer = null, liveScanBusy = false, liveScanActive = false, liveScanStableCount = 0, liveScanLastHint = '', liveScanLastMetrics = null, liveScanPrevSample = null, liveScanLastSpeechKey='', liveScanLastSpeechAt=0, liveScanSpeechEnabled=true, scannerMicEnabled=true, scannerMicListening=false, scannerMicRecognition=null, scannerMicShouldRestart=false, scannerMicCurrentResultId='', scannerMicStep='', scannerMicLastPrompt='', liveScanReadySince=0, liveScanCooldownUntil=0, liveScanPendingResult=false, liveScanAwaitNextOk=false, liveScanLastAcceptedSig='', liveScanLastAcceptedName='', liveScanNeedObjectChange=false, liveScanSameObjectWarnings=0, scannerMicEchoBlockUntil=0, liveScanCaptureLockUntil=0, scannerMicPausedBySpeech=false, scannerMicSpeechPauseToken=0;
 let aiListening = false;
 let accountPendingAction = null;
 
@@ -1444,10 +1444,33 @@ function preferredItalianVoice(){
   const voices=window.speechSynthesis.getVoices ? window.speechSynthesis.getVoices() : [];
   return voices.find(v=>/^it[-_]?it/i.test(v.lang) && /natural|google|elsa|federica|ital/i.test((v.name||'').toLowerCase())) || voices.find(v=>/^it[-_]?/i.test(v.lang)) || null;
 }
+
+function liveScannerDialogOpen(){ return !!($('#groceryScannerDialog')?.open); }
+function pauseScannerMicForAssistantSpeech(){
+  if(!scannerMicEnabled) return 0;
+  if(!(liveScanActive || liveScannerDialogOpen())) return 0;
+  const token=++scannerMicSpeechPauseToken;
+  scannerMicPausedBySpeech=true;
+  scannerMicShouldRestart=false;
+  try{ scannerMicRecognition?.abort?.(); }catch{}
+  try{ scannerMicRecognition?.stop?.(); }catch{}
+  scannerMicRecognition=null;
+  scannerMicListening=false;
+  setMicToggleUi();
+  return token;
+}
+function resumeScannerMicAfterAssistantSpeech(token=0){
+  if(token && token!==scannerMicSpeechPauseToken) return;
+  scannerMicPausedBySpeech=false;
+  setMicToggleUi();
+  if(scannerMicEnabled && (liveScanActive || liveScannerDialogOpen())) setTimeout(()=>startScannerMic(false), 260);
+}
+
 function speakNatural(text, opts={}){
   if(!liveScanSpeechEnabled || !('speechSynthesis' in window) || !text) return;
   const spokenText=String(text);
-  scannerMicEchoBlockUntil=Math.max(scannerMicEchoBlockUntil, Date.now()+Math.min(8500, 1400 + spokenText.length*42));
+  const pauseToken=pauseScannerMicForAssistantSpeech();
+  scannerMicEchoBlockUntil=Math.max(scannerMicEchoBlockUntil, Date.now()+Math.min(9500, 1600 + spokenText.length*48));
   const utter=new SpeechSynthesisUtterance(spokenText);
   utter.lang='it-IT';
   const voice=preferredItalianVoice();
@@ -1455,7 +1478,12 @@ function speakNatural(text, opts={}){
   utter.rate=opts.rate || 1.01;
   utter.pitch=opts.pitch || 1.02;
   utter.volume=opts.volume || 1;
-  utter.onend=()=>{ scannerMicEchoBlockUntil=Math.max(scannerMicEchoBlockUntil, Date.now()+650); };
+  const finish=()=>{
+    scannerMicEchoBlockUntil=Math.max(scannerMicEchoBlockUntil, Date.now()+900);
+    if(pauseToken) setTimeout(()=>resumeScannerMicAfterAssistantSpeech(pauseToken), 360);
+  };
+  utter.onend=finish;
+  utter.onerror=finish;
   if(opts.flush) speechSynthesis.cancel();
   speechSynthesis.speak(utter);
 }
@@ -1489,7 +1517,8 @@ function setMicToggleUi(){
   if(!btn) return;
   btn.classList.toggle('active', !!scannerMicEnabled);
   btn.classList.toggle('listening', !!scannerMicListening);
-  btn.textContent=!scannerMicEnabled ? 'Mic off' : (scannerMicListening ? 'Mic in ascolto' : 'Mic attivo');
+  btn.classList.toggle('paused', !!scannerMicPausedBySpeech);
+  btn.textContent=!scannerMicEnabled ? 'Mic off' : (scannerMicPausedBySpeech ? 'Mic in pausa' : (scannerMicListening ? 'Mic in ascolto' : 'Mic attivo'));
 }
 function getActiveScannerResult(){
   const current=scannerMicCurrentResultId ? document.getElementById(scannerMicCurrentResultId) : null;
@@ -1747,7 +1776,36 @@ function renderScanCompletionStatus(el, result={}){
   const line = info.missing.length ? `Completamento ${pct}%. Mancano: ${info.missing.map(k=>({name:'nome',brand:'marca',size:'formato/capienza',qty:'quantità',expiry:'scadenza',category:'categoria',damage:'stato'}[k]||k)).join(', ')}.` : (info.warn.length ? `Scheda utilizzabile. Opzionali non letti: ${info.warn.map(k=>({brand:'marca',size:'formato/capienza',expiry:'scadenza'}[k]||k)).join(', ')}.` : 'Scheda completa: puoi confermare.');
   box.innerHTML=`<strong>Riepilogo smart</strong><div class="line">${esc(line)}</div><div class="scan-progress">${progress}</div>`;
 }
+
+function syncScanResultFromFields(el, result={}){
+  if(!el || !result) return result;
+  const read=(sel)=>String(el.querySelector(sel)?.value||'').trim();
+  const name=read('[data-scan-name]');
+  const brand=read('[data-scan-brand]');
+  const size=read('[data-scan-size]');
+  const qty=read('[data-scan-qty]');
+  const unit=read('[data-scan-unit]');
+  const expiry=read('[data-scan-expiry]');
+  const cat=read('[data-scan-cat]');
+  const damage=read('[data-scan-damage]');
+  if(name && !/^es\./i.test(name)) result.productName=name;
+  if(brand) result.brand=brand;
+  if(size) result.estimatedSize=size;
+  if(qty && Number(qty)>0) result.quantity=Number(qty);
+  if(unit) result.unit=unit;
+  if(expiry) result.expiryDate=expiry;
+  if(cat) result.category=cat;
+  if(damage) { result.damageType=damage; result.isDamaged=!/^integro$/i.test(damage); }
+  const currentTokens=specificProductTokens([result.productName,result.brand,result.variant].join(' '));
+  const matchTokens=specificProductTokens([result.bestMatchName,result.bestMatchSource,result.bestMatchProductType].join(' '));
+  if(result.bestMatchName && currentTokens.length && matchTokens.length && tokenOverlapCount(currentTokens,matchTokens)===0){
+    clearRejectedMemoryPrediction(result,'Memoria/AI locale ignorata: la scheda corrente è stata letta o corretta come prodotto diverso.');
+  }
+  el._scanResult=result;
+  return result;
+}
 function refreshScanResultCard(el, result={}){
+  result=syncScanResultFromFields(el,result||{});
   renderScanCompletionStatus(el, result);
   if(!el?.classList.contains('confirmed')){
     const info=getScanCompletionStatus(el,result);
@@ -1809,6 +1867,7 @@ function promptScannerConversation(el, result={}, force=false){
 }
 function startScannerMic(autoSpeak=true){
   if(!scannerMicEnabled) { setMicToggleUi(); return; }
+  if(scannerMicPausedBySpeech){ setMicToggleUi(); return; }
   const SR=window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SR){ toast('Microfono live non supportato da questo browser'); scannerMicEnabled=false; setMicToggleUi(); return; }
   if(scannerMicListening) return;
@@ -1817,6 +1876,7 @@ function startScannerMic(autoSpeak=true){
   scannerMicRecognition=r; r.lang='it-IT'; r.interimResults=false; r.continuous=true;
   r.onstart=()=>{ scannerMicListening=true; setMicToggleUi(); };
   r.onresult=(e)=>{
+    if(scannerMicPausedBySpeech || Date.now()<scannerMicEchoBlockUntil) return;
     for(let i=e.resultIndex;i<e.results.length;i++){
       const txt=e.results[i][0].transcript;
       handleScannerMicText(txt);
@@ -1827,7 +1887,7 @@ function startScannerMic(autoSpeak=true){
     else if(e?.error!=='aborted'){ toast('Microfono live: ripeti più lentamente'); }
     setMicToggleUi();
   };
-  r.onend=()=>{ scannerMicListening=false; setMicToggleUi(); if(scannerMicShouldRestart && (liveScanActive || $('#groceryScannerDialog')?.open)) setTimeout(()=>startScannerMic(false), 600); };
+  r.onend=()=>{ scannerMicListening=false; setMicToggleUi(); if(scannerMicShouldRestart && !scannerMicPausedBySpeech && (liveScanActive || $('#groceryScannerDialog')?.open)) setTimeout(()=>startScannerMic(false), 600); };
   try{ r.start(); if(autoSpeak) speakNatural('Microfono attivo. Possiamo parlare mentre inquadri il prodotto e fino alla compilazione completa della scheda.', {flush:false, rate:1.0, pitch:1.02}); }catch{}
 }
 function stopScannerMic(silent=false){
@@ -2113,12 +2173,14 @@ function setLiveFollowupHud(step='label'){
   if(guides) guides.className='live-scan-guides ready';
 }
 function liveFollowupInstruction(step='label'){
+  const action = liveScanActive ? 'premi SCATTA ORA' : 'usa SCATTA FOTO o CARICA FOTO';
   return step==='expiry'
-    ? 'Etichetta acquisita. Ora cerca con calma la data di scadenza: quando la vedi bene, premi SCATTA ORA.'
-    : 'Prodotto riconosciuto. Prima mostrami bene l’etichetta frontale con nome, marca e formato. Prenditi tempo: premi SCATTA ORA solo quando è leggibile.';
+    ? `Etichetta acquisita. Ora cerca con calma la data di scadenza: quando la vedi bene, ${action}.`
+    : `Prodotto riconosciuto. Prima mostrami bene l’etichetta frontale con nome, marca, formato, ingredienti e allergeni. Prenditi tempo: quando è leggibile, ${action}.`;
 }
 function shouldAskLiveLabelFrame(el,result={}){
-  if(!liveScanActive || !el || result.needsRetake) return false;
+  if(!el || result.needsRetake) return false;
+  if(!(liveScanActive || result.liveProductCapture || result.guidedPhotoCapture || el.dataset.liveLabelTarget==='1')) return false;
   const s=getScanFormState(el,result);
   const needExpiry = !s.expiry && !el.dataset.voiceExpiryDone;
   const needSize = isBottleLike(result,s) && (!s.size || /da confermare|capienza da confermare|1,5 l \/ 2 l/i.test(String(s.size||''))) && !el.dataset.voiceSizeDone;
@@ -2153,9 +2215,12 @@ function enterLiveLabelFollowup(el,result={}){
   setActiveScannerResult(el);
   const instruction=liveFollowupInstruction('label');
   setScanVoiceHelper(el,instruction,'live');
-  setScannerStatus(instruction, voiceLine('label_followup',[
+  setScannerStatus(instruction, liveScanActive ? voiceLine('label_followup',[
     'Prodotto riconosciuto. Prima fammi vedere bene l etichetta frontale. Prenditi tempo e premi scatta ora solo quando è leggibile.',
     'Perfetto. Ora cerca l etichetta con nome marca e formato. Non scatto da solo: premi scatta ora quando la vedi bene.'
+  ]) : voiceLine('label_followup_photo',[
+    'Prodotto riconosciuto. Ora aggiungi una foto dell etichetta frontale, così leggo nome marca formato ingredienti e allergeni.',
+    'Perfetto. Adesso fai o carica una foto dell etichetta. La userò per completare la stessa scheda.'
   ]), true);
   setLiveFollowupHud('label');
 }
@@ -2190,6 +2255,15 @@ function mergeLabelVisionIntoResultCard(el,base={},extra={},dataUrl=''){
   base.brand = el.querySelector('[data-scan-brand]')?.value?.trim() || base.brand || extra.brand || '';
   base.estimatedSize = el.querySelector('[data-scan-size]')?.value?.trim() || base.estimatedSize || extra.estimatedSize || '';
   base.expiryDate = el.querySelector('[data-scan-expiry]')?.value?.trim() || base.expiryDate || expiry || '';
+  // V27.73: se la nuova etichetta entra in conflitto con la memoria/AI locale precedente, la nuova etichetta comanda.
+  if(labelConflicts || hasStrongCurrentLabelEvidence(extra)){
+    const curTokens=specificProductTokens([base.productName,base.brand,base.variant,...(extra.detectedText||[]),...(extra.visibleEvidence||[])].join(' '));
+    const oldTokens=specificProductTokens([base.bestMatchName,base.bestMatchSource,base.bestMatchProductType].join(' '));
+    if(oldTokens.length && curTokens.length && tokenOverlapCount(curTokens,oldTokens)===0){
+      base=clearRejectedMemoryPrediction(base,'Etichetta attuale più affidabile della memoria locale precedente.');
+      base.localVision=false;
+    }
+  }
   base.detectedText=[...(base.detectedText||[]), ...(extra.detectedText||[])].filter(Boolean).slice(-18);
   base.visibleEvidence=[...(base.visibleEvidence||[]), ...(extra.visibleEvidence||[])].filter(Boolean).slice(-18);
   base.ingredients=mergeUniqueList(base.ingredients||[], extra.ingredients||[], 50);
@@ -2242,9 +2316,12 @@ async function analyzeLabelFrameForActiveResult(dataUrl, el, visualSignature='')
     el.dataset.liveFollowupStep='expiry';
     const msg=liveFollowupInstruction('expiry');
     setScanVoiceHelper(el,msg,'live');
-    setScannerStatus(msg, voiceLine('expiry_followup',[
+    setScannerStatus(msg, liveScanActive ? voiceLine('expiry_followup',[
       'Etichetta acquisita. Ora cerca con calma la scadenza e premi scatta ora quando la vedi bene.',
       'Perfetto, prima etichetta fatta. Adesso mostrami la data di scadenza: hai tempo, premi scatta ora quando è leggibile.'
+    ]) : voiceLine('expiry_followup_photo',[
+      'Etichetta acquisita. Ora aggiungi una foto della scadenza oppure dimmela a voce.',
+      'Perfetto, etichetta fatta. Adesso fai o carica una foto della data di scadenza, oppure pronunciala.'
     ]), true);
     setLiveFollowupHud('expiry');
     return true;
@@ -2281,7 +2358,7 @@ function openGroceryScanner(afterShopping=false){
 }
 function stopLiveVisionMode(keepMessage=false){
   setScannerLiveUi(false);
-  liveScanActive=false; liveScanStableCount=0; liveScanLastHint=''; liveScanPrevSample=null; liveScanLastSpeechKey=''; liveScanReadySince=0; liveScanCooldownUntil=0; liveScanPendingResult=false; liveScanAwaitNextOk=false, visionBackendStatus=null, visionBackendStatusAt=0; stopScannerMic(true); if('speechSynthesis' in window) try{ speechSynthesis.cancel(); }catch{}
+  liveScanActive=false; scannerMicPausedBySpeech=false; scannerMicSpeechPauseToken++; liveScanStableCount=0; liveScanLastHint=''; liveScanPrevSample=null; liveScanLastSpeechKey=''; liveScanReadySince=0; liveScanCooldownUntil=0; liveScanPendingResult=false; liveScanAwaitNextOk=false, visionBackendStatus=null, visionBackendStatusAt=0; stopScannerMic(true); if('speechSynthesis' in window) try{ speechSynthesis.cancel(); }catch{}
   if(liveScanTimer){ clearTimeout(liveScanTimer); liveScanTimer=null; }
   if(liveScanStream){ try{ liveScanStream.getTracks().forEach(t=>t.stop()); }catch{} liveScanStream=null; }
   const pv=$('#scannerPreview');
@@ -2336,8 +2413,8 @@ function renderLiveScanStage(note='Metti il prodotto nel riquadro: quando è ben
   <div class="live-scan-controls"><button class="primary-btn" id="scannerCaptureNowInlineBtn" type="button"><span class="action-symbol zap"></span><span>Scatta adesso</span></button><button class="mini-btn" id="scannerVoiceToggleBtn" type="button">Voce attiva</button><button class="mini-btn mic" id="scannerMicToggleBtn" type="button">Mic attivo</button><button class="mini-btn next-btn" id="scannerNextObjectBtn" type="button" hidden>OK prossimo prodotto</button><button class="outline-btn" id="scannerStopLiveBtn" type="button">Chiudi diretta</button></div>
   <p class="live-scan-note"><strong>Guida live.</strong> La camera resta grande, tu tieni fermo il prodotto. Dopo ogni scheda si passa avanti solo con OK. <span class="live-tip">${esc(note)}</span></p>`;
   $('#scannerCaptureNowInlineBtn')?.addEventListener('click', ()=>captureLiveFrame(true));
-  $('#scannerVoiceToggleBtn')?.addEventListener('click', ()=>{ liveScanSpeechEnabled=!liveScanSpeechEnabled; setVoiceToggleUi(); toast(liveScanSpeechEnabled ? 'Voce attivata' : 'Voce disattivata'); if(liveScanSpeechEnabled) speakNatural('Voce attivata. Ti guiderò durante la scansione.', {flush:true}); else if('speechSynthesis' in window) try{ speechSynthesis.cancel(); }catch{} });
-  $('#scannerMicToggleBtn')?.addEventListener('click', ()=>{ scannerMicEnabled=!scannerMicEnabled; if(scannerMicEnabled){ setMicToggleUi(); startScannerMic(true); } else { stopScannerMic(); } });
+  $('#scannerVoiceToggleBtn')?.addEventListener('click', ()=>{ liveScanSpeechEnabled=!liveScanSpeechEnabled; setVoiceToggleUi(); toast(liveScanSpeechEnabled ? 'Voce attivata' : 'Voce disattivata'); if(liveScanSpeechEnabled) speakNatural('Voce attivata. Ti guiderò durante la scansione.', {flush:true}); else { scannerMicSpeechPauseToken++; scannerMicPausedBySpeech=false; setMicToggleUi(); if('speechSynthesis' in window) try{ speechSynthesis.cancel(); }catch{} if(scannerMicEnabled && (liveScanActive || liveScannerDialogOpen())) startScannerMic(false); } });
+  $('#scannerMicToggleBtn')?.addEventListener('click', ()=>{ scannerMicEnabled=!scannerMicEnabled; if(scannerMicEnabled){ scannerMicPausedBySpeech=false; setMicToggleUi(); startScannerMic(true); } else { scannerMicPausedBySpeech=false; stopScannerMic(); } });
   $('#scannerNextObjectBtn')?.addEventListener('click', ()=>allowNextObjectScan(true));
   setVoiceToggleUi(); setMicToggleUi(); setNextObjectUi(false);
   $('#scannerStopLiveBtn')?.addEventListener('click', ()=>{ stopLiveVisionMode(); setScannerStatus('Diretta chiusa. Puoi riaprirla quando vuoi.'); });
@@ -2696,6 +2773,8 @@ async function captureLiveFrame(manual=false){
   liveScanCaptureLockUntil=Date.now()+2600;
   const video=$('#liveScanVideo'); if(!video || video.readyState<2){ if(manual) toast('Videocamera non pronta'); return; }
   liveScanBusy=true;
+  // V27.73: appena parte un'analisi blocco il loop, così non partono due foto dello stesso prodotto.
+  if(liveScanActive && !existingLabelTarget) liveScanPendingResult=true;
   liveScanReadySince=0; liveScanStableCount=0;
   const guides=$('#liveScanGuides'); if(guides) guides.className='live-scan-guides scanning';
   const c=document.createElement('canvas'); c.width=video.videoWidth||1280; c.height=video.videoHeight||720;
@@ -2732,8 +2811,36 @@ async function captureLiveFrame(manual=false){
 
 async function handleGroceryFiles(files){
   const arr=[...(files||[])]; if(!arr.length) return;
-  for(const file of arr) await analyzeGroceryPhoto(file);
+  // V27.75: Scatta foto / Carica foto seguono lo stesso flusso guidato della diretta.
+  // Se esiste una scheda prodotto in attesa di etichetta o scadenza, la foto successiva aggiorna quella scheda
+  // invece di creare un nuovo prodotto. Così: prodotto -> etichetta/ingredienti -> scadenza -> conferma.
+  for(const file of arr){
+    const followTarget=getLiveLabelTarget?.();
+    if(followTarget){
+      await analyzeGroceryFileAsFollowup(file, followTarget);
+    }else{
+      await analyzeGroceryPhoto(file);
+    }
+  }
   $('#groceryPhotoInput').value=''; $('#groceryGalleryInput').value='';
+}
+
+async function analyzeGroceryFileAsFollowup(file, target=null){
+  const el=target || getLiveLabelTarget?.();
+  if(!el){ return analyzeGroceryPhoto(file); }
+  const original=await fileToDataUrl(file);
+  const dataUrl=await compressImage(original,1280,0.9);
+  const step=getLiveFollowupStep(el);
+  setScannerStatus(
+    step==='expiry'
+      ? 'Foto scadenza ricevuta: aggiorno la stessa scheda prodotto.'
+      : 'Foto etichetta ricevuta: leggo nome, marca, formato, ingredienti e allergeni sulla stessa scheda.',
+    step==='expiry'
+      ? voiceLine('photo_expiry_scan',['Perfetto, controllo la data di scadenza dalla foto.','Ok, provo a leggere la scadenza dalla foto.'])
+      : voiceLine('photo_label_scan',['Perfetto, controllo etichetta, ingredienti e allergeni dalla foto.','Ok, leggo etichetta e composizione del prodotto dalla foto.']),
+    true
+  );
+  await analyzeLabelFrameForActiveResult(dataUrl, el, '');
 }
 function loadImageElement(dataUrl){
   return new Promise((resolve,reject)=>{ const img=new Image(); img.onload=()=>resolve(img); img.onerror=reject; img.src=dataUrl; });
@@ -2829,6 +2936,7 @@ async function analyzeGroceryDataUrl(dataUrl,fileName='photo.jpg', visualSignatu
   let visionError=null;
   let localPre=await autonomousVisionGuess(dataUrl).catch(()=>null);
   const liveCapture=/^(manual|auto)-live\.jpg$/i.test(String(fileName||''));
+  const guidedPhotoCapture=!liveCapture && !visualSignature && !/^(label|expiry)-/i.test(String(fileName||''));
   const localReady=!!(localPre && localAutonomyReady(localPre));
   const candidateGate = localReady ? {eligible:true, reason:'Prodotto già riconosciuto localmente.'} : await classifyConsumableCandidateDataUrl(dataUrl, localPre, liveCapture).catch(()=>({eligible:true, reason:'Gate non disponibile: procedo prudente.'}));
   if(liveCapture && !candidateGate.eligible){
@@ -2862,10 +2970,15 @@ async function analyzeGroceryDataUrl(dataUrl,fileName='photo.jpg', visualSignatu
     result=normalizeLiveProductCaptureResult(result,fileName);
   }
   if(result.needsRetake){ setScannerStatus(result.reason || 'Non vedo bene, rifai la foto.', voiceLine('retake',['La foto non è abbastanza chiara. Riproviamo con il prodotto più fermo e ben visibile.','Non riesco a riconoscerlo bene. Prova a centrarlo meglio e rifare la scansione.']), true); addScannerResult({...result,dataUrl}); document.querySelector('.scanning-preview')?.remove(); return; }
-  if(liveCapture){
-    result.liveProductCapture=true;
+  if(liveCapture || guidedPhotoCapture){
+    result.liveProductCapture=!!liveCapture;
+    result.guidedPhotoCapture=!!guidedPhotoCapture;
     result.shouldAskConfirmation=true;
-    if(Array.isArray(result.items)) result.items.forEach(it=>{ it.liveProductCapture=true; it.shouldAskConfirmation=true; });
+    if(Array.isArray(result.items)) result.items.forEach(it=>{
+      it.liveProductCapture=!!liveCapture;
+      it.guidedPhotoCapture=!!guidedPhotoCapture;
+      it.shouldAskConfirmation=true;
+    });
   }
   result.dataUrl=dataUrl; result.quality=quality; result.visualSignature=visualSignature || liveScanLastMetrics?.signature || ''; ensureVisionBrain().totalScans=Number(ensureVisionBrain().totalScans||0)+1; if(result.autonomousVision) ensureVisionBrain().autonomousHits=Number(ensureVisionBrain().autonomousHits||0)+1;
   const summary=presentVisionResults(result,dataUrl);
@@ -3547,29 +3660,33 @@ async function improveVisionWithLocalLearning(dataUrl='', result={}){
     const missingName=!result.productName || isBadScanName(result.productName);
     const agrees=localPredictionAgreesWithCurrent(local,result);
     const strongLabel=hasStrongCurrentLabelEvidence(result);
-    if(missingName || agrees){
-      if(missingName){
-        result=Object.assign({}, result, local, {cloudVision:!!result.cloudVision, cloudFallback:!!result.cloudFallback, localEnhanced:true, needsManual: Number(local.confidence||0)<.91 || result.needsManual, shouldAskConfirmation: Number(local.confidence||0)<.93});
-      }else{
-        // Etichetta/OCR attuale vince sempre: la memoria locale può solo completare campi mancanti.
-        const keep=Object.assign({}, result);
-        if(!keep.brand && local.brand) keep.brand=local.brand;
-        if(!keep.variant && local.variant) keep.variant=local.variant;
-        if(!keep.estimatedSize && local.estimatedSize) keep.estimatedSize=local.estimatedSize;
-        if((!keep.unit || keep.unit==='pz') && local.unit) keep.unit=local.unit;
-        if(!keep.category && local.category) keep.category=local.category;
-        keep.localEnhanced=true;
-        keep.autonomousVision=!!local.autonomousVision;
-        keep.localVision=true;
-        keep.confidence=Math.max(Number(keep.confidence||0), Math.min(Number(local.confidence||0), .86));
-        if(agrees){ keep.bestMatchName=local.bestMatchName||local.productName||''; keep.bestMatchSource=local.bestMatchSource||'AI locale imparata'; keep.bestMatchScore=local.bestMatchScore||Math.round((local.confidence||0)*100); }
-        result=keep;
-      }
+    // V27.73: l'AI locale è memoria, non autorità.
+    // Se l'etichetta attuale contiene testo leggibile, NON può mai sostituire nome/prodotto con un prodotto imparato prima.
+    if(missingName && !strongLabel){
+      result=Object.assign({}, result, local, {cloudVision:!!result.cloudVision, cloudFallback:!!result.cloudFallback, localEnhanced:true, needsManual: Number(local.confidence||0)<.91 || result.needsManual, shouldAskConfirmation: Number(local.confidence||0)<.93});
+    }else if(agrees){
+      // Etichetta/OCR attuale vince sempre: la memoria locale può solo completare campi mancanti.
+      const keep=Object.assign({}, result);
+      if(!keep.brand && local.brand) keep.brand=local.brand;
+      if(!keep.variant && local.variant) keep.variant=local.variant;
+      if(!keep.estimatedSize && local.estimatedSize) keep.estimatedSize=local.estimatedSize;
+      if((!keep.unit || keep.unit==='pz') && local.unit) keep.unit=local.unit;
+      if(!keep.category && local.category) keep.category=local.category;
+      keep.localEnhanced=true;
+      keep.autonomousVision=!!local.autonomousVision;
+      keep.localVision=true;
+      keep.confidence=Math.max(Number(keep.confidence||0), Math.min(Number(local.confidence||0), .86));
+      keep.bestMatchName=local.bestMatchName||local.productName||'';
+      keep.bestMatchSource=local.bestMatchSource||'AI locale imparata';
+      keep.bestMatchScore=local.bestMatchScore||Math.round((local.confidence||0)*100);
+      result=keep;
     }else if(strongLabel){
       result.localPredictionRejected=true;
       result.rejectedLocalPrediction=local.productName||local.bestMatchName||'';
       result.matchRejectedReason='AI locale ignorata: l’etichetta attuale indica un prodotto diverso.';
       result=clearRejectedMemoryPrediction(result,result.matchRejectedReason);
+      result.autonomousVision=false;
+      result.localVision=!!result.localVision && !result.rejectedLocalPrediction;
     }
   }
   if(features) result.visualFeatures=features;
@@ -3721,14 +3838,14 @@ function addScannerResult(result){
     toast('Risultato eliminato');
   });
   el.querySelectorAll('[data-scan-name],[data-scan-brand],[data-scan-size],[data-scan-qty],[data-scan-unit],[data-scan-expiry],[data-scan-cat],[data-scan-damage]').forEach(field=>{
-    field.addEventListener('input',()=>refreshScanResultCard(el,result));
-    field.addEventListener('change',()=>refreshScanResultCard(el,result));
+    field.addEventListener('input',()=>{ result=syncScanResultFromFields(el,result); refreshScanResultCard(el,result); });
+    field.addEventListener('change',()=>{ result=syncScanResultFromFields(el,result); refreshScanResultCard(el,result); });
     field.addEventListener('focus',()=>setActiveScannerResult(el));
   });
   refreshScanResultCard(el,result);
   if(!result.needsRetake){
     liveScanPendingResult=true; liveScanAwaitNextOk=false; setActiveScannerResult(el);
-    if(result.liveProductCapture){
+    if(result.liveProductCapture || result.guidedPhotoCapture){
       el.dataset.liveLabelTarget='1';
       el.dataset.liveFollowupStep='label';
     }
