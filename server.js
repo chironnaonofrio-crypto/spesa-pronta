@@ -19,7 +19,7 @@ app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 function emptyDb(){
-  return { users:{}, households:{}, tokens:{}, meta:{ createdAt:Date.now(), version:'V27.94 DIRECT REOPEN' } };
+  return { users:{}, households:{}, tokens:{}, meta:{ createdAt:Date.now(), version:'V27.95 MODAL DIRECT OPEN' } };
 }
 function ensureDb(){
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -50,7 +50,7 @@ function writeDb(db){
   ensureDb();
   db.meta = db.meta || {};
   db.meta.updatedAt = Date.now();
-  db.meta.version = 'V27.94 DIRECT REOPEN';
+  db.meta.version = 'V27.95 MODAL DIRECT OPEN';
   const tmp = `${DB_FILE}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
   fs.renameSync(tmp, DB_FILE);
@@ -99,7 +99,7 @@ app.get('/api/health', (req,res) => {
   res.json({
     ok:true,
     app:'Spesa Pronta',
-    version:'V27.94 DIRECT REOPEN',
+    version:'V27.95 MODAL DIRECT OPEN',
     time:new Date().toISOString(),
     db:{
       persistent: DATA_DIR.includes('/var/data') || !!process.env.DATA_DIR || !!process.env.DB_FILE,
