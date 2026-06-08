@@ -1,0 +1,93 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "spesa pronta",
+      "intents": [
+        { "name": "AMAZON.CancelIntent", "samples": [] },
+        { "name": "AMAZON.HelpIntent", "samples": [] },
+        { "name": "AMAZON.StopIntent", "samples": [] },
+        {
+          "name": "ReadListIntent",
+          "samples": [
+            "dimmi la lista della spesa",
+            "cosa manca",
+            "cosa devo comprare",
+            "leggi la lista",
+            "dimmi la lista di spesa pronta"
+          ]
+        },
+        {
+          "name": "AddItemIntent",
+          "slots": [
+            { "name": "Product", "type": "AMAZON.SearchQuery" },
+            { "name": "Unit", "type": "AMAZON.SearchQuery" }
+          ],
+          "samples": [
+            "aggiungi {Product}",
+            "metti {Product} nella lista",
+            "manca {Product}",
+            "segna {Product} da comprare",
+            "aggiungi {Product} in {Unit}"
+          ]
+        },
+        {
+          "name": "SetQuantityIntent",
+          "slots": [
+            { "name": "Product", "type": "AMAZON.SearchQuery" },
+            { "name": "Quantity", "type": "AMAZON.NUMBER" },
+            { "name": "Unit", "type": "AMAZON.SearchQuery" }
+          ],
+          "samples": [
+            "imposta {Product} a {Quantity}",
+            "imposta {Product} a {Quantity} {Unit}",
+            "segna {Quantity} {Unit} di {Product}",
+            "modifica {Product} a {Quantity} {Unit}"
+          ]
+        },
+        {
+          "name": "IncreaseItemIntent",
+          "slots": [
+            { "name": "Product", "type": "AMAZON.SearchQuery" },
+            { "name": "Quantity", "type": "AMAZON.NUMBER" }
+          ],
+          "samples": [
+            "aumenta {Product} di {Quantity}",
+            "aggiungi {Quantity} a {Product}"
+          ]
+        },
+        {
+          "name": "DecreaseItemIntent",
+          "slots": [
+            { "name": "Product", "type": "AMAZON.SearchQuery" },
+            { "name": "Quantity", "type": "AMAZON.NUMBER" }
+          ],
+          "samples": [
+            "diminuisci {Product} di {Quantity}",
+            "togli {Quantity} da {Product}"
+          ]
+        },
+        {
+          "name": "ChangeUnitIntent",
+          "slots": [
+            { "name": "Product", "type": "AMAZON.SearchQuery" },
+            { "name": "Unit", "type": "AMAZON.SearchQuery" }
+          ],
+          "samples": [
+            "cambia unità di {Product} in {Unit}",
+            "metti {Product} in {Unit}"
+          ]
+        },
+        {
+          "name": "ResetListIntent",
+          "samples": [
+            "ho fatto la spesa",
+            "svuota la lista",
+            "resetta la spesa",
+            "rimetti tutto in casa"
+          ]
+        }
+      ],
+      "types": []
+    }
+  }
+}

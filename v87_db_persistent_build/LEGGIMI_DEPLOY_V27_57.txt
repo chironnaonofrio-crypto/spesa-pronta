@@ -1,0 +1,5 @@
+V27.57 ROOT+PUBLIC FIX
+- Render può servire public/index.html.
+- Hosting/file manager può servire index.html in root.
+- Root e public sono allineati.
+- Dopo upload aprire /clear-cache.html e verificare badge V27.57 ROOT+PUBLIC FIX.

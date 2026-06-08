@@ -1,0 +1,37 @@
+{
+  "manifest": {
+    "publishingInformation": {
+      "locales": {
+        "it-IT": {
+          "summary": "Gestisci la lista della spesa con Spesa Pronta.",
+          "examplePhrases": [
+            "Alexa, apri Spesa Pronta",
+            "Alexa, chiedi a Spesa Pronta cosa devo comprare",
+            "Alexa, chiedi a Spesa Pronta di aggiungere acqua"
+          ],
+          "keywords": [
+            "spesa",
+            "lista",
+            "casa",
+            "inventario"
+          ],
+          "name": "Spesa Pronta",
+          "description": "Skill per leggere e aggiornare la lista della spesa sincronizzata con il cloud di Spesa Pronta."
+        }
+      },
+      "isAvailableWorldwide": true,
+      "testingInstructions": "Configura endpoint HTTPS: https://TUO-DOMINIO/api/alexa?householdId=ID&token=TOKEN",
+      "category": "ORGANIZERS_AND_ASSISTANTS",
+      "distributionCountries": []
+    },
+    "apis": {
+      "custom": {
+        "endpoint": {
+          "uri": "https://TUO-DOMINIO/api/alexa?householdId=ID_FAMIGLIA&token=TOKEN_CLOUD"
+        },
+        "interfaces": []
+      }
+    },
+    "manifestVersion": "1.0"
+  }
+}
