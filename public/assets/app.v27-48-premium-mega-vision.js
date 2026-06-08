@@ -2468,18 +2468,14 @@ function refreshVisionBrainPanel(){
 
 
 
-function enhanceScannerQuickCards(){
-  const wrap=document.querySelector('#groceryScannerDialog .scanner-quick-cards');
-  if(!wrap || wrap.dataset.finalCards==='1') return;
-  const cards=[
-    {img:'assets/illustrations/ui-ref-inquadra.png', title:'INQUADRA', sub:'RICONOSCE IL PRODOTTO'},
-    {img:'assets/illustrations/ui-ref-legge.png', title:'LEGGE', sub:'ETICHETTA E SCADENZA'},
-    {img:'assets/illustrations/ui-ref-dialoga.png', title:'PARLA CON TE', sub:'CHIEDE SOLO CIÒ CHE MANCA'},
-    {img:'assets/illustrations/ui-ref-exp.png', title:'MODALITÀ EXP', sub:'SCADENZE RAPIDE'}
-  ];
-  wrap.classList.add('scanner-quick-cards-final');
-  wrap.dataset.finalCards='1';
-  wrap.innerHTML=cards.map(card=>`<span><img class="quick-card-art" src="${card.img}" alt="${card.title}"><span class="quick-copy"><b>${card.title}</b><em>${card.sub}</em></span></span>`).join('');
+function enhanceScannerQuickCards(){ const wrap=document.querySelector('#groceryScannerDialog .scanner-quick-cards'); if(wrap) wrap.style.display='none'; }
+
+
+function rebuildScannerMergedPills(){
+  const bar=document.querySelector('#groceryScannerDialog .scanner-actions');
+  if(!bar || bar.dataset.mergedPills==='1') return;
+  bar.dataset.mergedPills='1';
+  bar.classList.add('scanner-actions-merged');
 }
 
 function ensureScannerLiveButtons(){
@@ -2496,6 +2492,7 @@ function ensureScannerLiveButtons(){
 function openGroceryScanner(afterShopping=false){
   const dlg=$('#groceryScannerDialog'); if(!dlg) return;
   enhanceScannerQuickCards();
+  rebuildScannerMergedPills();
   ensureScannerLiveButtons();
   dlg.dataset.afterShopping = afterShopping ? '1' : '0';
   refreshVisionBrainPanel();
