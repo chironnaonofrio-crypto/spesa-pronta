@@ -1867,3 +1867,27 @@ body{color-scheme:light;}
   .scanner-secondary-actions .secondary-pill-bg{min-height:70px!important;}
   .scanner-title-block > #scannerSeedBrainProof .seed-proof-visual-wrap{height:82px!important;}
 }
+
+
+/* V28.17 - remove verify pill + footer flow fix */
+.verify-action-btn,
+#markVerifyBtn,
+.secondary-pill-verify{display:none!important;visibility:hidden!important;pointer-events:none!important}
+.scanner-footer{
+  position:relative!important;
+  bottom:auto!important;
+  top:auto!important;
+  left:auto!important;
+  right:auto!important;
+  z-index:auto!important;
+  background:#fff!important;
+  padding:12px 0 0!important;
+  margin-top:18px!important;
+  box-shadow:none!important;
+}
+.scanner-footer::before,.scanner-footer::after{display:none!important;content:none!important}
+.scanner-secondary-actions > *:only-child{grid-column:1/-1!important}
+.scanner-card{padding-bottom:20px!important}
+@media(max-width:820px){
+  .scanner-footer{position:relative!important;bottom:auto!important;padding:12px 0 0!important;margin-top:16px!important}
+}
