@@ -1959,17 +1959,24 @@ body{color-scheme:light;}
 }
 
 
-/* V28.13 - First inventory safe flow fix */
-#markVerifyBtn,.verify-action-btn,.secondary-pill-verify{display:none!important}
-.scanner-footer{position:static!important;bottom:auto!important;z-index:auto!important;background:transparent!important;box-shadow:none!important;padding:14px 0 0!important;margin-top:20px!important}
-.scanner-footer .primary-btn,.scanner-footer .outline-btn{position:static!important}
-.first-inventory-session-card{margin:16px 0;padding:16px;border-radius:24px;border:1px solid rgba(13,110,253,.16);background:linear-gradient(180deg,#f8fbff,#eef7ff);box-shadow:0 18px 36px rgba(12,45,94,.06);color:#15375f;font-weight:850}
-.first-inventory-session-card.expired{background:linear-gradient(180deg,#fff8ed,#fff2db);border-color:rgba(219,154,20,.22)}
-.first-inventory-session-card strong{display:block;font-size:1.05rem;color:#102849;margin-bottom:6px}
-.first-inventory-session-card p{margin:0 0 10px;color:#516987;line-height:1.35;font-weight:750}
-.first-inventory-session-card ul{margin:10px 0 12px;padding-left:18px;color:#183a64}
-.first-inventory-session-actions{display:grid;grid-template-columns:1fr;gap:10px;margin-top:10px}
-.slim-pill{min-height:48px!important;border-radius:999px!important;font-size:.88rem!important;padding:.7rem 1rem!important}
-.danger-soft{background:#fff!important;border-color:rgba(210,70,70,.22)!important;color:#9b2c2c!important}
-.inventory-required .dashboard-locked-note{display:block!important}
-.dashboard-locked-note{display:none;margin:14px 0;padding:14px 16px;border-radius:22px;background:linear-gradient(180deg,#eef7ff,#f7fbff);border:1px solid rgba(13,110,253,.16);font-weight:850;color:#173a65}
+/* V28.14 - controllo obbligatorio: niente "Fatta da verificare" e footer non sticky */
+.scanner-footer,
+.scanner-card .scanner-footer,
+.scanner-modal .scanner-footer,
+.scanner-card-premium .scanner-footer{
+  position:static!important;
+  bottom:auto!important;
+  top:auto!important;
+  z-index:auto!important;
+  background:#fff!important;
+  padding:18px 0 0!important;
+  margin-top:22px!important;
+  border-top:1px solid rgba(210,225,245,.9)!important;
+}
+.scanner-footer .primary-btn,
+.scanner-footer .outline-btn{
+  width:100%!important;
+}
+#markVerifyBtn,.verify-action-btn,.secondary-pill-verify{display:none!important;}
+.scanner-secondary-actions{grid-template-columns:1fr!important;}
+.scanner-secondary-actions #scannerCaptureNowBtn{width:100%!important;}

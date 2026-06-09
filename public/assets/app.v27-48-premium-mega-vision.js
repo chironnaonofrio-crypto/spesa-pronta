@@ -781,7 +781,7 @@ function bind(){
   $('#refreshCaptchaBtn')?.addEventListener('click', () => { captcha=newCaptcha(); renderCaptcha(); });
   $('#continueOfflineBtn')?.addEventListener('click', () => toast('Per usare Spesa Pronta serve accesso o registrazione cloud.'));
   $('#initialScanBtn')?.addEventListener('click', () => openGroceryScanner(true));
-  $('#initialVerifyLaterBtn')?.addEventListener('click', ()=>toast('Inventario iniziale obbligatorio: devi completare il controllo.'));
+  $('#initialVerifyLaterBtn')?.addEventListener('click', markInitialInventoryToVerify);
   $('#saveSettingsBtn').addEventListener('click', saveSettingsFromForm);
   $('#syncNowBtn').addEventListener('click', () => syncCloud(true));
   $('#saveProfileBtn').addEventListener('click', saveProfile);
@@ -809,7 +809,6 @@ function bind(){
   $('#scannerCloseBtn')?.addEventListener('click', closeGroceryScanner);
   $('#scannerFinishBtn')?.addEventListener('click', finishScanner);
   $('#scannerResetBtn')?.addEventListener('click', resetScannerResults);
-  $('#markVerifyBtn')?.addEventListener('click', markShoppingDoneToVerify);
   $('#fridgeModeBtn')?.addEventListener('click', startFridgeMode);
   $('#groceryPhotoInput')?.addEventListener('change', e => handleGroceryFiles(e.target.files));
   $('#groceryGalleryInput')?.addEventListener('change', e => handleGroceryFiles(e.target.files));
@@ -850,7 +849,7 @@ function initialView(){
   if(session.pendingVerifyEmail || session.pendingVerifyPhone) return 'verify-email';
   if(!isSignedIn()) return 'registration';
   if(session.welcomePending) return 'welcome';
-  if(needsInitialInventory()) return 'dashboard';
+  if(needsInitialInventory()) return 'onboarding';
   return 'dashboard';
 }
 function updateFlowClasses(){
@@ -860,7 +859,7 @@ function updateFlowClasses(){
 function showView(v){
   toggleMobileMenu(false);
   if(!isSignedIn() && !['registration','verify-email'].includes(v)) v='registration';
-  if(false && needsInitialInventory() && !['welcome','onboarding','registration','settings','help'].includes(v)) v='onboarding';
+  if(needsInitialInventory() && !['welcome','onboarding','registration','settings','help'].includes(v)) v='onboarding';
   if(v==='welcome' && !session.welcomePending) v='onboarding';
   updateFlowClasses();
   activeView=v;
@@ -2657,7 +2656,7 @@ async function aiAnswer(text){
   if(q.includes('dimentica tutto') || q.includes('cancella memoria')){ aiMemory=defaultAiMemory(); saveAiMemory(); return 'Ok, ho cancellato la memoria locale dell’assistente.'; }
   if(q.includes('fotografa') || q.includes('foto spesa') || q.includes('scanner') || q.includes('modalita frigo')){ openGroceryScanner(false); return 'Perfetto, ho aperto la modalità foto spesa. Fotografa un articolo alla volta: se non vedo bene ti chiedo di rifarla.'; }
   if(q.includes('cosa devo comprare') || q.includes('lista della spesa') || q.includes('che manca') || q.includes('cosa manca')) return listBuyText();
-  if(q.includes('ho fatto la spesa') || q.includes('spesa fatta')){ openGroceryScanner(true); return 'Perfetto. Prima di chiudere la spesa ti propongo il controllo con foto: scatta un articolo alla volta, oppure segna “fatta da verificare”.'; }
+  if(q.includes('ho fatto la spesa') || q.includes('spesa fatta')){ openGroceryScanner(true); return 'Perfetto. Per chiudere la spesa devi completare il controllo con foto: scansiona un articolo alla volta e poi premi Completa controllo.'; }
   m=q.match(/siamo\s+(\d+)\s+persone|(?:metti|imposta|aggiorna).*?(\d+)\s+persone/);
   if(m){ settings.people=Number(m[1]||m[2]); saveAll(); render(); return `Ok, ho aggiornato il profilo: ${settings.people} persone in casa. Ora ricalcolo acqua, alimenti e scorte.`; }
   m=q.match(/(?:ho|abbiamo|siamo).*?(\d+)\s+(?:animali|cani|gatti)|(?:metti|imposta|aggiorna).*?(\d+)\s+(?:animali|cani|gatti)/);
@@ -6015,136 +6014,4 @@ try{
     setTimeout(removeInlineDebug,300);
     setTimeout(removeInlineDebug,1400);
   }catch(e){ console.warn('V28.06 debug console patch error',e); }
-})();
-
-
-/* V28.13 - first inventory safe recovery (24h), no auto scanner overlay */
-(function(){
-  const TTL=24*60*60*1000;
-  const KEY='spesa_pronta_first_inventory_sessions_v2813';
-  function now(){return Date.now();}
-  function safeJson(v,f){try{return JSON.parse(v)||f}catch{return f}}
-  function loadMap(){return safeJson(localStorage.getItem(KEY),'{}')||{};}
-  function saveMap(m){try{localStorage.setItem(KEY,JSON.stringify(m||{}));}catch{}}
-  function userKeys(){
-    const out=[];
-    try{
-      if(settings?.householdId) out.push('house:'+settings.householdId);
-      if(session?.user?.email) out.push('email:'+String(session.user.email).toLowerCase());
-      if(settings?.profile?.email) out.push('email:'+String(settings.profile.email).toLowerCase());
-      if(session?.user?.id) out.push('user:'+session.user.id);
-    }catch{}
-    return [...new Set(out.filter(Boolean))];
-  }
-  function draftItems(){
-    try{return (state||[]).map(i=>({id:i.id,name:i.name,brand:i.brand,qty:i.qty,unit:i.unit,size:i.size,category:i.category,expiryDate:i.expiryDate,updatedAt:i.updatedAt||now()}));}catch{return []}
-  }
-  function saveDraft(reason='auto'){
-    try{
-      if(settings?.inventorySetupDone) return;
-      const items=draftItems();
-      if(!items.length) return;
-      const d={version:'V28.13',reason,items,updatedAt:now(),expiresAt:now()+TTL};
-      const m=loadMap();
-      const keys=userKeys();
-      keys.forEach(k=>m[k]=d); m.__latest=d;
-      saveMap(m);
-    }catch{}
-  }
-  function clearDraft(){
-    const m=loadMap();
-    userKeys().forEach(k=>delete m[k]); delete m.__latest; saveMap(m);
-  }
-  function findDraft(){
-    const m=loadMap();
-    const keys=userKeys();
-    let d=null, key='';
-    for(const k of keys){ if(m[k]){d=m[k]; key=k; break;} }
-    if(!d && m.__latest){ d=m.__latest; key='__latest'; }
-    if(!d) return null;
-    return {draft:d,key,expired:Number(d.expiresAt||0)<now()};
-  }
-  function restoreDraftIfNeeded(){
-    try{
-      if(settings?.inventorySetupDone) return 'done';
-      const f=findDraft();
-      if(!f) return 'none';
-      if(f.expired){
-        state=[]; clearDraft();
-        aiMemory.firstInventoryNotice={type:'expired',at:now(),message:'La sessione di controllo lasciata in sospeso è scaduta dopo 24 ore. Gli articoli temporanei sono stati riportati a 0.'};
-        saveAll?.(); saveAiMemory?.(); return 'expired';
-      }
-      if(Array.isArray(f.draft.items) && f.draft.items.length && (!state||!state.length)){
-        state=migrateItems?migrateItems(f.draft.items):f.draft.items;
-        aiMemory.firstInventoryNotice={type:'resumed',at:now(),count:state.length,expiresAt:f.draft.expiresAt,message:'Ho ripristinato il controllo iniziale lasciato in sospeso.'};
-        saveAll?.(); saveAiMemory?.(); return 'resumed';
-      }
-    }catch{}
-    return 'none';
-  }
-  function resetFirstInventory(){
-    state=[]; settings.inventorySetupDone=false; settings.inventoryStatus='required'; settings.inventoryUpdatedAt=null; clearDraft();
-    aiMemory.firstInventoryNotice={type:'reset',at:now(),message:'Hai scelto di ricominciare da 0 articoli.'};
-    saveAll?.(); saveAiMemory?.(); render?.(); toast?.('Controllo iniziale azzerato');
-  }
-  function noticeHtml(){
-    try{
-      if(settings?.inventorySetupDone) return '';
-      const f=findDraft(); const n=aiMemory?.firstInventoryNotice;
-      if(n?.type==='expired') return `<div class="first-inventory-session-card expired"><strong>Sessione controllo scaduta</strong><p>Sono passate più di 24 ore: gli articoli temporanei del controllo iniziale sono stati riportati a 0 per evitare quantità sbagliate.</p><button class="primary-btn slim-pill" type="button" data-start-first-inventory>Inizia nuovo controllo</button></div>`;
-      if(f && !f.expired && Array.isArray(f.draft.items) && f.draft.items.length){
-        const hours=Math.max(1,Math.ceil((Number(f.draft.expiresAt||now())-now())/3600000));
-        const list=f.draft.items.slice(0,6).map(i=>`<li>${esc?.(i.name||'Prodotto')||i.name} <b>${esc?.(String(i.qty||1))||i.qty} ${esc?.(i.unit||'pz')||i.unit||'pz'}</b></li>`).join('');
-        return `<div class="first-inventory-session-card"><strong>Controllo iniziale in sospeso</strong><p>Hai già aggiunto ${f.draft.items.length} articoli. Li tengo salvati per altre ${hours}h: puoi continuare o ricominciare da 0.</p><ul>${list}</ul><div class="first-inventory-session-actions"><button class="primary-btn slim-pill" type="button" data-start-first-inventory>Continua controllo</button><button class="outline-btn slim-pill danger-soft" type="button" data-reset-first-inventory>Ricomincia da 0 articoli</button></div></div>`;
-      }
-    }catch{}
-    return '';
-  }
-  function renderNotice(){
-    try{
-      document.querySelectorAll('.first-inventory-session-card').forEach(el=>el.remove());
-      const html=noticeHtml(); if(!html) return;
-      const target=document.querySelector('#view-dashboard .panel') || document.querySelector('#view-dashboard') || document.querySelector('.app-main') || document.querySelector('main');
-      if(target) target.insertAdjacentHTML('afterbegin',html);
-    }catch{}
-  }
-  document.addEventListener('click', e=>{
-    const reset=e.target.closest('[data-reset-first-inventory]');
-    if(reset){ e.preventDefault(); resetFirstInventory(); return; }
-    const start=e.target.closest('[data-start-first-inventory]');
-    if(start){ e.preventDefault(); if(typeof openGroceryScanner==='function') openGroceryScanner(true); return; }
-  });
-  window.addEventListener('beforeunload',()=>saveDraft('beforeunload'));
-  const oldRender=window.render||render;
-  if(typeof oldRender==='function'){
-    window.render=function(){ const r=oldRender.apply(this,arguments); renderNotice(); return r; };
-    try{ render=window.render; }catch{}
-  }
-  const oldApply=window.applyAuthPayload||applyAuthPayload;
-  if(typeof oldApply==='function'){
-    window.applyAuthPayload=function(data,makeWelcome){ const r=oldApply.apply(this,arguments); restoreDraftIfNeeded(); renderNotice(); return r; };
-    try{ applyAuthPayload=window.applyAuthPayload; }catch{}
-  }
-  const oldConfirm=window.confirmScanResult||confirmScanResult;
-  if(typeof oldConfirm==='function'){
-    window.confirmScanResult=function(el,result,silent){ const r=oldConfirm.apply(this,arguments); saveDraft('item-confirmed'); renderNotice(); return r; };
-    try{ confirmScanResult=window.confirmScanResult; }catch{}
-  }
-  const oldFinish=window.finishScanner||finishScanner;
-  if(typeof oldFinish==='function'){
-    window.finishScanner=function(){
-      const beforeDone=!!settings.inventorySetupDone;
-      const r=oldFinish.apply(this,arguments);
-      if(settings.inventorySetupDone || beforeDone){ clearDraft(); }
-      return r;
-    };
-    try{ finishScanner=window.finishScanner; }catch{}
-  }
-  const oldLogout=window.performLogoutAccount||performLogoutAccount;
-  if(typeof oldLogout==='function'){
-    window.performLogoutAccount=function(){ saveDraft('logout'); return oldLogout.apply(this,arguments); };
-    try{ performLogoutAccount=window.performLogoutAccount; }catch{}
-  }
-  restoreDraftIfNeeded(); setTimeout(renderNotice,400);
-  window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.13', firstInventorySafe:'v28_13'});
 })();
