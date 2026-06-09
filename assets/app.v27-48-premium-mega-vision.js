@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v28.39-openai-home-pro';
+window.SPESA_PRONTA_VERSION='v28.40-openai-dashboard-home-pro';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -640,7 +640,7 @@ async function performCloudSyncV2821(){
 function downloadBackupV2821(){
   const backup={
     app:'Spesa Pronta',
-    version:'V28.28 Cloud Voice Icons Inline',
+    version:'V28.40 OpenAI Dashboard Home Pro',
     exportedAt:new Date().toISOString(),
     items:state,
     settings,
@@ -6452,7 +6452,7 @@ try{
 
 
 // V28.21 Language Cloud Pro
-window.SPESA_PRONTA_VERSION='v28.39-openai-home-pro';
+window.SPESA_PRONTA_VERSION='v28.40-openai-dashboard-home-pro';
 
 
 // =============================================================
@@ -6946,8 +6946,8 @@ try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, 
 // =============================================================
 (function(){
   try{
-    window.SPESA_PRONTA_VERSION='v28.39-openai-home-pro';
-    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.39', preflightBugSweep:'regex_boundary_cache_runtime_marker'});
+    window.SPESA_PRONTA_VERSION='v28.40-openai-dashboard-home-pro';
+    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.38', preflightBugSweep:'regex_boundary_cache_runtime_marker'});
     if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('openai-connection-guard-v2836-ready',{regexBoundaryFixed:true,cache:'v2836',loadedScript:'app.v27-48-premium-mega-vision'}),900);
   }catch(_){ }
 })();
@@ -6956,8 +6956,8 @@ try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, 
 // V28.36 - Diagnosi OpenAI reale: verifica chiave server + modello + endpoint Responses.
 (function(){
   try{
-    window.SPESA_PRONTA_VERSION='v28.39-openai-home-pro';
-    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.39', openAiConnectionGuard:'server_key_aliases_real_healthcheck_model_fallback'});
+    window.SPESA_PRONTA_VERSION='v28.40-openai-dashboard-home-pro';
+    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.38', openAiConnectionGuard:'server_key_aliases_real_healthcheck_model_fallback'});
     function endpointV2836(path){ const base=((window.settings&&settings.apiEndpoint)||'/api').replace(/\/$/,''); return base+path; }
     async function runOpenAiCheckV2836(){
       const btn=document.querySelector('[data-openai-check-v2836]');
@@ -7093,8 +7093,8 @@ try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, 
     }
   }catch(_){ }
   try{
-    window.SPESA_PRONTA_VERSION='v28.39-openai-home-pro';
-    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.39', ocrBoostPro:'highres_contrast_teacher_image_label_expiry_barcode', openaiHomePro:'premium_landing_fridge_mount'});
+    window.SPESA_PRONTA_VERSION='v28.40-openai-dashboard-home-pro';
+    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.38', ocrBoostPro:'highres_contrast_teacher_image_label_expiry_barcode'});
     if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('ocr-boost-ready-v2838',{version:V, stages:['label','expiry','barcode','ingredients']}),1400);
   }catch(_){ }
 })();
