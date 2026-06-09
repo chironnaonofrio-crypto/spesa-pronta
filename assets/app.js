@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v27.47-blank-page-fixed';
+window.SPESA_PRONTA_VERSION='v28.21-language-cloud-pro';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -496,6 +496,188 @@ function toast(msg){
   clearTimeout(toastTimer);
   toastTimer=setTimeout(()=>el.classList.remove('show'),2800);
 }
+
+const LANGUAGE_CHOICES_V2821=[
+  {code:'it',short:'IT',name:'Italiano',flag:'🇮🇹',cls:'flag-it'},
+  {code:'en',short:'EN',name:'English',flag:'🇬🇧',cls:'flag-en'},
+  {code:'es',short:'ES',name:'Español',flag:'🇪🇸',cls:'flag-es'},
+  {code:'de',short:'DE',name:'Deutsch',flag:'🇩🇪',cls:'flag-de'}
+];
+const CLOUD_LAST_SYNC_KEY_V2821='spesa-pronta-final:last-cloud-sync:v2821';
+
+function languageMetaV2821(code){
+  return LANGUAGE_CHOICES_V2821.find(x=>x.code===code) || LANGUAGE_CHOICES_V2821[0];
+}
+function setAppLanguageV2821(code, closeDialog=true){
+  const meta=languageMetaV2821(code);
+  settings.lang=meta.code;
+  saveAll();
+  applyLang();
+  render();
+  renderLanguageMenuV2821();
+  if(closeDialog) closeLanguageMenuV2821();
+  toast(`${meta.flag} ${meta.name}`);
+}
+function renderTopLanguageV2821(){
+  const meta=languageMetaV2821(settings.lang);
+  const flag=$('#languagePillFlag'), code=$('#languagePillCode'), name=$('#languagePillName');
+  if(flag) flag.textContent=meta.flag;
+  if(code) code.textContent=meta.short;
+  if(name) name.textContent=meta.name;
+}
+function renderLanguageMenuV2821(){
+  const list=$('#languageOptions');
+  if(!list) return;
+  const current=languageMetaV2821(settings.lang).code;
+  list.innerHTML=LANGUAGE_CHOICES_V2821.map(lang=>`
+    <button class="language-option-pro ${lang.cls} ${lang.code===current?'active':''}" data-lang-choice="${lang.code}" type="button" aria-pressed="${lang.code===current?'true':'false'}">
+      <span class="flag">${lang.flag}</span>
+      <span class="copy"><b>${lang.short}</b><span>${lang.name}</span></span>
+      <span class="check">✓</span>
+    </button>
+  `).join('');
+  list.querySelectorAll('[data-lang-choice]').forEach(btn=>btn.addEventListener('click',()=>setAppLanguageV2821(btn.dataset.langChoice,true)));
+}
+function openLanguageMenuV2821(){
+  renderLanguageMenuV2821();
+  const dialog=$('#languageDialog');
+  if(!dialog) return;
+  if(typeof dialog.showModal==='function') dialog.showModal(); else dialog.setAttribute('open','open');
+}
+function closeLanguageMenuV2821(){
+  const dialog=$('#languageDialog');
+  if(!dialog) return;
+  if(typeof dialog.close==='function') dialog.close(); else dialog.removeAttribute('open');
+}
+function isCloudReadyV2821(){
+  return !!(settings.cloudEnabled && settings.householdId && settings.token && settings.apiEndpoint);
+}
+function cloudLastSyncTsV2821(){
+  return Number(settings.lastSyncAt || localStorage.getItem(CLOUD_LAST_SYNC_KEY_V2821) || 0);
+}
+function formatCloudTimeV2821(ts){
+  if(!ts) return 'Mai';
+  try{
+    const loc=(settings.lang==='en')?'en-GB':(settings.lang==='es')?'es-ES':(settings.lang==='de')?'de-DE':'it-IT';
+    return new Date(ts).toLocaleString(loc,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  }catch{ return 'Ora'; }
+}
+function localBackupStatusV2821(){
+  try{
+    const k='spesa-pronta-backup-test';
+    localStorage.setItem(k,'1'); localStorage.removeItem(k);
+    return 'Pronto';
+  }catch{ return 'Bloccato'; }
+}
+function renderCloudCenterV2821(){
+  const dialog=$('#cloudSyncDialog');
+  if(!dialog) return;
+  const ready=isCloudReadyV2821();
+  const online=navigator.onLine !== false;
+  const box=$('#cloudStatusBox');
+  if(box) box.classList.toggle('offline', !online || !ready);
+  const title=$('#cloudStatusTitle'), text=$('#cloudStatusText');
+  if(title) title.textContent = ready && online ? 'Cloud online' : (online ? 'Cloud non configurato' : 'Offline');
+  if(text) text.textContent = ready && online ? `Sincronizzazione server pronta per ${state.length} prodotti.` : (online ? 'Accedi o registrati per collegare il server cloud.' : 'Connessione assente: puoi usare backup locale e riprovare dopo.');
+  const last=$('#cloudLastSync'); if(last) last.textContent=formatCloudTimeV2821(cloudLastSyncTsV2821());
+  const count=$('#cloudProductCount'); if(count) count.textContent=String(state.length);
+  const backup=$('#cloudBackupStatus'); if(backup) backup.textContent=localBackupStatusV2821();
+  const household=$('#cloudHouseholdId'); if(household) household.textContent=settings.householdId || 'Locale';
+  const endpoint=$('#cloudEndpointValue'); if(endpoint) endpoint.textContent=settings.apiEndpoint || '/api';
+}
+function openCloudCenterV2821(){
+  renderCloudCenterV2821();
+  const dialog=$('#cloudSyncDialog');
+  if(!dialog) return;
+  if(typeof dialog.showModal==='function') dialog.showModal(); else dialog.setAttribute('open','open');
+}
+function closeCloudCenterV2821(){
+  const dialog=$('#cloudSyncDialog');
+  if(!dialog) return;
+  if(typeof dialog.close==='function') dialog.close(); else dialog.removeAttribute('open');
+}
+async function performCloudSyncV2821(){
+  const btn=$('#cloudSyncRunBtn');
+  if(btn){ btn.disabled=true; btn.dataset.oldText=btn.textContent; btn.textContent='↻ Sincronizzo…'; }
+  try{
+    const ok=await syncCloud(true);
+    renderCloudCenterV2821();
+    if(!ok && !isCloudReadyV2821()) toast('Accedi o registrati per usare il cloud');
+  }finally{
+    if(btn){ btn.disabled=false; btn.innerHTML='↻ <span>Sincronizza ora</span>'; }
+  }
+}
+function downloadBackupV2821(){
+  const backup={
+    app:'Spesa Pronta',
+    version:'V28.21 Language Cloud Pro',
+    exportedAt:new Date().toISOString(),
+    items:state,
+    settings,
+    session,
+    aiMemory
+  };
+  const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=`spesa-pronta-backup-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 500);
+  toast('Backup scaricato ✅');
+  renderCloudCenterV2821();
+}
+function restoreBackupV2821(){
+  $('#cloudRestoreBackupInput')?.click();
+}
+function handleBackupRestoreFileV2821(e){
+  const file=e.target.files?.[0];
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const data=JSON.parse(String(reader.result||'{}'));
+      const items=Array.isArray(data.items) ? data.items : (Array.isArray(data.state) ? data.state : null);
+      if(!items && !data.settings && !data.aiMemory) throw new Error('backup_invalid');
+      if(items) state=items;
+      if(data.settings && typeof data.settings==='object') settings={...defaultSettings(),...settings,...data.settings};
+      if(data.session && typeof data.session==='object') session={...session,...data.session};
+      if(data.aiMemory && typeof data.aiMemory==='object') aiMemory={...defaultAiMemory(),...data.aiMemory};
+      if(!LANGUAGE_CHOICES_V2821.some(x=>x.code===settings.lang)) settings.lang='it';
+      saveAiMemory();
+      saveAll();
+      applyLang();
+      render();
+      renderCloudCenterV2821();
+      toast('Backup ripristinato ✅');
+    }catch(err){
+      toast('Backup non valido');
+    }finally{
+      e.target.value='';
+    }
+  };
+  reader.readAsText(file);
+}
+async function copyCloudIdV2821(){
+  const id=settings.householdId || 'Profilo locale - nessun ID cloud';
+  try{ await navigator.clipboard.writeText(id); }catch{}
+  toast(t('copied'));
+}
+function bindLanguageCloudProV2821(){
+  $('#languageMenuBtn')?.addEventListener('click', openLanguageMenuV2821);
+  $('#languageCloseBtn')?.addEventListener('click', closeLanguageMenuV2821);
+  $('#languageDialog')?.addEventListener('click', e=>{ if(e.target?.id==='languageDialog') closeLanguageMenuV2821(); });
+  $('#syncNowBtn')?.addEventListener('click', openCloudCenterV2821);
+  $('#cloudCloseBtn')?.addEventListener('click', closeCloudCenterV2821);
+  $('#cloudSyncDialog')?.addEventListener('click', e=>{ if(e.target?.id==='cloudSyncDialog') closeCloudCenterV2821(); });
+  $('#cloudSyncRunBtn')?.addEventListener('click', performCloudSyncV2821);
+  $('#cloudDownloadBackupBtn')?.addEventListener('click', downloadBackupV2821);
+  $('#cloudRestoreBackupBtn')?.addEventListener('click', restoreBackupV2821);
+  $('#cloudRestoreBackupInput')?.addEventListener('change', handleBackupRestoreFileV2821);
+  $('#cloudCopyIdBtn')?.addEventListener('click', copyCloudIdV2821);
+}
+
 function setBusyButton(btn, busy, text){
   if(!btn) return;
   btn.disabled=!!busy;
@@ -748,8 +930,9 @@ function bind(){
   $('#mobileNavBackdrop')?.addEventListener('click', () => toggleMobileMenu(false));
   $all('[data-view-shortcut]').forEach(b => b.addEventListener('click', () => showView(b.dataset.viewShortcut)));
   $('#userShortcutBtn').addEventListener('click', handleUserShortcut);
-  $('#languageSelect').addEventListener('change', e => { settings.lang=e.target.value; saveAll(); applyLang(); render(); });
-  $('#settingsLanguage').addEventListener('change', e => { settings.lang=e.target.value; saveAll(); applyLang(); render(); });
+  $('#languageSelect')?.addEventListener('change', e => setAppLanguageV2821(e.target.value, false));
+  $('#settingsLanguage')?.addEventListener('change', e => setAppLanguageV2821(e.target.value, false));
+  bindLanguageCloudProV2821();
   $('#searchInput').addEventListener('input', e => { searchTerm=e.target.value.toLowerCase(); renderProducts(); });
   $('#categorySelect').addEventListener('change', e => { categoryFilter=e.target.value; renderProducts(); });
   $all('.status-tab').forEach(b => b.addEventListener('click', () => { filter=b.dataset.filter; $all('.status-tab').forEach(x=>x.classList.toggle('active',x===b)); renderProducts(); }));
@@ -783,7 +966,8 @@ function bind(){
   $('#initialScanBtn')?.addEventListener('click', () => openGroceryScanner(true));
   $('#initialVerifyLaterBtn')?.addEventListener('click', markInitialInventoryToVerify);
   $('#saveSettingsBtn').addEventListener('click', saveSettingsFromForm);
-  $('#syncNowBtn').addEventListener('click', () => syncCloud(true));
+  // V28.21: la nuvoletta apre il centro sincronizzazione premium.
+  // Il sync reale resta disponibile dentro al menu cloud.
   $('#saveProfileBtn').addEventListener('click', saveProfile);
   $('#goRegisterBtn').addEventListener('click', () => showView(session.user ? 'settings' : 'registration'));
   $('#logoutAccountBtn')?.addEventListener('click', requestLogoutAccount);
@@ -826,8 +1010,10 @@ function applyLang(){
     const value = t(key);
     if(value && value !== key) el.placeholder = value;
   });
-  $('#languageSelect').value = settings.lang;
-  $('#settingsLanguage').value = settings.lang;
+  if($('#languageSelect')) $('#languageSelect').value = settings.lang;
+  if($('#settingsLanguage')) $('#settingsLanguage').value = settings.lang;
+  renderTopLanguageV2821();
+  renderCloudCenterV2821();
   $('#categorySelect').innerHTML = `<option value="all">${esc(t('allCategories'))}</option>` + categories.map(c=>`<option value="${c}">${esc(catName(c))}</option>`).join('');
   $('#customCategory').innerHTML = categories.map(c=>`<option value="${c}">${esc(catName(c))}</option>`).join('');
   renderCaptcha();
@@ -877,6 +1063,8 @@ function render(){
   updateFlowClasses();
   renderStats(); renderProducts(); renderSide(); renderSettings(); renderAllProducts(); renderShoppingFull(); renderSuggestions(); renderWelcome(); renderVerifyEmail(); applyInlineImages();
   renderUserPill();
+  renderTopLanguageV2821();
+  renderCloudCenterV2821();
 }
 
 function renderUserPill(){
@@ -1440,14 +1628,33 @@ function connectGoogleAssistant(){ settings.googleAssistantConnected=true; saveA
 async function copyGoogleEndpoint(){ const url=voiceEndpoint('google-assistant'); await navigator.clipboard.writeText(url).catch(()=>{}); toast(t('copied')); }
 function scheduleSync(){ clearTimeout(syncTimer); if(settings.cloudEnabled) syncTimer=setTimeout(()=>syncCloud(false), SYNC_WAIT); }
 async function syncCloud(show){
-  if(!settings.cloudEnabled || !settings.apiEndpoint || !settings.token || !settings.householdId){ if(show) toast(t('syncFail')); return; }
+  if(!settings.cloudEnabled || !settings.apiEndpoint || !settings.token || !settings.householdId){
+    if(show) toast(t('syncFail'));
+    renderCloudCenterV2821();
+    return false;
+  }
   try{
-    const payload={items:state, settings:{people:settings.people,animals:settings.animals,autoSmart:settings.autoSmart,lang:settings.lang,alexaConnected:settings.alexaConnected,googleAssistantConnected:settings.googleAssistantConnected,profile:settings.profile}, aiMemory};
-    const res=await fetch(`${settings.apiEndpoint}/households/${settings.householdId}/state`,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token}`},body:JSON.stringify(payload)});
+    const payload={items:state, settings:{people:settings.people,animals:settings.animals,autoSmart:settings.autoSmart,lang:settings.lang,alexaConnected:settings.alexaConnected,googleAssistantConnected:settings.googleAssistantConnected,profile:settings.profile,inventorySetupDone:settings.inventorySetupDone,inventoryStatus:settings.inventoryStatus,inventoryUpdatedAt:settings.inventoryUpdatedAt}, aiMemory};
+    const endpoint=(settings.apiEndpoint||'/api').replace(/\/$/,'');
+    const res=await fetch(`${endpoint}/households/${settings.householdId}/state`,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token}`},body:JSON.stringify(payload)});
     if(!res.ok) throw new Error('sync fail');
+    settings.lastSyncAt=Date.now();
+    settings.lastSyncError='';
+    localStorage.setItem(CLOUD_LAST_SYNC_KEY_V2821, String(settings.lastSyncAt));
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    renderStats();
+    renderCloudCenterV2821();
     if(show) toast(t('synced'));
-  }catch(err){ if(show) toast(t('syncFail')); }
+    return true;
+  }catch(err){
+    settings.lastSyncError=err?.message || 'sync_failed';
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    renderCloudCenterV2821();
+    if(show) toast(t('syncFail'));
+    return false;
+  }
 }
+
 
 
 function userDisplayName(){
@@ -4644,7 +4851,7 @@ function guidedMarkCardConfirmed(el){
 // =============================================================
 // V27.98 Preflight Stability Check - UI, diagnostics and sync guards
 // =============================================================
-window.SPESA_PRONTA_VERSION='v27.98-preflight-stability-check';
+window.SPESA_PRONTA_VERSION='v28.21-language-cloud-pro';
 window.SPESA_PRONTA_BUILD={version:'V27.98',brain:'Ultra Error Reduction Core + Preflight Stability Check',categoryEngine:'ultra_error_reduction_core_v27_97',preflight:'v27_98'};
 function v2798Now(){ return Date.now(); }
 function v2798SafeText(v){ return String(v==null?'':v); }
@@ -5471,3 +5678,7 @@ try{
     setTimeout(removeInlineDebug,1400);
   }catch(e){ console.warn('V28.06 debug console patch error',e); }
 })();
+
+
+// V28.21 Language Cloud Pro
+window.SPESA_PRONTA_VERSION='v28.21-language-cloud-pro';

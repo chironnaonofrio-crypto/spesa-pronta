@@ -14,7 +14,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="assets/styles.css?v=2820">
+  <link rel="stylesheet" href="assets/styles.css?v=2821">
   <title>Spesa Pronta</title>
 
 <style id="v27-56-premium-clean">
@@ -66,13 +66,19 @@
         </div>
         <div class="top-actions">
           <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Apri menu">☰</button>
-          <select id="languageSelect" aria-label="Lingua">
+          <button class="language-pill" id="languageMenuBtn" type="button" aria-label="Scegli lingua">
+            <span class="language-pill-flag" id="languagePillFlag">🇮🇹</span>
+            <span class="language-pill-copy"><b id="languagePillCode">IT</b><small id="languagePillName">Italiano</small></span>
+          </button>
+          <select id="languageSelect" class="hidden-language-select" aria-label="Lingua">
             <option value="it">IT</option>
             <option value="en">EN</option>
             <option value="es">ES</option>
             <option value="de">DE</option>
           </select>
-          <button class="icon-btn" id="syncNowBtn" type="button" title="Sync">☁</button>
+          <button class="icon-btn cloud-bubble-btn" id="syncNowBtn" type="button" title="Centro sincronizzazione" aria-label="Centro sincronizzazione">
+            <span class="cloud-bubble-icon">☁</span>
+          </button>
           <button class="user-pill guest" id="userShortcutBtn" type="button"><span id="userPillIcon">👤</span><div class="user-pill-text"><small id="userPillSub">Account</small><b id="userLabel">Registrati / Login</b></div></button>
         </div>
       </header>
@@ -467,6 +473,60 @@
   </section>
 
 
+
+  <dialog id="languageDialog" class="language-dialog-pro">
+    <section class="language-card-pro" aria-labelledby="languageDialogTitle">
+      <header class="language-head-pro">
+        <div>
+          <small>SCEGLI LINGUA</small>
+          <h3 id="languageDialogTitle">Seleziona la tua lingua</h3>
+        </div>
+        <button class="language-close-pro" id="languageCloseBtn" type="button" aria-label="Chiudi cambio lingua">×</button>
+      </header>
+      <div class="language-options-pro" id="languageOptions"></div>
+    </section>
+  </dialog>
+
+  <dialog id="cloudSyncDialog" class="cloud-dialog-pro">
+    <section class="cloud-card-pro" aria-labelledby="cloudDialogTitle">
+      <header class="cloud-head-pro">
+        <div class="cloud-logo-pro">☁</div>
+        <div>
+          <small>SPESA PRONTA CLOUD</small>
+          <h3 id="cloudDialogTitle">Centro sincronizzazione</h3>
+          <p>Controlla stato, backup e ripristino dati.</p>
+        </div>
+        <button class="cloud-close-pro" id="cloudCloseBtn" type="button" aria-label="Chiudi centro sincronizzazione">×</button>
+      </header>
+
+      <div class="cloud-status-pro" id="cloudStatusBox">
+        <span class="cloud-live-dot" id="cloudLiveDot"></span>
+        <div>
+          <strong id="cloudStatusTitle">Cloud online</strong>
+          <p id="cloudStatusText">Sincronizzazione server pronta.</p>
+        </div>
+      </div>
+
+      <div class="cloud-metrics-pro">
+        <article><span>ULTIMA SYNC</span><strong id="cloudLastSync">Mai</strong></article>
+        <article><span>PRODOTTI</span><strong id="cloudProductCount">0</strong></article>
+        <article><span>BACKUP LOCALE</span><strong id="cloudBackupStatus">Pronto</strong></article>
+        <article><span>HOUSEHOLD</span><strong id="cloudHouseholdId">Locale</strong></article>
+      </div>
+
+      <div class="cloud-endpoint-pro">
+        <span>ENDPOINT CLOUD</span>
+        <strong id="cloudEndpointValue">/api</strong>
+      </div>
+
+      <button class="cloud-action-main" id="cloudSyncRunBtn" type="button">↻ <span>Sincronizza ora</span></button>
+      <button class="cloud-action-soft" id="cloudDownloadBackupBtn" type="button">↓ <span>Scarica backup</span></button>
+      <button class="cloud-action-soft" id="cloudRestoreBackupBtn" type="button">↑ <span>Ripristina backup</span></button>
+      <input id="cloudRestoreBackupInput" type="file" accept="application/json,.json" hidden>
+      <button class="cloud-action-soft" id="cloudCopyIdBtn" type="button">▣ <span>Copia ID cloud</span></button>
+    </section>
+  </dialog>
+
   <dialog id="resetDialog" class="reset-dialog">
     <form id="resetForm" class="reset-card">
       <button class="icon-btn reset-close" id="resetCloseBtn" type="button" aria-label="Chiudi">×</button>
@@ -584,8 +644,8 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/vision-seed-memory.js?v=2820" defer></script>
-  <script src="assets/vision-mega-index.js?v=2820" defer></script>
-  <script src="assets/app.v27-48-premium-mega-vision.js?v=2820" defer></script>
+  <script src="assets/vision-seed-memory.js?v=2821" defer></script>
+  <script src="assets/vision-mega-index.js?v=2821" defer></script>
+  <script src="assets/app.v27-48-premium-mega-vision.js?v=2821" defer></script>
 </body>
 </html>
