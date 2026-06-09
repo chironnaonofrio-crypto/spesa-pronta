@@ -3422,7 +3422,7 @@ async function captureLiveFrame(manual=false){
     return;
   }
   const raw=c.toDataURL('image/jpeg',0.92);
-  const compressed=await compressImage(raw,1024,0.84).catch(()=>raw);
+  const compressed=await compressImage(raw,720,0.72).catch(()=>raw);
   const labelTarget = existingLabelTarget || (manual && liveScanActive ? getLiveLabelTarget() : null);
   const followStep = labelTarget ? getLiveFollowupStep(labelTarget) : '';
   setScannerStatus(labelTarget ? (followStep==='expiry' ? 'Sto analizzando lo scatto della scadenza...' : 'Sto analizzando lo scatto dell’etichetta...') : (manual ? 'Sto analizzando lo scatto manuale...' : 'Prodotto centrato: scatto automatico in corso, sto leggendo marca, quantità e stato.'), labelTarget ? (followStep==='expiry' ? voiceLine('manual_expiry_scan',['Perfetto, controllo la data di scadenza.','Ok, provo a leggere la scadenza.']) : voiceLine('manual_label_scan',['Perfetto, controllo l etichetta.','Ok, provo a leggere nome, marca e formato.'])) : (manual ? voiceLine('manual_scan',['Sto analizzando la foto.','Perfetto, controllo subito lo scatto.']) : voiceLine('auto_scan',['Perfetto. Ho scattato. Ora analizzo il prodotto.','Scatto eseguito. Sto leggendo etichetta, marca e dettagli del prodotto.'])), true);
@@ -3464,7 +3464,7 @@ async function analyzeGroceryFileAsFollowup(file, target=null){
   const el=target || getLiveLabelTarget?.();
   if(!el){ return analyzeGroceryPhoto(file); }
   const original=await fileToDataUrl(file);
-  const dataUrl=await compressImage(original,1150,0.86);
+  const dataUrl=await compressImage(original,760,0.74);
   const step=getLiveFollowupStep(el);
   setScannerStatus(
     step==='expiry'
@@ -3503,7 +3503,7 @@ async function imageQuality(dataUrl){
 }
 async function analyzeGroceryPhoto(file){
   const original=await fileToDataUrl(file);
-  const dataUrl=await compressImage(original,1024,0.84);
+  const dataUrl=await compressImage(original,760,0.74);
   await analyzeGroceryDataUrl(dataUrl,file?.name||'photo.jpg');
 }
 
@@ -5541,17 +5541,17 @@ try{ document.dispatchEvent(new CustomEvent('spesa-pronta:v2799-sync-ready')); }
 
 
 // =============================================================
-// V28.01 Sync Hash Fix
+// V28.02 Sync Hash Fix + Barcode Dedupe
 // Diagnosi più pulita, test sync manuale, contatore memoria server,
 // avviso cache/build e report copiabile per debug rapido.
 // =============================================================
 window.SPESA_PRONTA_VERSION='v28.00-final-test-tools';
-window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.01', brain:'Ultra Error Reduction Core + Sync Hash Fix', finalTestTools:'v28_00'});
+window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.02', brain:'Ultra Error Reduction Core + Sync Hash Fix + Barcode Dedupe', finalTestTools:'v28_02'});
 function v2800BuildAgeWarning(){
   try{
     const key='spesaProntaLastBuildVersion';
     const prev=localStorage.getItem(key)||'';
-    localStorage.setItem(key, window.SPESA_PRONTA_BUILD.version||'V28.01');
+    localStorage.setItem(key, window.SPESA_PRONTA_BUILD.version||'V28.02');
     if(prev && prev!==window.SPESA_PRONTA_BUILD.version){
       logAiDiagnosticV98?.('build-updated',{from:prev,to:window.SPESA_PRONTA_BUILD.version,note:'Se vedi grafica vecchia apri clear-cache.html'});
     }
@@ -5569,7 +5569,7 @@ function v2800AiReportCompact(){
   }).join('\n');
   return [
     'SPESA PRONTA - DIAGNOSI AI',
-    `Versione: ${window.SPESA_PRONTA_BUILD?.version||'V28.01'}`,
+    `Versione: ${window.SPESA_PRONTA_BUILD?.version||'V28.02'}`,
     `Brain: ${window.SPESA_PRONTA_BUILD?.brain||''}`,
     `Queue sync: ${pendingLearningQueueCount?.()||0}`,
     `Docente OpenAI: ${pf.teacherActive===false?'non attivo':(pf.teacherActive?'attivo':'non verificato')}`,
@@ -5599,7 +5599,7 @@ async function v2800TestSync(){
     const url=(typeof v2799Endpoint==='function'?v2799Endpoint(base,'/ai/test-sync'):(String(base).replace(/\/$/,'')+'/ai/test-sync'));
     try{
       const out=await (typeof v2799FetchJson==='function'
-        ? v2799FetchJson(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token}`},body:JSON.stringify({householdId:settings.householdId,clientVersion:window.SPESA_PRONTA_BUILD?.version||'V28.01'})},7500)
+        ? v2799FetchJson(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token}`},body:JSON.stringify({householdId:settings.householdId,clientVersion:window.SPESA_PRONTA_BUILD?.version||'V28.02'})},7500)
         : fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token}`},body:JSON.stringify({householdId:settings.householdId})}).then(async r=>({ok:r.ok,status:r.status,data:await r.json().catch(()=>null),url})) );
       last=out;
       if(out.ok && out.data?.ok){
@@ -5640,7 +5640,7 @@ function v2800UpgradePreflightPanel(){
     pill.innerHTML='<b>Prodotti server</b><span data-pf-global>—</span>';
     body.appendChild(pill);
   }
-  const version=panel.querySelector('[data-pf-version]'); if(version) version.textContent='V28.01';
+  const version=panel.querySelector('[data-pf-version]'); if(version) version.textContent='V28.02';
   return panel;
 }
 const ensurePreflightPanelV98_v2800 = typeof ensurePreflightPanelV98==='function' ? ensurePreflightPanelV98 : null;
@@ -5689,3 +5689,330 @@ if(runPreflightV98_v2800){
 v2800BuildAgeWarning();
 setTimeout(()=>{ try{ v2800UpgradePreflightPanel(); runPreflightV98?.(false); }catch(_){} },1300);
 try{ document.dispatchEvent(new CustomEvent('spesa-pronta:v2800-final-test-tools-ready')); }catch(_){ }
+
+
+// =============================================================
+// V28.04 LOW COST + CATEGORY ACCURACY CORE
+// Obiettivo: tagliare drasticamente i costi e migliorare categorie.
+// Regola: locale/memoria/barcode/cache prima; docente OpenAI solo quando serve.
+// =============================================================
+function v2803EvidenceText(result={}){
+  return [result.productName,result.brand,result.variant,result.productType,result.packageType,result.category,result.estimatedSize,result.sizeDetectedRaw,result.unit,...(result.detectedText||[]),...(result.visibleEvidence||[])].filter(Boolean).join(' ');
+}
+function v2803Normalize(s=''){ return normalizeLearnText ? normalizeLearnText(s) : String(s||'').toLowerCase(); }
+function v2803CategoryDecision(result={}){
+  const n=v2803Normalize(v2803EvidenceText(result));
+  const score={}; const why={};
+  const add=(cat,pts,label)=>{ score[cat]=(score[cat]||0)+pts; (why[cat]=why[cat]||[]).push(label); };
+  const has=(rx)=>rx.test(n);
+  // Non idonei: non deve sprecare docente.
+  if(has(/\b(cane|gatto vivo|persona|viso|pantaloni|maglia|scarpe|telecomando|televisore|tv|mobile|sedia|tavolo|porta|pavimento|divano|letto)\b/)) add('non_consumable',200,'oggetto non prodotto');
+  // Bevande: acqua separata da bibite, latte, succhi.
+  if(has(/\b(coca\s*cola|coca-cola|cola\b|blues\s*cola|cola\s*blues|pepsi|fanta|sprite|aranciata|chinotto|gassosa|cedrata|tonica|bibita\s*gassata|bevanda\s*gassata)\b/)) add('soft_drinks',140,'cola/bibita gassata letta');
+  if(has(/\b(acqua|minerale|oligominerale|naturale|frizzante|effervescente|levissima|sant\s*anna|san\s*benedetto|vera|lete|ferrarelle|uliveto|rocchetta)\b/)) add('water',95,'acqua/minerale letta');
+  if(has(/\b(succo|nettare|spremuta|estath[eè]|t[eè]\s*freddo|ice\s*tea|bevanda\s+alla\s+frutta)\b/)) add('juice',100,'succo/tè freddo');
+  if(has(/\b(red\s*bull|monster|energy\s*drink|powerade|gatorade|isotonica|sport\s*drink)\b/)) add('sports_energy_drinks',120,'energy/sport drink');
+  if(has(/\b(latte\s*uht|latte\s+parzialmente|latte\s+scremato|latte\s+intero|bevanda\s+al\s+latte|latte\s+di\s+(soia|avena|mandorla|riso))\b/)) add('milk_drinks',115,'latte/bevanda latte');
+  if(has(/\b(caff[eè]|caffe|capsule\s+caffe|cialde|orzo|camomilla|tisana|infuso|t[eè]|tea)\b/)) add('coffee_tea',90,'caffè/tè/infuso');
+  // Cremosi/alimentari: mai bevande solo perché liquidi/vasetti.
+  if(has(/\b(yogurt|yoghurt|kefir|skyr|greco|fermenti|ayo\s*kefir)\b/)) add('yogurt',135,'yogurt/kefir letto');
+  if(has(/\b(pesto|salsa|bbq|barbecue|ketchup|maionese|senape|condimento|sugo|passata|rag[uù]|besciamella|hummus)\b/)) add('sauces_condiments',135,'salsa/condimento letto');
+  if(has(/\b(olio\s+evo|olio|extra\s+vergine|aceto|balsamico)\b/)) add('oil_vinegar',120,'olio/aceto');
+  if(has(/\b(nutella|crema\s+spalmabile|crema\s+(al\s+)?pistacchio|crema\s+nocciole|burro\s+d\s*arachidi|spalmabile)\b/)) add('spreads',125,'crema spalmabile');
+  if(has(/\b(marmellata|confettura|composta|miele)\b/)) add('jams_honey',110,'marmellata/miele');
+  if(has(/\b(cioccolat|cacao|tavoletta|pralina|caramell|merendina|biscott|wafer|dolc|torta)\b/)) add('chocolate_sweets',95,'dolci/cioccolata');
+  if(has(/\b(formaggio|mozzarella|ricotta|burro|panna|parmigiano|grana|mascarpone|stracchino|scamorza|provola|gorgonzola|latticini)\b/)) add('dairy',105,'latticini/formaggi');
+  if(has(/\b(uova|uovo)\b/)) add('eggs',100,'uova');
+  if(has(/\b(pasta|spaghetti|penne|fusilli|rigatoni|riso|farro|cous\s*cous|gnocchi|lasagne)\b/)) add('pasta_rice',100,'pasta/riso');
+  if(has(/\b(farina|lievito|zucchero|fecola|amido|pangrattato|preparato\s+per\s+torta)\b/)) add('flour_baking',90,'farine/preparati');
+  if(has(/\b(pane|piadina|cracker|grissini|taralli|fette\s+biscottate|pan\s+bauletto)\b/)) add('bakery',88,'pane/forno');
+  if(has(/\b(tonno|sgombro|sardine|alici)\b/)) add('canned_fish_meat',95,'conserva pesce');
+  if(has(/\b(fagioli|ceci|lenticchie|piselli|mais|legumi)\b/)) add('legumes_canned',90,'legumi/mais');
+  if(has(/\b(surgelat|congelat|frozen|findus)\b/)) add('frozen',100,'surgelato');
+  if(has(/\b(gelato|ghiacciolo|sorbetto)\b/)) add('ice_cream',100,'gelato');
+  // Casa/igiene: priorità sopra alimenti se parole chimiche forti.
+  if(has(/\b(candeggina|sgrassatore|disinfettante\s+casa|detergente\s+superfici|pavimenti|bagno|wc|pulizia|dexal|ace|chanteclair)\b/)) add('cleaning',150,'pulizia casa/chimico');
+  if(has(/\b(detersivo\s+lavatrice|lavatrice|ammorbidente|bucato|dash|perlana|candeggina\s+delicata)\b/)) add('laundry',150,'bucato');
+  if(has(/\b(detersivo\s+piatti|lavastoviglie|brillantante|finish|pril|svelto)\b/)) add('dishwashing',145,'piatti/lavastoviglie');
+  if(has(/\b(carta\s+igienica|scottex|rotoloni|tovaglioli|carta\s+casa|fazzoletti)\b/)) add('paper_house',120,'carta casa');
+  if(has(/\b(shampoo|bagnoschiuma|docciaschiuma|deodorante|dentifricio|spazzolino|collutorio|sapone)\b/)) add(has(/dentifricio|spazzolino|collutorio/)?'oral_care':'hair_body',115,'igiene persona');
+  if(has(/\b(farmaco|medicina|integratore|cerotti|tachipirina|oki|brufen|paracetamolo|ibuprofene|garze)\b/)) add('pharmacy',140,'farmacia');
+  if(has(/\b(crocchette|umido\s+cane|umido\s+gatto|monge|royal\s*canin|purina|whiskas|felix|mangime\s+(cane|gatto))\b/)) add('pet_food',130,'cibo animali');
+  if(has(/\b(acquario|mangime\s+pesci|biocondizionatore|batteri\s+acquario|askoll|sera|tetra)\b/)) add('aquarium',130,'acquario');
+  // Packaging: solo supporto leggero.
+  if(has(/\b(lattina|can)\b/)) add('soft_drinks',8,'lattina supporto');
+  if(has(/\b(vasetto|barattolo|vetro|jar)\b/) && !score.water) add('preserves_jars',6,'vasetto supporto debole');
+  if(has(/\b(flacone|spray)\b/) && (score.cleaning||score.laundry||score.dishwashing||score.hair_body)) add('house',5,'flacone supporto');
+  // Anti-conflict.
+  if((score.soft_drinks||0)>90) score.water=0;
+  if((score.sauces_condiments||0)>90) ['water','drinks','soft_drinks','milk_drinks'].forEach(c=>score[c]=0);
+  if((score.cleaning||0)>90 || (score.laundry||0)>90 || (score.dishwashing||0)>90){ ['food','drinks','water','soft_drinks','juice','milk_drinks','yogurt','dairy'].forEach(c=>score[c]=0); }
+  const order = typeof CATEGORY_PRIORITY_ORDER!=='undefined' ? CATEGORY_PRIORITY_ORDER : Object.keys(score);
+  let ranked=Object.entries(score).filter(([,s])=>s>0).sort((a,b)=>b[1]-a[1] || order.indexOf(a[0])-order.indexOf(b[0]));
+  const best=ranked[0]?.[0] || result.category || 'food'; const bestScore=ranked[0]?.[1]||0; const second=ranked[1]?.[1]||0;
+  return {category:best, score:bestScore, gap:bestScore-second, candidates:ranked.slice(0,5).map(([category,score])=>({category,score,reasons:why[category]||[]})), reasons:why[best]||[], confidence:bestScore>=120?.98:bestScore>=90?.94:bestScore>=65?.84:bestScore>=40?.68:.45, source:'v28_03_low_cost_category'};
+}
+function applyV2803LowCostCategory(result={}){
+  if(!result || typeof result!=='object') return result;
+  const d=v2803CategoryDecision(result);
+  const old=result.category||'';
+  if(d.category && (d.confidence>=.68 || !old || ['food','drinks','house','Alimentari generici'].includes(old))) result.category=d.category;
+  result.categoryBrainV2803=d;
+  result.categoryRuleEvidence=[...(result.categoryRuleEvidence||[]),...(d.reasons||[])].filter(Boolean).slice(0,20);
+  result.categoryRuleSource='v28.03 low cost category accuracy';
+  if(typeof categoryPhysicalState==='function') result.physicalState=categoryPhysicalState(result.category);
+  if(result.category==='soft_drinks') { result.isLiquid=true; if(!result.unit || result.unit==='pz') result.unit=/lattina|can/i.test(v2803EvidenceText(result))?'lattina':'bt'; }
+  if(['water','juice','milk_drinks','coffee_tea','sports_energy_drinks'].includes(result.category)){ result.isLiquid=true; if(!result.unit || result.unit==='pz') result.unit='bt'; }
+  if(['cleaning','laundry','dishwashing','paper_house','personal_care','oral_care','hair_body','pharmacy','pet_food','aquarium','non_consumable'].includes(result.category)) result.isLiquid = ['cleaning','laundry','dishwashing','hair_body','oral_care','personal_care'].includes(result.category) ? !!result.isLiquid : false;
+  if(d.confidence<.62){ result.categoryNeedsVerification=true; result.needsManual=true; result.detailQuestion=result.detailQuestion||'Categoria non sicura: correggila prima di confermare oppure scansiona meglio l’etichetta.'; }
+  if(old && result.category!==old) result.categoryGuardNote=`Categoria V28.04: ${old} → ${result.category}`;
+  return result;
+}
+try{
+  if(typeof applyMonsterProductIntelligenceV96==='function' && !window.__v2803CategoryWrapped){
+    const __v96=applyMonsterProductIntelligenceV96;
+    applyMonsterProductIntelligenceV96=function(result={}){ return applyV2803LowCostCategory(__v96(result)); };
+    window.__v2803CategoryWrapped=true;
+  }
+}catch(_){ }
+try{
+  if(typeof applyExpertCategoryBrainV95==='function' && !window.__v2803V95Wrapped){
+    const __v95b=applyExpertCategoryBrainV95;
+    applyExpertCategoryBrainV95=function(result={}){ return applyV2803LowCostCategory(__v95b(result)); };
+    window.__v2803V95Wrapped=true;
+  }
+}catch(_){ }
+
+
+// =============================================================
+// V28.04 COST GUARD PRO
+// Obiettivo: tagliare costi senza rendere cieca la Vision AI.
+// Locale/OCR/cache/barcode/memoria prima. Docente OpenAI: massimo
+// 1 analisi completa per articolo + 1 OCR scadenza ultra-leggero se serve.
+// =============================================================
+(function(){
+  const COST_GUARD_VERSION='V28.04';
+  const TEACHER_CACHE_KEY='spesa_pronta_teacher_cache_v2804';
+  const TEACHER_BUDGET_KEY='spesa_pronta_teacher_budget_v2804';
+  function cgHash(s=''){
+    let h=2166136261; const str=String(s||'');
+    for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,16777619); }
+    return (h>>>0).toString(36);
+  }
+  function cgLoad(key, fallback){ try{return JSON.parse(localStorage.getItem(key)||'')||fallback;}catch(_){return fallback;} }
+  function cgSave(key,val){ try{localStorage.setItem(key,JSON.stringify(val));}catch(_){} }
+  function cgSessionId(){
+    try{
+      const target=typeof getLiveLabelTarget==='function' ? getLiveLabelTarget() : null;
+      return target?.dataset?.scanSessionId || window.scannerActiveProductSessionId || (typeof scannerActiveProductSessionId!=='undefined' ? scannerActiveProductSessionId : '') || document.querySelector('.scan-result:not(.confirmed)')?.dataset?.scanSessionId || 'standalone';
+    }catch(_){ return 'standalone'; }
+  }
+  function cgCache(){ const c=cgLoad(TEACHER_CACHE_KEY,{items:{},hits:0,misses:0,updatedAt:0}); c.items=c.items||{}; return c; }
+  function cgBudget(){ const b=cgLoad(TEACHER_BUDGET_KEY,{sessions:{},updatedAt:0}); b.sessions=b.sessions||{}; return b; }
+  function cgBudgetFor(sessionId){
+    const b=cgBudget(); const now=Date.now();
+    // pulizia vecchie sessioni dopo 2 ore
+    for(const [k,v] of Object.entries(b.sessions)){ if(now-Number(v.updatedAt||0)>7200000) delete b.sessions[k]; }
+    const s=b.sessions[sessionId]=b.sessions[sessionId]||{fullCalls:0,expiryCalls:0,cacheHits:0,blocked:0,startedAt:now,updatedAt:now};
+    s.updatedAt=now; cgSave(TEACHER_BUDGET_KEY,b); return s;
+  }
+  function cgPutBudget(sessionId, updater){ const b=cgBudget(); const s=b.sessions[sessionId]=b.sessions[sessionId]||{fullCalls:0,expiryCalls:0,cacheHits:0,blocked:0,startedAt:Date.now(),updatedAt:Date.now()}; updater(s); s.updatedAt=Date.now(); b.updatedAt=Date.now(); cgSave(TEACHER_BUDGET_KEY,b); return s; }
+  function cgStageKind(stage='auto'){ stage=String(stage||'auto').toLowerCase(); return stage==='expiry'?'expiry':'full'; }
+  function cgCacheKey(dataUrl, stage, sessionId){
+    // Non salvo immagini: salvo solo firma testuale corta + lunghezza. Serve ad evitare richieste duplicate ravvicinate.
+    return [stage,sessionId,cgHash(String(dataUrl||'').slice(0,900)+String(dataUrl||'').slice(-900)),String(dataUrl||'').length].join('|');
+  }
+  function cgCacheGet(key){
+    const c=cgCache(); const it=c.items[key];
+    if(it && Date.now()-Number(it.at||0)<24*3600*1000){ c.hits=Number(c.hits||0)+1; c.updatedAt=Date.now(); cgSave(TEACHER_CACHE_KEY,c); return it.result; }
+    c.misses=Number(c.misses||0)+1; c.updatedAt=Date.now(); cgSave(TEACHER_CACHE_KEY,c); return null;
+  }
+  function cgCacheSet(key,result){
+    if(!result || typeof result!=='object') return;
+    const c=cgCache(); const entries=Object.entries(c.items||{});
+    if(entries.length>120){ entries.sort((a,b)=>Number(a[1].at||0)-Number(b[1].at||0)); for(const [k] of entries.slice(0,30)) delete c.items[k]; }
+    c.items[key]={at:Date.now(),result:Object.assign({},result,{dataUrl:undefined,image:undefined})}; c.updatedAt=Date.now(); cgSave(TEACHER_CACHE_KEY,c);
+  }
+  try{
+    if(typeof compressImage==='function' && !window.__v2804CompressWrapped){
+      const originalCompress=compressImage;
+      compressImage=async function(dataUrl,max=1280,quality=.86){
+        // immagini più piccole = meno costo Vision. La qualità resta sufficiente per etichette grandi.
+        const hardMax=Math.min(Number(max)||640, 620);
+        const hardQuality=Math.min(Number(quality)||.62, .56);
+        return originalCompress.call(this,dataUrl,hardMax,hardQuality);
+      };
+      window.__v2804CompressWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof askVisionAi==='function' && !window.__v2804AskVisionWrapped){
+      const originalAskVision=askVisionAi;
+      askVisionAi=async function(dataUrl, opts={}){
+        const stage=String(opts?.stage||'auto').toLowerCase();
+        const kind=cgStageKind(stage);
+        const sessionId=cgSessionId();
+        const cacheKey=cgCacheKey(dataUrl,stage,sessionId);
+        const cached=cgCacheGet(cacheKey);
+        if(cached){
+          cgPutBudget(sessionId,s=>{s.cacheHits=Number(s.cacheHits||0)+1;});
+          try{ logAiDiagnosticV98?.('cost-guard-cache-hit',{stage,sessionId}); }catch(_){ }
+          return Object.assign({},cached,{cloudVision:false,teacherSkipped:true,teacherCacheHit:true,teacherSkipReason:'Risposta docente recuperata da cache: nessun costo aggiuntivo.'});
+        }
+        const b=cgBudgetFor(sessionId);
+        const fullLimit=1;
+        const expiryLimit=1;
+        if(kind==='full' && Number(b.fullCalls||0)>=fullLimit){
+          cgPutBudget(sessionId,s=>{s.blocked=Number(s.blocked||0)+1;});
+          try{ logAiDiagnosticV98?.('cost-guard-blocked',{stage,sessionId,reason:'full_teacher_budget_exceeded'}); }catch(_){ }
+          const e=new Error('cost_guard_teacher_budget_exceeded');
+          e.userSilent=true; e.visionError={error:'cost_guard_teacher_budget_exceeded', stage, message:'Docente già usato per questo articolo: uso locale/memoria o chiedo conferma manuale.'};
+          throw e;
+        }
+        if(kind==='expiry' && Number(b.expiryCalls||0)>=expiryLimit){
+          cgPutBudget(sessionId,s=>{s.blocked=Number(s.blocked||0)+1;});
+          try{ logAiDiagnosticV98?.('cost-guard-blocked',{stage,sessionId,reason:'expiry_teacher_budget_exceeded'}); }catch(_){ }
+          const e=new Error('cost_guard_expiry_budget_exceeded');
+          e.userSilent=true; e.visionError={error:'cost_guard_expiry_budget_exceeded', stage, message:'OCR scadenza già tentato: correggi la scadenza manualmente o rifai solo se indispensabile.'};
+          throw e;
+        }
+        const result=await originalAskVision.call(this,dataUrl,Object.assign({},opts,{costGuard:true,sessionId,lowCost:true}));
+        if(result && result.cloudVision){
+          cgPutBudget(sessionId,s=>{ if(kind==='expiry') s.expiryCalls=Number(s.expiryCalls||0)+1; else s.fullCalls=Number(s.fullCalls||0)+1; });
+          cgCacheSet(cacheKey,result);
+          try{ logAiDiagnosticV98?.('cost-guard-teacher-used',{stage,sessionId,kind}); }catch(_){ }
+        }
+        return result;
+      };
+      window.__v2804AskVisionWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    const oldDiag=window.copyAiDiagnosisReportV2800 || window.copyAiDiagnosisReportV98 || null;
+    window.spesaProntaCostGuardV2804=function(){
+      const budget=cgBudget(); const cache=cgCache();
+      const sessions=Object.values(budget.sessions||{});
+      return {version:COST_GUARD_VERSION,active:true,teacherFullCalls:sessions.reduce((s,x)=>s+Number(x.fullCalls||0),0),teacherExpiryCalls:sessions.reduce((s,x)=>s+Number(x.expiryCalls||0),0),blocked:sessions.reduce((s,x)=>s+Number(x.blocked||0),0),cacheHits:Number(cache.hits||0),cacheEntries:Object.keys(cache.items||{}).length};
+    };
+    setTimeout(()=>{ try{ logAiDiagnosticV98?.('cost-guard-ready',window.spesaProntaCostGuardV2804()); }catch(_){} },1800);
+  }catch(_){ }
+})();
+
+
+// =============================================================
+// V28.05 VISION CROP + COUNT CHECK
+// Prima del docente OpenAI invia solo area utile centrale del prodotto.
+// Riduce peso/costo e registra quanto è stato risparmiato in Diagnosi AI.
+// =============================================================
+(function(){
+  const V='V28.05';
+  const STATS_KEY='spesa_pronta_vision_crop_v2805';
+  function loadStats(){ try{return JSON.parse(localStorage.getItem(STATS_KEY)||'')||{version:V,crops:0,bytesBefore:0,bytesAfter:0,last:null};}catch(_){return {version:V,crops:0,bytesBefore:0,bytesAfter:0,last:null};} }
+  function saveStats(s){ try{localStorage.setItem(STATS_KEY,JSON.stringify(s));}catch(_){} }
+  function dataUrlBytes(s=''){ return Math.round(String(s||'').length*0.75); }
+  function loadImgV2805(dataUrl){ return new Promise((res,rej)=>{ const img=new Image(); img.onload=()=>res(img); img.onerror=rej; img.src=dataUrl; }); }
+  function cropProfile(stage='auto'){
+    stage=String(stage||'auto').toLowerCase();
+    if(stage==='expiry') return {w:.92,h:.70,max:460,q:.50,label:'expiry-date'};
+    if(stage==='label') return {w:.92,h:.82,max:520,q:.52,label:'label'};
+    if(stage==='ingredients') return {w:.94,h:.86,max:560,q:.52,label:'ingredients'};
+    return {w:.84,h:.84,max:520,q:.52,label:'product-center'};
+  }
+  async function cropCentralForTeacherV2805(dataUrl, opts={}){
+    try{
+      if(!/^data:image\//i.test(String(dataUrl||''))) return {dataUrl,skipped:true,reason:'not_data_image'};
+      const img=await loadImgV2805(dataUrl);
+      if(!img.width || !img.height || Math.min(img.width,img.height)<260) return {dataUrl,skipped:true,reason:'too_small'};
+      const prof=cropProfile(opts.stage||opts.kind||'auto');
+      let cw=Math.round(img.width*prof.w), ch=Math.round(img.height*prof.h);
+      // Se la foto è molto verticale, non tagliare troppo in altezza: spesso etichette e scadenze sono sopra/sotto il centro.
+      if(img.height/img.width>1.55){ ch=Math.round(img.height*(opts.stage==='expiry'?.78:.74)); cw=Math.round(img.width*.94); }
+      // Se la foto è molto larga, tieni il centro ma con più altezza.
+      if(img.width/img.height>1.55){ cw=Math.round(img.width*.78); ch=Math.round(img.height*.92); }
+      const sx=Math.max(0,Math.round((img.width-cw)/2));
+      const sy=Math.max(0,Math.round((img.height-ch)/2));
+      const scale=Math.min(1, prof.max/Math.max(cw,ch));
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.max(1,Math.round(cw*scale));
+      canvas.height=Math.max(1,Math.round(ch*scale));
+      const ctx=canvas.getContext('2d',{willReadFrequently:false});
+      ctx.drawImage(img,sx,sy,cw,ch,0,0,canvas.width,canvas.height);
+      const out=canvas.toDataURL('image/jpeg', prof.q);
+      const before=dataUrlBytes(dataUrl), after=dataUrlBytes(out);
+      const saved=before>0?Math.round((1-after/before)*100):0;
+      const stats=loadStats();
+      stats.crops=Number(stats.crops||0)+1;
+      stats.bytesBefore=Number(stats.bytesBefore||0)+before;
+      stats.bytesAfter=Number(stats.bytesAfter||0)+after;
+      stats.last={at:Date.now(),stage:opts.stage||'auto',profile:prof.label,before,after,savedPercent:saved,source:`${img.width}x${img.height}`,sent:`${canvas.width}x${canvas.height}`};
+      saveStats(stats);
+      try{ logAiDiagnosticV98?.('vision-crop-v2805',stats.last); }catch(_){ }
+      return {dataUrl:out,skipped:false,before,after,savedPercent:saved,profile:prof.label};
+    }catch(err){
+      try{ logAiDiagnosticV98?.('vision-crop-v2805-error',{message:String(err?.message||err)}); }catch(_){ }
+      return {dataUrl,skipped:true,reason:String(err?.message||err)};
+    }
+  }
+  try{
+    if(typeof askVisionAi==='function' && !window.__v2805AskVisionCropWrapped){
+      const previousAskVision=askVisionAi;
+      askVisionAi=async function(dataUrl, opts={}){
+        if(opts && opts.teacherCroppedV2805) return previousAskVision.call(this,dataUrl,opts);
+        const stage=String(opts?.stage||'auto').toLowerCase();
+        const crop=await cropCentralForTeacherV2805(dataUrl,{stage});
+        const nextOpts=Object.assign({},opts,{teacherCroppedV2805:true, cropV2805: crop.skipped?null:{before:crop.before,after:crop.after,savedPercent:crop.savedPercent,profile:crop.profile}});
+        return previousAskVision.call(this,crop.dataUrl,nextOpts);
+      };
+      window.__v2805AskVisionCropWrapped=true;
+    }
+  }catch(_){ }
+  window.spesaProntaVisionCropV2805=function(){
+    const s=loadStats();
+    const saved=s.bytesBefore?Math.round((1-(Number(s.bytesAfter||0)/Number(s.bytesBefore||1)))*100):0;
+    return Object.assign({},s,{version:V,totalSavedPercent:saved});
+  };
+  try{
+    const oldCopy=window.copyAiDiagnosisReportV2800 || window.copyAiDiagnosisReportV98;
+    if(oldCopy && !window.__v2805DiagCropLine){
+      const original=oldCopy;
+      window.copyAiDiagnosisReportV2800=window.copyAiDiagnosisReportV98=async function(){
+        try{ logAiDiagnosticV98?.('vision-crop-summary',window.spesaProntaVisionCropV2805()); }catch(_){ }
+        return original.apply(this,arguments);
+      };
+      window.__v2805DiagCropLine=true;
+    }
+  }catch(_){ }
+  setTimeout(()=>{ try{ logAiDiagnosticV98?.('vision-crop-ready-v2805',window.spesaProntaVisionCropV2805()); }catch(_){} },1600);
+})();
+
+
+// =============================================================
+// V28.06 Debug Console Page
+// Sposta la console Diagnosi AI fuori dallo scanner: /debug.html
+// =============================================================
+(function(){
+  try{
+    window.SPESA_PRONTA_VERSION='v28.06-debug-console-page';
+    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.06', brain:'Ultra Error Reduction Core + Cost Guard + Debug Console Page', debugConsole:'debug.html'});
+    try{ localStorage.setItem('spesa_pronta_debug_build','V28.06'); }catch(_){ }
+    const isDebugPage=()=>/\/debug\.html(?:$|[?#])/.test(location.pathname+location.search);
+    const removeInlineDebug=()=>{ try{ if(!isDebugPage()) document.getElementById('preflightPanelV98')?.remove(); }catch(_){ } };
+    const oldEnsure=typeof ensurePreflightPanelV98==='function'?ensurePreflightPanelV98:null;
+    if(oldEnsure){
+      ensurePreflightPanelV98=function(){
+        if(!isDebugPage()) return null;
+        return oldEnsure();
+      };
+    }
+    const oldRun=typeof runPreflightV98==='function'?runPreflightV98:null;
+    if(oldRun){
+      runPreflightV98=function(manual=false){
+        if(!isDebugPage()) { removeInlineDebug(); return Promise.resolve(true); }
+        return oldRun(manual);
+      };
+    }
+    document.addEventListener('DOMContentLoaded',removeInlineDebug);
+    setTimeout(removeInlineDebug,300);
+    setTimeout(removeInlineDebug,1400);
+  }catch(e){ console.warn('V28.06 debug console patch error',e); }
+})();

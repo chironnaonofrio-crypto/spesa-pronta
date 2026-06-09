@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow,noarchive,nosnippet">
+  <meta name="googlebot" content="noindex,nofollow,noarchive,nosnippet">
+  <title>Spesa Pronta · Debug AI</title>
+  <style>
+    :root{--blue:#1266f1;--green:#18bf72;--ink:#10233f;--muted:#607089;--line:#dbe7f5;--bg:#eef4fb;--ok:#17a05d;--warn:#b77900;--bad:#d83b3b;--dark:#061b32}
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:linear-gradient(180deg,#eef4fb,#f8fbff);color:var(--ink)}
+    .page{max-width:1040px;margin:0 auto;padding:18px 14px 36px}.top{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px}.brand{display:flex;align-items:center;gap:10px}.logo{width:44px;height:44px;border-radius:16px;background:linear-gradient(135deg,var(--blue),var(--green));box-shadow:0 14px 30px rgba(18,102,241,.22)}
+    h1{font-size:1.58rem;line-height:1.05;margin:0}.subtitle{margin:4px 0 0;color:var(--muted);font-weight:750}.badge{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:8px 12px;background:#fff;border:1px solid var(--line);font-weight:950;color:#16427d}.badge.ok{background:#edfff6;color:#0b7e48;border-color:#baf2d5}.badge.warn{background:#fff8e7;color:#845900;border-color:#f3d89c}.badge.bad{background:#fff1f1;color:#a92020;border-color:#ffcaca}.badge.dark{background:#061b32;color:#fff;border-color:#102b4a}
+    .hero{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;margin-bottom:12px}.notice{padding:12px 14px;border-radius:18px;background:#f3f8ff;border:1px solid #d7e8ff;color:#244463;font-weight:850}.notice.warn{background:#fff8e7;border-color:#f3d89c;color:#845900}.notice.ok{background:#edfff6;border-color:#baf2d5;color:#0b7e48}.notice.bad{background:#fff1f1;border-color:#ffcaca;color:#a92020}
+    .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0}.card{background:#fff;border:1px solid var(--line);border-radius:24px;padding:14px;box-shadow:0 16px 36px rgba(12,45,94,.055)}.metric b{display:block;text-transform:uppercase;letter-spacing:.06em;font-size:.76rem;color:#697b94}.metric strong{display:block;font-size:1.2rem;margin-top:7px;word-break:break-word}.metric small{display:block;margin-top:5px;color:var(--muted);font-weight:750;line-height:1.25}
+    .actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0 16px}button,a.btn{border:0;border-radius:18px;min-height:54px;padding:12px 14px;font-weight:1000;font-size:.94rem;cursor:pointer;text-decoration:none;display:flex;align-items:center;justify-content:center;text-align:center}.primary{background:linear-gradient(135deg,#176fff,#0d57d5);color:#fff;box-shadow:0 16px 32px rgba(18,102,241,.22)}.ghost{background:#fff;border:1px solid var(--line);color:#143f76}.danger{background:#fff0f0;color:#a92020;border:1px solid #ffd0d0}.success{background:#edfff6;color:#0b7e48;border:1px solid #baf2d5}.darkbtn{background:#061b32;color:#fff;border:1px solid #102b4a}
+    .panel{background:#061b32;color:#eaf4ff;border-radius:26px;padding:16px;white-space:pre-wrap;line-height:1.4;font-size:.9rem;box-shadow:0 18px 42px rgba(6,27,50,.18);overflow:auto;max-height:46vh}.section-title{font-size:1.1rem;margin:18px 0 10px}.list{display:grid;gap:10px}.queue-item{border:1px solid var(--line);border-radius:20px;background:#fff;padding:12px}.queue-item b{display:block;margin-bottom:6px}.small{font-size:.82rem;color:var(--muted);font-weight:750;line-height:1.35}.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}.pillrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.mini{font-size:.78rem;min-height:34px;padding:7px 10px;border-radius:999px}.redacted{color:#8ea7c3}.good{color:#0b7e48}.warnText{color:#845900}.badText{color:#a92020}
+    @media(max-width:780px){.hero{grid-template-columns:1fr}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.actions{grid-template-columns:1fr 1fr}.two{grid-template-columns:1fr}.page{padding:14px 10px 28px}.top{align-items:flex-start}.badge{font-size:.78rem;padding:7px 10px}h1{font-size:1.35rem}.card{border-radius:20px;padding:12px}.panel{font-size:.8rem;max-height:50vh}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="top">
+      <div class="brand"><div class="logo"></div><div><h1>Diagnosi AI</h1><p class="subtitle">Console debug separata · Spesa Pronta</p></div></div>
+      <span class="badge dark" id="buildBadge">V28.07</span>
+    </div>
+
+    <div class="hero">
+      <div class="notice warn" id="securityNotice">Console tecnica temporanea — pronta per blocco password. Noindex attivo, report sanitizzati.</div>
+      <span class="badge warn" id="cacheBadge">Controllo cache…</span>
+    </div>
+
+    <div class="grid">
+      <div class="card metric"><b>Docente</b><strong id="mTeacher">—</strong><small id="mTeacherSub">OpenAI Vision</small></div>
+      <div class="card metric"><b>Database</b><strong id="mDb">—</strong><small id="mDbSub">Supabase/Postgres</small></div>
+      <div class="card metric"><b>Sync queue</b><strong id="mQueue">—</strong><small id="mQueueSub">Coda locale</small></div>
+      <div class="card metric"><b>Prodotti server</b><strong id="mProducts">—</strong><small id="mProductsSub">Reali unici / raw</small></div>
+      <div class="card metric"><b>Knowledge cache</b><strong id="mCache">—</strong><small id="mCacheSub">entry / hit</small></div>
+      <div class="card metric"><b>Barcode brain</b><strong id="mBarcode">—</strong><small id="mBarcodeSub">hit / miss</small></div>
+      <div class="card metric"><b>Brain</b><strong id="mBrain">Ultra V97</strong><small id="mBrainSub">Cost Guard + Crop</small></div>
+      <div class="card metric"><b>Stato</b><strong id="mStatus">Controllo…</strong><small id="mStatusSub">Preflight</small></div>
+    </div>
+
+    <div class="actions">
+      <button class="primary" id="btnRefresh">Ricontrolla</button>
+      <button class="ghost" id="btnRetry">Ritenta sync</button>
+      <button class="success" id="btnTest">Test Sync ora</button>
+      <button class="darkbtn" id="btnCopyShort">Copia diagnosi breve</button>
+      <button class="ghost" id="btnCopyFull">Copia diagnosi completa</button>
+      <button class="ghost" id="btnExportQueue">Copia coda sicura</button>
+      <a class="btn ghost" href="./index.html">Torna all’app</a>
+      <a class="btn ghost" href="./clear-cache.html">Pulisci cache</a>
+      <button class="danger" id="btnClearQueue">Svuota coda locale</button>
+      <button class="ghost" id="btnResetDiag">Reset eventi diagnosi</button>
+    </div>
+
+    <div class="two">
+      <div>
+        <h2 class="section-title">Report breve</h2>
+        <div class="panel" id="shortReportBox">Carico diagnosi…</div>
+      </div>
+      <div>
+        <h2 class="section-title">Ultimo errore / sync</h2>
+        <div class="panel" id="errorBox">Carico stato…</div>
+      </div>
+    </div>
+
+    <h2 class="section-title">Report completo sanitizzato</h2>
+    <div class="panel" id="reportBox">Carico diagnosi…</div>
+
+    <h2 class="section-title">Coda sync locale</h2>
+    <div class="list" id="queueList"></div>
+  </main>
+<script>
+(function(){
+  const DEBUG_VERSION='V28.07 Debug Safe Pro';
+  const SETTINGS_KEY='spesa-pronta-final:settings:v19';
+  const AI_MEMORY_KEY='spesa-pronta-final:ai-memory:v23';
+  const LEARNING_QUEUE_KEY='spesa_pronta_learning_queue_v2782';
+  const state={preflight:null,status:null,test:null,lastRetry:null,lastError:null,loadedAt:Date.now()};
+  const $=id=>document.getElementById(id);
+  function safeJsonGet(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'')||fallback}catch{return fallback}}
+  function safeJsonSet(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true}catch{return false}}
+  function getSettings(){return Object.assign({apiEndpoint:'/api',token:'',householdId:''},safeJsonGet(SETTINGS_KEY,{}));}
+  function getMemory(){return safeJsonGet(AI_MEMORY_KEY,{});}
+  function saveMemory(mem){safeJsonSet(AI_MEMORY_KEY,mem||{});}
+  function getQueue(){const q=safeJsonGet(LEARNING_QUEUE_KEY,[]);return Array.isArray(q)?q:[];}
+  function saveQueue(q){localStorage.setItem(LEARNING_QUEUE_KEY,JSON.stringify((q||[]).slice(0,120)));}
+  function apiBase(){return (getSettings().apiEndpoint||'/api').replace(/\/$/,'')||'/api'}
+  async function fetchJson(url,opt){const res=await fetch(url,Object.assign({cache:'no-store'},opt||{}));const txt=await res.text();let data=null;try{data=txt?JSON.parse(txt):null}catch{data={raw:txt}};return {ok:res.ok,status:res.status,data,raw:txt};}
+  function redactText(txt){return String(txt||'')
+    .replace(/(sk-[A-Za-z0-9_\-]{12,})/g,'[OPENAI_KEY_REDACTED]')
+    .replace(/(Bearer\s+)[A-Za-z0-9._\-]+/gi,'$1[REDACTED]')
+    .replace(/("token"\s*:\s*")[^"]+/gi,'$1[REDACTED]')
+    .replace(/("apiKey"\s*:\s*")[^"]+/gi,'$1[REDACTED]')
+    .replace(/("OPENAI_API_KEY"\s*:\s*")[^"]+/gi,'$1[REDACTED]')
+    .replace(/(postgres(?:ql)?:\/\/)[^\s"']+/gi,'$1[DATABASE_URL_REDACTED]')
+    .replace(/(DATABASE_URL=)[^\s]+/gi,'$1[DATABASE_URL_REDACTED]')
+    .slice(0,20000);
+  }
+  function sanitizeObj(obj){try{return JSON.parse(redactText(JSON.stringify(obj||{})))}catch{return obj}}
+  function fmt(v){return v==null||v===''?'—':String(v)}
+  function lastEvent(type){const ev=(getMemory().diagnosticsV98?.events||[]).slice().reverse().find(e=>!type||e.type===type);return ev||null;}
+  function statusText(){const p=state.preflight||state.status||{};const q=getQueue().length;if(!p.ok && !p.teacherActive) return 'Da verificare'; if(q>0) return 'Sync in coda'; return 'Sistema pronto';}
+  function readableReason(raw){const s=String(raw||'');const map={http_500_server_error:'Errore server durante salvataggio memoria',server_not_reachable:'Server non raggiunto',endpoint_not_confirmed:'Endpoint non confermato',timeout:'Timeout richiesta',network_error:'Errore rete',payload_invalid:'Payload non valido',unauthorized:'Accesso non autorizzato'};return map[s]||s||'—'}
+  function updateMetrics(){const p=state.preflight||state.status||{};const q=getQueue();const g=p.globalProductMemory||{};$('mTeacher').textContent=p.teacherMessage||(p.teacherActive?'OpenAI attivo':'non attivo');$('mDb').textContent=(p.dbMode||'—')+(p.databaseConnected?' ✅':' ⚠️');$('mQueue').textContent=String(q.length);$('mQueueSub').textContent=q.length?'Da sincronizzare':'Vuota';$('mProducts').textContent=String(g.count ?? p.globalCount ?? '—');$('mProductsSub').textContent='raw '+String(g.rawCount ?? g.count ?? p.globalCount ?? '—')+' · duplicati '+String(g.duplicatesPossible ?? 0);$('mCache').textContent=String(p.knowledgeCache?.entries ?? '—')+' / '+String(p.knowledgeCache?.hits ?? 0);$('mCacheSub').textContent='barcode hit '+String(p.knowledgeCache?.barcodeHits ?? 0);$('mBarcode').textContent='hit '+String(p.barcodeBrain?.hits ?? 0);$('mBarcodeSub').textContent='miss '+String(p.barcodeBrain?.misses ?? 0);$('mBrain').textContent=p.ultraBrainV97?.version||p.monsterBrainV96?.version||p.costGuardV2804?.version||'Ultra V97+';$('mStatus').textContent=statusText();$('mStatusSub').textContent=p.ok?'Preflight ok':'Controllare';const badge=$('buildBadge');badge.textContent='V28.07';badge.className='badge '+(q.length?'warn':'ok');$('cacheBadge').textContent='Debug V28.07 · noindex · report sicuro';$('cacheBadge').className='badge ok';}
+  function queueSummary(){return getQueue().map(x=>({id:x.id,reason:x.reason,tries:x.tries,product:x.payload?.confirmed?.productName,brand:x.payload?.confirmed?.brand,format:x.payload?.confirmed?.format,category:x.payload?.confirmed?.category}));}
+  function shortReport(){const p=state.preflight||state.status||{};const mem=getMemory();const q=getQueue();const diag=mem.diagnosticsV98||{};const lastSync=diag.lastSync||lastEvent('sync-failed')?.data||lastEvent('sync-queued')?.data||{};const lastEndpoint=lastEvent('sync-endpoint-failed')?.data||{};return redactText([
+    'SPESA PRONTA - DIAGNOSI BREVE',
+    'Versione console: '+DEBUG_VERSION,
+    'Build app: '+fmt(localStorage.getItem('spesa_pronta_debug_build')||'V28.x'),
+    'Queue sync: '+q.length,
+    'Docente OpenAI: '+(p.teacherActive?'attivo':'non attivo'),
+    'Database: '+fmt(p.dbMode)+' / connected='+!!p.databaseConnected,
+    'Memory ready: '+!!p.memoryReady,
+    'Prodotti server: '+fmt(p.globalProductMemory?.count ?? p.globalCount)+' raw='+fmt(p.globalProductMemory?.rawCount),
+    'Ultimo sync: '+(lastSync.type||lastSync.reason||lastSync.reasonLabel||'nessuno')+' '+readableReason(lastSync.reason||lastSync.reasonLabel),
+    'Endpoint fallito: '+(lastEndpoint.endpoint||'nessuno')+' '+(lastEndpoint.status||''),
+    'Ultima categoria: '+(diag.lastCategory?JSON.stringify(diag.lastCategory):'nessuna'),
+    'Ultimo prodotto in coda: '+(q[0]?.payload?.confirmed?.productName||'nessuno')+' / '+(q[0]?.payload?.confirmed?.brand||''),
+    'Test sync: '+(state.test?JSON.stringify(sanitizeObj(state.test)):'nessuno')
+  ].join('\n'));
+  }
+  function fullReport(){const p=state.preflight||state.status||{};const mem=getMemory();const q=getQueue();const diag=mem.diagnosticsV98||{};const events=(diag.events||[]).slice(0,24).map(ev=>{const t=new Date(ev.at||Date.now()).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit',second:'2-digit'});return `${t} | ${ev.type} | ${JSON.stringify(sanitizeObj(ev.data||{})).slice(0,420)}`}).join('\n');return redactText([
+    shortReport(),
+    '', '--- PRELIGHT / STATUS ---', JSON.stringify(sanitizeObj(p),null,2),
+    '', '--- KNOWLEDGE / BARCODE ---', 'Knowledge cache: '+JSON.stringify(sanitizeObj(p.knowledgeCache||{})), 'Barcode brain: '+JSON.stringify(sanitizeObj(p.barcodeBrain||{})),
+    '', '--- ULTIMI EVENTI ---', events || 'Nessun evento locale.',
+    '', '--- CODA LOCALE SANITIZZATA ---', JSON.stringify(sanitizeObj(queueSummary()),null,2)
+  ].join('\n'));
+  }
+  function errorReport(){const diag=getMemory().diagnosticsV98||{};const failed=lastEvent('sync-endpoint-failed')?.data||lastEvent('sync-failed')?.data||diag.lastSync||{};const q=getQueue();return redactText([
+    'ULTIMO ERRORE / SYNC',
+    'Stato: '+(q.length?'sync in coda':'nessuna coda'),
+    'Motivo tecnico: '+fmt(failed.reason||failed.reasonLabel||failed.status),
+    'Motivo leggibile: '+readableReason(failed.reason||failed.reasonLabel),
+    'Endpoint: '+fmt(failed.endpoint),
+    'HTTP status: '+fmt(failed.status),
+    'Body: '+fmt(typeof failed.body==='string'?failed.body:JSON.stringify(failed.body||{})),
+    'Tentativi primo job: '+fmt(q[0]?.tries),
+    'Prodotto primo job: '+fmt(q[0]?.payload?.confirmed?.productName)+' / '+fmt(q[0]?.payload?.confirmed?.brand)
+  ].join('\n'));
+  }
+  function renderQueue(){const list=$('queueList');const q=getQueue();if(!q.length){list.innerHTML='<div class="notice ok">Nessun elemento in coda sync ✅</div>';return;}list.innerHTML=q.map((job,i)=>{const p=job.payload?.confirmed||{};return `<div class="queue-item"><b>#${i+1} ${p.productName||'Prodotto senza nome'}</b><div class="small">Marca: ${p.brand||'—'} · formato: ${p.format||'—'} · categoria: ${p.category||'—'}</div><div class="small">Motivo: ${readableReason(job.reason)||'—'} · tentativi: ${job.tries||0}</div><div class="small">ID: ${job.id||'—'}</div><div class="pillrow"><button class="ghost mini" data-copy-job="${i}">Copia job sicuro</button></div></div>`}).join('');list.querySelectorAll('[data-copy-job]').forEach(btn=>btn.onclick=()=>copyText(JSON.stringify(sanitizeObj(queueSummary()[Number(btn.dataset.copyJob)]||{}),null,2),'Job copiato ✅'));}
+  function render(){updateMetrics();$('shortReportBox').textContent=shortReport();$('errorBox').textContent=errorReport();$('reportBox').textContent=fullReport();renderQueue();}
+  async function refresh(){try{let r=await fetchJson(apiBase()+'/ai/preflight'); if(!r.ok) r=await fetchJson(apiBase()+'/ai/status'); state.preflight=r.data||{};}catch(e){state.lastError=e.message||String(e);try{const r=await fetchJson('/api/ai/status');state.preflight=r.data||{};}catch(err){state.lastError=err.message||String(err);}}render();}
+  async function testSync(){try{const settings=getSettings();const r=await fetchJson(apiBase()+'/ai/test-sync',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(settings.token||'')},body:JSON.stringify({source:'debug-console-v2807',householdId:settings.householdId||'',checkOnly:true,debugVersion:DEBUG_VERSION})});state.test={ok:r.ok,status:r.status,data:r.data};}catch(e){state.test={ok:false,error:e.message||String(e)}}render();}
+  async function retryQueue(){const settings=getSettings();let q=getQueue();if(!q.length){state.lastRetry={ok:true,message:'queue_empty'};render();return;}const remaining=[];const results=[];for(const job of q){let saved=false;let last=null;const endpoints=[apiBase()+'/ai/learn/autonomy','/api/ai/learn/autonomy'];for(const ep of [...new Set(endpoints)]){try{const r=await fetchJson(ep,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(settings.token||'')},body:JSON.stringify({householdId:settings.householdId||'',payload:job.payload,clientMemorySummary:{source:'debug-console-v2807',queued:q.length,debugVersion:DEBUG_VERSION}})});last={endpoint:ep,status:r.status,data:r.data};if(r.ok && (r.data?.saved||r.data?.ok||r.data?.syncConfirmed)){saved=true;break;}}catch(e){last={endpoint:ep,error:e.message||String(e)}}}
+      if(saved){results.push({id:job.id,ok:true,last});}else{job.tries=Number(job.tries||0)+1;job.lastTryAt=Date.now();job.reason=last?.data?.reason||last?.data?.error||last?.error||job.reason||'sync_failed';remaining.push(job);results.push({id:job.id,ok:false,last});}}
+    saveQueue(remaining);state.lastRetry={ok:remaining.length===0,remaining:remaining.length,results:sanitizeObj(results)};await refresh();}
+  async function copyText(txt,msg){try{await navigator.clipboard.writeText(redactText(txt));alert(msg||'Diagnosi copiata ✅')}catch{const ta=document.createElement('textarea');ta.value=redactText(txt);document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();alert(msg||'Diagnosi copiata ✅')}}
+  function resetDiag(){const mem=getMemory();mem.diagnosticsV98=Object.assign({},mem.diagnosticsV98||{},{events:[],lastSync:null,lastCategory:null});saveMemory(mem);render();}
+  $('btnRefresh').onclick=refresh;$('btnTest').onclick=async()=>{await testSync();await refresh();};$('btnRetry').onclick=retryQueue;$('btnCopyShort').onclick=()=>copyText(shortReport(),'Diagnosi breve copiata ✅');$('btnCopyFull').onclick=()=>copyText(fullReport(),'Diagnosi completa copiata ✅');$('btnExportQueue').onclick=()=>copyText(JSON.stringify(sanitizeObj(queueSummary()),null,2),'Coda sicura copiata ✅');$('btnClearQueue').onclick=()=>{if(confirm('Svuotare la coda sync locale? Fallo solo se sei sicuro.')){saveQueue([]);render();}};$('btnResetDiag').onclick=()=>{if(confirm('Pulire gli eventi Diagnosi AI locali?')) resetDiag();};
+  refresh();
+})();
+</script>
+</body>
+</html>
