@@ -1867,3 +1867,108 @@ body{color-scheme:light;}
   .scanner-secondary-actions .secondary-pill-bg{min-height:70px!important;}
   .scanner-title-block > #scannerSeedBrainProof .seed-proof-visual-wrap{height:82px!important;}
 }
+
+
+/* V28.11 - Vision card image fix: icona bianca funzionante + pillola centrata */
+.scanner-title-block > #scannerSeedBrainProof,
+.scanner-card-premium .scanner-seed-proof{
+  width:100%!important;
+  max-width:100%!important;
+  margin-left:auto!important;
+  margin-right:auto!important;
+  box-sizing:border-box!important;
+  align-self:center!important;
+}
+.scanner-title-block > #scannerSeedBrainProof .seed-proof-head,
+.scanner-card-premium .scanner-seed-proof .seed-proof-head{
+  display:grid!important;
+  grid-template-columns:clamp(112px,28vw,160px) minmax(0,1fr)!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:16px!important;
+  width:100%!important;
+  box-sizing:border-box!important;
+}
+.scanner-title-block > #scannerSeedBrainProof .seed-proof-visual-wrap,
+.scanner-card-premium .scanner-seed-proof .seed-proof-visual-wrap{
+  width:clamp(112px,28vw,160px)!important;
+  height:clamp(92px,22vw,128px)!important;
+  justify-self:center!important;
+  align-self:center!important;
+  border-radius:24px!important;
+  background:#fff!important;
+  border:1px solid rgba(13,110,253,.14)!important;
+  box-shadow:0 14px 28px rgba(12,45,94,.08)!important;
+  overflow:hidden!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+}
+.scanner-title-block > #scannerSeedBrainProof .seed-proof-visual,
+.scanner-card-premium .scanner-seed-proof .seed-proof-visual{
+  width:100%!important;
+  height:100%!important;
+  object-fit:contain!important;
+  object-position:center!important;
+  background:#fff!important;
+  transform:none!important;
+  padding:5px!important;
+  box-sizing:border-box!important;
+  filter:none!important;
+}
+.scanner-title-block > #scannerSeedBrainProof h3,
+.scanner-card-premium .scanner-seed-proof h3{
+  text-align:left!important;
+}
+.scanner-title-block > #scannerSeedBrainProof p,
+.scanner-card-premium .scanner-seed-proof p{
+  text-align:left!important;
+}
+@media(max-width:520px){
+  .scanner-title-block > #scannerSeedBrainProof,
+  .scanner-card-premium .scanner-seed-proof{
+    padding:12px!important;
+  }
+  .scanner-title-block > #scannerSeedBrainProof .seed-proof-head,
+  .scanner-card-premium .scanner-seed-proof .seed-proof-head{
+    grid-template-columns:112px minmax(0,1fr)!important;
+    gap:12px!important;
+  }
+  .scanner-title-block > #scannerSeedBrainProof .seed-proof-visual-wrap,
+  .scanner-card-premium .scanner-seed-proof .seed-proof-visual-wrap{
+    width:112px!important;
+    height:92px!important;
+    border-radius:20px!important;
+  }
+  .scanner-title-block > #scannerSeedBrainProof .seed-proof-visual,
+  .scanner-card-premium .scanner-seed-proof .seed-proof-visual{
+    padding:4px!important;
+  }
+}
+@media(max-width:390px){
+  .scanner-title-block > #scannerSeedBrainProof .seed-proof-head,
+  .scanner-card-premium .scanner-seed-proof .seed-proof-head{
+    grid-template-columns:96px minmax(0,1fr)!important;
+    gap:10px!important;
+  }
+  .scanner-title-block > #scannerSeedBrainProof .seed-proof-visual-wrap,
+  .scanner-card-premium .scanner-seed-proof .seed-proof-visual-wrap{
+    width:96px!important;
+    height:82px!important;
+  }
+}
+
+
+/* V28.12 - first inventory session + no sticky final buttons */
+#markVerifyBtn,.verify-action-btn,.secondary-pill-verify{display:none!important}
+.scanner-footer{position:static!important;bottom:auto!important;z-index:auto!important;background:transparent!important;padding:18px 0 0!important;margin-top:22px!important}
+@media(max-width:820px){.scanner-footer{position:static!important;bottom:auto!important;z-index:auto!important;background:transparent!important;padding:18px 0 0!important}}
+.first-inventory-session-card{margin:14px 0;padding:16px;border-radius:24px;background:linear-gradient(180deg,#eef7ff,#f7fbff);border:1px solid rgba(13,110,253,.16);box-shadow:0 16px 32px rgba(12,45,94,.06);color:#15395f}
+.first-inventory-session-card strong{display:block;font-size:1.04rem;font-weight:1000;color:#12335f;margin-bottom:5px}
+.first-inventory-session-card p{margin:.15rem 0 .75rem;color:#4b6380;font-weight:760;line-height:1.35}
+.first-inventory-session-card ul{margin:.25rem 0 .8rem;padding-left:1.1rem;color:#274969;font-weight:850;display:grid;gap:3px}
+.first-inventory-session-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.slim-pill{min-height:48px!important;border-radius:999px!important;font-size:.86rem!important;padding:.75rem 1rem!important}
+.danger-soft{color:#8a4800!important;background:#fff8eb!important;border-color:rgba(218,161,0,.26)!important}
+.first-inventory-session-card.expired{background:linear-gradient(180deg,#fff7ed,#fffdf8);border-color:rgba(218,120,0,.22)}
+@media(max-width:520px){.first-inventory-session-actions{grid-template-columns:1fr}.first-inventory-session-card{padding:14px;border-radius:20px}}

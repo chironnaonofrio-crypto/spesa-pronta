@@ -178,6 +178,110 @@ let accountPendingAction = null;
 let scannerProductSessionCounter=0;
 let scannerActiveProductSessionId='';
 const LEARNING_QUEUE_KEY='spesa_pronta_learning_queue_v2782';
+
+// V28.12 - First inventory interrupted session guard (24h)
+const FIRST_INVENTORY_SESSION_KEY='spesa_pronta_first_inventory_sessions_v2812';
+const FIRST_INVENTORY_SESSION_TTL=24*60*60*1000;
+function firstInventoryLoadSessions(){ try{return JSON.parse(localStorage.getItem(FIRST_INVENTORY_SESSION_KEY)||'{}')||{};}catch(_){return{};} }
+function firstInventorySaveSessions(map={}){ try{localStorage.setItem(FIRST_INVENTORY_SESSION_KEY, JSON.stringify(map||{}));}catch(_){} }
+function firstInventoryAliases(data=null){
+  const user=data?.user || session?.user || {};
+  const profile=settings?.profile || {};
+  const raw=[data?.householdId, settings?.householdId, user.email, user.username, profile.email, profile.username].filter(Boolean);
+  return [...new Set(raw.map(x=>String(x).trim().toLowerCase()).filter(Boolean))];
+}
+function firstInventorySummaryItems(items=state){
+  return (items||[]).slice(0,18).map(i=>({id:i.id,name:nameOf?nameOf(i):(i.name||i.id),qty:i.qty,unit:i.unit,category:i.category,expiryDate:i.expiryDate||''}));
+}
+function firstInventorySnapshot(reason='snapshot'){
+  if(settings?.inventorySetupDone) return null;
+  if(!Array.isArray(state) || !state.length) return null;
+  const now=Date.now();
+  return {version:'v28.12',reason,createdAt:now,updatedAt:now,expiresAt:now+FIRST_INVENTORY_SESSION_TTL,items:state,summary:firstInventorySummaryItems(state),settings:{inventorySetupDone:false,inventoryStatus:'required',people:settings.people,animals:settings.animals},profile:settings.profile||{},aliases:firstInventoryAliases()};
+}
+function saveFirstInventoryDraftIfNeeded(reason='auto'){
+  const snap=firstInventorySnapshot(reason); if(!snap) return false;
+  const map=firstInventoryLoadSessions();
+  const aliases=snap.aliases.length?snap.aliases:firstInventoryAliases();
+  aliases.forEach(a=>{ map[a]=Object.assign({}, snap, {key:a}); });
+  map.__latest=snap;
+  firstInventorySaveSessions(map);
+  try{ aiMemory.firstInventoryPending={updatedAt:snap.updatedAt,expiresAt:snap.expiresAt,count:snap.summary.length,reason}; saveAiMemory(); }catch(_){ }
+  return true;
+}
+function clearFirstInventoryDraft(){
+  const map=firstInventoryLoadSessions();
+  firstInventoryAliases().forEach(a=>delete map[a]);
+  delete map.__latest;
+  firstInventorySaveSessions(map);
+  try{ delete aiMemory.firstInventoryPending; delete aiMemory.firstInventoryNotice; saveAiMemory(); }catch(_){ }
+}
+function findFirstInventoryDraftFor(data=null){
+  const map=firstInventoryLoadSessions();
+  const aliases=firstInventoryAliases(data);
+  let draft=null;
+  for(const a of aliases){ if(map[a]){ draft=map[a]; break; } }
+  if(!draft && map.__latest && (!aliases.length || (Date.now()-Number(map.__latest.updatedAt||0)<FIRST_INVENTORY_SESSION_TTL))) draft=map.__latest;
+  if(!draft) return null;
+  const expired=Date.now()>Number(draft.expiresAt||0);
+  return {draft,expired};
+}
+function applyFirstInventoryDraftAfterAuth(data={}, incomingItems=[]){
+  const found=findFirstInventoryDraftFor(data);
+  if(!found) return {items:incomingItems, notice:null};
+  const map=firstInventoryLoadSessions();
+  const aliases=firstInventoryAliases(data);
+  if(found.expired){
+    aliases.forEach(a=>delete map[a]); delete map.__latest; firstInventorySaveSessions(map);
+    try{ aiMemory.firstInventoryNotice={type:'expired',at:Date.now(),message:'La sessione di controllo lasciata in sospeso è scaduta dopo 24 ore. Gli articoli temporanei sono stati riportati a 0.'}; }catch(_){ }
+    return {items:[], notice:'expired'};
+  }
+  const restored=migrateItems(Array.isArray(found.draft.items)?found.draft.items:[]);
+  try{ aiMemory.firstInventoryNotice={type:'resumed',at:Date.now(),expiresAt:found.draft.expiresAt,count:restored.length,message:'Ho ripristinato la sessione di controllo lasciata in sospeso.'}; }catch(_){ }
+  return {items:restored, notice:'resumed'};
+}
+function resetFirstInventorySessionFromUi(){
+  state=[];
+  settings.inventorySetupDone=false; settings.inventoryStatus='required'; settings.inventoryUpdatedAt=null;
+  clearFirstInventoryDraft();
+  try{ $('#scannerResults')&&( $('#scannerResults').innerHTML='' ); $('#scannerPreview')&&( $('#scannerPreview').innerHTML='' ); }catch(_){ }
+  setScannerStatus?.('Sessione azzerata. La casa è tornata a 0 articoli: inizia un nuovo controllo completo.');
+  toast('Inventario iniziale azzerato: riparti da 0');
+  saveAll(); render();
+}
+function firstInventoryNoticeHtml(){
+  if(settings?.inventorySetupDone) return '';
+  const found=findFirstInventoryDraftFor();
+  const notice=aiMemory?.firstInventoryNotice || null;
+  if(notice?.type==='expired'){
+    return `<div class="first-inventory-session-card expired"><strong>Sessione controllo scaduta</strong><p>Sono passate più di 24 ore: gli articoli temporanei della prima registrazione sono stati riportati a 0 per evitare quantità sbagliate.</p><button class="primary-btn slim-pill" type="button" data-continue-first-inventory>Inizia nuovo controllo</button></div>`;
+  }
+  const draft=(found && !found.expired) ? found.draft : null;
+  const count=Array.isArray(state)?state.length:0;
+  if(!draft && !count) return '';
+  const expiresAt=Number(draft?.expiresAt || (Date.now()+FIRST_INVENTORY_SESSION_TTL));
+  const hours=Math.max(0, Math.ceil((expiresAt-Date.now())/3600000));
+  const summary=firstInventorySummaryItems(state).slice(0,6).map(i=>`<li>${esc(i.name)} <b>${esc(i.qty)} ${esc(i.unit||'pz')}</b></li>`).join('');
+  return `<div class="first-inventory-session-card"><strong>Controllo iniziale in sospeso</strong><p>Ho conservato gli articoli già aggiunti per altre ${hours}h. Puoi continuare senza perdere il lavoro oppure ricominciare da zero.</p>${summary?`<ul>${summary}</ul>`:''}<div class="first-inventory-session-actions"><button class="primary-btn slim-pill" type="button" data-continue-first-inventory>Continua controllo</button><button class="outline-btn slim-pill danger-soft" type="button" data-reset-first-inventory>Ricomincia da 0 articoli</button></div></div>`;
+}
+function renderFirstInventorySessionNotices(){
+  const html=firstInventoryNoticeHtml();
+  document.querySelectorAll('.first-inventory-session-card').forEach(el=>el.remove());
+  if(!html) return;
+  const onboarding=document.querySelector('#view-onboarding .onboarding-premium .premium-hero');
+  if(onboarding) onboarding.insertAdjacentHTML('afterend', html);
+  const dialog=document.querySelector('#groceryScannerDialog .scanner-status');
+  if(dialog) dialog.insertAdjacentHTML('afterend', html);
+}
+function bindFirstInventorySessionActions(){
+  document.addEventListener('click', e=>{
+    const reset=e.target.closest('[data-reset-first-inventory]');
+    if(reset){ e.preventDefault(); resetFirstInventorySessionFromUi(); openGroceryScanner(true); }
+    const cont=e.target.closest('[data-continue-first-inventory]');
+    if(cont){ e.preventDefault(); openGroceryScanner(true); }
+  });
+}
+
 function newScannerProductSessionId(prefix='scan'){
   scannerProductSessionCounter++;
   return `${prefix}_${Date.now()}_${scannerProductSessionCounter}_${Math.random().toString(36).slice(2,7)}`;
@@ -743,6 +847,7 @@ function init(){
   // if('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
 }
 function bind(){
+  bindFirstInventorySessionActions();
   $all('.nav-item').forEach(b => b.addEventListener('click', () => showView(b.dataset.view)));
   $('#mobileMenuBtn')?.addEventListener('click', () => toggleMobileMenu(true));
   $('#mobileNavBackdrop')?.addEventListener('click', () => toggleMobileMenu(false));
@@ -809,7 +914,6 @@ function bind(){
   $('#scannerCloseBtn')?.addEventListener('click', closeGroceryScanner);
   $('#scannerFinishBtn')?.addEventListener('click', finishScanner);
   $('#scannerResetBtn')?.addEventListener('click', resetScannerResults);
-  $('#markVerifyBtn')?.addEventListener('click', markShoppingDoneToVerify);
   $('#fridgeModeBtn')?.addEventListener('click', startFridgeMode);
   $('#groceryPhotoInput')?.addEventListener('change', e => handleGroceryFiles(e.target.files));
   $('#groceryGalleryInput')?.addEventListener('change', e => handleGroceryFiles(e.target.files));
@@ -878,7 +982,9 @@ function render(){
   updateFlowClasses();
   renderStats(); renderProducts(); renderSide(); renderSettings(); renderAllProducts(); renderShoppingFull(); renderSuggestions(); renderWelcome(); renderVerifyEmail(); applyInlineImages();
   renderUserPill();
+  renderFirstInventorySessionNotices();
 }
+
 
 function renderUserPill(){
   const btn = $('#userShortcutBtn');
@@ -1010,6 +1116,7 @@ function resetLocalAccountState(){
   showView('registration');
 }
 function performLogoutAccount(){
+  saveFirstInventoryDraftIfNeeded('logout');
   resetLocalAccountState();
   showAccountNotice('Disconnessione completata', 'Sei uscito correttamente. Puoi accedere di nuovo quando vuoi.', 'success');
 }
@@ -1266,8 +1373,17 @@ async function resetPassword(e){
 function applyAuthPayload(data, makeWelcome=false){
   session={mode:'registered',user:data.user,welcomePending:!!makeWelcome};
   settings={...settings,...(data.settings||{}),cloudEnabled:true,householdId:data.householdId,token:data.token,profile:{...(settings.profile||{}),firstName:data.user.firstName||'',lastName:data.user.lastName||'',username:data.user.username||'',email:data.user.email||''}};
-  state=Array.isArray(data.items)?migrateItems(data.items):[];
+  const incomingItems=Array.isArray(data.items)?migrateItems(data.items):[];
   if(data.aiMemory) aiMemory=Object.assign(aiMemory,data.aiMemory);
+  if(!settings.inventorySetupDone){
+    const resume=applyFirstInventoryDraftAfterAuth(data,incomingItems);
+    state=resume.items;
+    if(resume.notice){ settings.inventorySetupDone=false; settings.inventoryStatus='required'; settings.inventoryUpdatedAt=null; }
+    if(resume.notice==='expired') toast('Sessione controllo scaduta: articoli riportati a 0.');
+    if(resume.notice==='resumed') toast('Sessione controllo ripristinata ✅');
+  }else{
+    state=incomingItems;
+  }
   if(!state.length && !settings.inventorySetupDone){ settings.inventorySetupDone=false; settings.inventoryStatus='required'; }
   saveAiMemory(); saveAll(); render();
 }
@@ -2656,7 +2772,7 @@ async function aiAnswer(text){
   if(q.includes('dimentica tutto') || q.includes('cancella memoria')){ aiMemory=defaultAiMemory(); saveAiMemory(); return 'Ok, ho cancellato la memoria locale dell’assistente.'; }
   if(q.includes('fotografa') || q.includes('foto spesa') || q.includes('scanner') || q.includes('modalita frigo')){ openGroceryScanner(false); return 'Perfetto, ho aperto la modalità foto spesa. Fotografa un articolo alla volta: se non vedo bene ti chiedo di rifarla.'; }
   if(q.includes('cosa devo comprare') || q.includes('lista della spesa') || q.includes('che manca') || q.includes('cosa manca')) return listBuyText();
-  if(q.includes('ho fatto la spesa') || q.includes('spesa fatta')){ openGroceryScanner(true); return 'Perfetto. Prima di chiudere la spesa ti propongo il controllo con foto: scatta un articolo alla volta, oppure segna “fatta da verificare”.'; }
+  if(q.includes('ho fatto la spesa') || q.includes('spesa fatta')){ openGroceryScanner(true); return 'Perfetto. Prima di chiudere la spesa ti propongo il controllo con foto: scatta un articolo alla volta, e conferma gli articoli reali.'; }
   m=q.match(/siamo\s+(\d+)\s+persone|(?:metti|imposta|aggiorna).*?(\d+)\s+persone/);
   if(m){ settings.people=Number(m[1]||m[2]); saveAll(); render(); return `Ok, ho aggiornato il profilo: ${settings.people} persone in casa. Ora ricalcolo acqua, alimenti e scorte.`; }
   m=q.match(/(?:ho|abbiamo|siamo).*?(\d+)\s+(?:animali|cani|gatti)|(?:metti|imposta|aggiorna).*?(\d+)\s+(?:animali|cani|gatti)/);
@@ -2762,7 +2878,7 @@ function finishScanner(){
   stopLiveVisionMode(true);
   const confirmed=document.querySelectorAll('#scannerResults .scan-result.confirmed').length;
   if(!settings.inventorySetupDone && confirmed===0){
-    setScannerStatus('Per completare il primo inventario devi confermare almeno un prodotto scansionato.','Per completare il primo inventario devi confermare almeno un prodotto.', true);
+    setScannerStatus('Per sbloccare l’account devi completare il controllo iniziale: conferma almeno un prodotto reale.','Per completare il primo inventario devi confermare almeno un prodotto.', true);
     toast('Conferma almeno un prodotto scansionato');
     return;
   }
@@ -4336,6 +4452,7 @@ function confirmScanResult(el,result,silent=false){
     newItem.unit=unit; newItem.expiryDate=expiryDate; newItem.aiMeta=aiMeta; state.unshift(newItem); rememberEvent('photo_new_item',newItem,qty,'Vision AI nuovo articolo');
     el.classList.add('confirmed'); el.querySelector('.scan-fields strong').textContent='Aggiunto: '+productName;
   }
+  saveFirstInventoryDraftIfNeeded('item-confirmed');
   aiMemory.scanHistory=aiMemory.scanHistory||[];
   aiMemory.scanHistory.push({name:productName,brand,size,qty,unit,category,expiryDate,damageNote,at:Date.now(),confidence:result.confidence||null});
   aiMemory.scanHistory=aiMemory.scanHistory.slice(-300);
@@ -5472,3 +5589,7 @@ try{
     setTimeout(removeInlineDebug,1400);
   }catch(e){ console.warn('V28.06 debug console patch error',e); }
 })();
+
+
+// V28.12 - first inventory session guard build marker
+window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.12', brain:'Ultra Error Reduction Core + First Inventory Guard', firstInventoryGuard:'v28_12'});
