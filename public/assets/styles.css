@@ -2197,3 +2197,12 @@ body{color-scheme:light;}
   .cloud-action-main,.cloud-action-soft{min-height:56px;border-radius:20px}
   .cloud-voice-grid{grid-template-columns:1fr}
 }
+
+
+/* V28.31 - Scan Draft Recovery Pro */
+.scan-draft-recovery.pro{display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px;align-items:center;margin:14px 0 18px;padding:16px;border:1px solid rgba(45,96,255,.16);border-radius:24px;background:linear-gradient(135deg,rgba(255,255,255,.96),rgba(243,248,255,.94));box-shadow:0 18px 44px rgba(16,44,91,.10);position:relative;overflow:hidden}
+.scan-draft-recovery.pro:before{content:"";position:absolute;inset:0 0 auto 0;height:4px;background:linear-gradient(90deg,#2d60ff,#34d399,#f59e0b)}
+.scan-draft-recovery .draft-icon{width:48px;height:48px;border-radius:18px;display:grid;place-items:center;background:linear-gradient(135deg,#ecf3ff,#ffffff);box-shadow:inset 0 0 0 1px rgba(45,96,255,.13),0 10px 24px rgba(45,96,255,.13);font-size:24px;font-weight:900;color:#2454d6}
+.scan-draft-recovery .draft-copy{min-width:0}.scan-draft-recovery .draft-copy strong{display:block;font-size:1.02rem;color:#101828;letter-spacing:-.02em}.scan-draft-recovery .draft-copy p{margin:4px 0 3px;color:#334155;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.scan-draft-recovery .draft-copy small{display:block;color:#64748b;font-weight:600}.scan-draft-recovery .draft-actions{grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap}.scan-draft-recovery .draft-actions button{flex:1 1 145px;min-height:42px;border-radius:15px}
+#groceryScannerDialog[data-scan-draft-saved="1"] #scannerStatus:after{content:"Bozza salvata automaticamente";display:inline-flex;margin-left:8px;padding:4px 8px;border-radius:999px;background:rgba(52,211,153,.13);color:#047857;font-size:.72rem;font-weight:900;vertical-align:middle}
+@media(max-width:640px){.scan-draft-recovery.pro{grid-template-columns:42px minmax(0,1fr);padding:14px;border-radius:21px}.scan-draft-recovery .draft-icon{width:42px;height:42px;border-radius:15px}.scan-draft-recovery .draft-actions{gap:8px}.scan-draft-recovery .draft-actions button{flex:1 1 100%;min-height:44px}.scan-draft-recovery .draft-copy p{white-space:normal}}

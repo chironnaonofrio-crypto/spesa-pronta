@@ -2234,6 +2234,40 @@ function enrichVisionDetails(result={}){
   return result;
 }
 
+
+function hasCentralConsumableEvidenceV2828(obj={}, result={}){
+  const text=normalizeVisionText([
+    obj.productName,obj.name,obj.product,obj.brand,obj.variant,obj.productType,obj.packageType,obj.objectType,obj.reason,
+    result.productName,result.brand,result.variant,result.productType,result.packageType,result.category,
+    ...(Array.isArray(obj.detectedText)?obj.detectedText:[]), ...(Array.isArray(obj.visibleEvidence)?obj.visibleEvidence:[]),
+    ...(Array.isArray(result.detectedText)?result.detectedText:[]), ...(Array.isArray(result.visibleEvidence)?result.visibleEvidence:[])
+  ].join(' '));
+  return /(coca\s*cola|coca-cola|cola|pepsi|fanta|sprite|bibita|bevanda|acqua|latte|bottiglia|lattina|pesto|salsa|bbq|ketchup|maionese|sugo|condimento|olio|aceto|yogurt|kefir|detersivo|candeggina|shampoo|sapone|prodotto|etichetta|marca)/.test(text);
+}
+function repairCentralConsumableV2828(obj={}, result={}){
+  if(!hasCentralConsumableEvidenceV2828(obj,result)) return result;
+  const text=normalizeVisionText([obj.productName,obj.name,obj.product,obj.brand,obj.variant,obj.productType,obj.packageType,obj.reason,...(obj.detectedText||[]),...(obj.visibleEvidence||[]),result.productName,result.brand].join(' '));
+  result.needsRetake=false;
+  result.needsManual=true;
+  result.shouldAskConfirmation=true;
+  if(/(coca\s*cola|coca-cola)/.test(text)){
+    result.productName=result.productName||'Coca-Cola';
+    result.brand=result.brand||'Coca-Cola';
+    result.category='soft_drinks';
+    result.isLiquid=true;
+    result.unit=result.unit&&result.unit!=='pz'?result.unit:'bt';
+  }else if(/cola/.test(text)){
+    result.productName=result.productName||'Cola';
+    result.category='soft_drinks';
+    result.isLiquid=true;
+    result.unit=result.unit&&result.unit!=='pz'?result.unit:'bt';
+  }
+  if(!result.reason || /non idoneo|persona|sfondo|tavolo|piatto|pavimento/.test(normalizeVisionText(result.reason))){
+    result.reason='Prodotto centrale rilevato: ignoro oggetti laterali e sfondo. Controlla e conferma i dati.';
+  }
+  return result;
+}
+
 function normalizeVisionResult(obj={}){
   const allowedCats=REAL_ALLOWED_CATEGORIES;
   const allowedUnits=new Set(['pz','pc','bt','lt','ml','kg','g','conf','pack','lattina','busta','scatola']);
@@ -2301,16 +2335,22 @@ function normalizeVisionResult(obj={}){
   if(result.confidence<0.72 && !result.needsRetake) result.shouldAskConfirmation=true;
   return result;
 }
-async function visionAnalyze({image,catalog,settings,memory,stage='auto'}){
+async function visionAnalyze({image,teacherImage='',fullImage='',teacherImageMeta=null,focusInstruction='',primarySubjectMode='',localGuess=null,catalog,settings,memory,stage='auto'}){
   if(!aiConnected()){
     return { needsManual:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.25, shouldAskConfirmation:true, cloudVision:false, cloudOffline:true, cloudError:'missing_openai_key', teacherInactive:true, teacherInactiveReason:'Docente OpenAI non attivo: chiave API mancante sul server.', reason:'Docente OpenAI non attivo: uso riconoscimento locale prudente.' };
   }
+  const fullImageForServer = (fullImage && String(fullImage).startsWith('data:image/')) ? fullImage : image;
+  const openAiTeacherImage = (teacherImage && String(teacherImage).startsWith('data:image/')) ? teacherImage : image;
+  const teacherMeta = teacherImageMeta && typeof teacherImageMeta==='object' ? teacherImageMeta : null;
   const compact=(catalog||[]).map(i=>({id:i.id,name:itemName(i,settings?.lang||'it'),names:i.names,unit:i.unit,category:i.category,qty:i.qty})).slice(0,80);
   const learned=summarizeLearnedProducts(memory).slice(0,35);
   const candidates=buildVisionCandidatePool(catalog, settings, memory).slice(0,70);
   const oneShotPrompt=`Sei la Vision AI cloud di Spesa Pronta. Analizza la foto reale e rispondi SOLO con JSON valido.
 OBIETTIVO: riconoscere prodotto, marca, formato/capienza, scadenza e stato con massima prudenza.
 Regole severe anti-errore:
+- PRIORITÀ SOGGETTO: se nella foto ci sono più oggetti, analizza SOLO il prodotto principale al centro dell'inquadratura o quello più grande/centrale. Ignora oggetti laterali, persone, piatti, tavolo, sfondo, mobili e prodotti secondari.
+- Se al centro c'è una bottiglia/latta/confezione alimentare con etichetta leggibile, NON rispondere oggetto non idoneo solo perché nello sfondo c'è una persona, piatto, tavolo o un altro prodotto laterale.
+- Se leggi testo centrale come Coca-Cola/Cola/Pepsi/Fanta/Sprite/acqua/latte, quello è il prodotto da analizzare; eventuali salse o oggetti laterali non devono influenzare nome, categoria o formato.
 - Analizza SOLO prodotti idonei alla spesa/casa: alimentari, bevande, frutta/verdura, prodotti casa, farmacia, animali, acquario.
 - Se vedi cane, gatto, persona, vestiti/pantaloni, telecomando, TV, mobili, pavimento, strumenti o oggetti non consumabili, NON creare un prodotto: rispondi con {"needsRetake":true,"notConsumable":true,"reason":"Oggetto non idoneo: aspetto un prodotto di consumo","productName":"","confidence":0}.
 - NON inventare mai. Se non leggi un dettaglio, lascia il campo vuoto o scrivi "da confermare" e metti needsManual true.
@@ -2342,35 +2382,41 @@ JSON: {"productName":"","brand":"","variant":"","estimatedSize":"","sizeDetected
     try{
       const stageName=String(stage||'auto').toLowerCase();
       if(stageName==='product'){
-        const fastProductPrompt=`Analizza la foto prodotto. Rispondi SOLO JSON valido. Devi essere veloce: riconosci prodotto, marca, tipo, formato se leggibile e categoria reale. Non cercare di leggere tutta la tabella ingredienti se non è visibile. Se vedi cane, vestiti, telecomando, TV, mobili o oggetti non consumabili rispondi {"needsRetake":true,"notConsumable":true,"reason":"Oggetto non idoneo","productName":"","confidence":0}. Categoria: usa regole realtà professionali v27.96: scegli per prove dell etichetta, non per forma generica; confezione è solo indizio. Bevanda solo se è davvero da bere (acqua, cola, bibita gassata, succo, latte da bere). Se leggi Cola/Blues/Pepsi/Fanta/Sprite non classificarla come acqua: categoria soft_drinks, unit bt/lattina. Pesto/salsa/BBQ/ketchup/maionese/condimento = sauces_condiments; olio/aceto = oil_vinegar; yogurt/kefir = yogurt; cioccolata/dolci = chocolate_sweets; crema spalmabile = spreads; marmellata/miele = jams_honey; cibo animali = pet_food; bucato/piatti/pulizia/carta casa hanno categorie dedicate; barattolo/vasetto/bottiglia/flacone sono solo confezione, non categoria se il testo dice altro. Schema JSON: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","variant":"","productType":"","packageType":"","estimatedSize":"","sizeDetectedRaw":"","sizeConfidence":0,"quantity":1,"unit":"pz","category":"food","confidence":0.1,"isLiquid":false,"isDamaged":false,"damageType":"","expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"barcode":"","detectedText":[],"visibleEvidence":[],"detailQuestion":"","reason":""}`;
-        primaryRaw = await visionJsonCall('Solo JSON valido. Analisi rapida prodotto.', fastProductPrompt, image, {maxTokens:520});
+        const fastProductPrompt=`Analizza la foto prodotto. Rispondi SOLO JSON valido. PRIORITÀ: scegli il prodotto centrale/più grande, non oggetti laterali o sfondo. Se al centro c'è una bottiglia Coca-Cola/cola o altra confezione idonea, analizza quella e ignora persone/piatti/tavolo/salse laterali. Devi essere veloce: riconosci prodotto, marca, tipo, formato se leggibile e categoria reale. Non cercare di leggere tutta la tabella ingredienti se non è visibile. Se vedi cane, vestiti, telecomando, TV, mobili o oggetti non consumabili rispondi {"needsRetake":true,"notConsumable":true,"reason":"Oggetto non idoneo","productName":"","confidence":0}. Categoria: usa regole realtà professionali v27.96: scegli per prove dell etichetta, non per forma generica; confezione è solo indizio. Bevanda solo se è davvero da bere (acqua, cola, bibita gassata, succo, latte da bere). Se leggi Cola/Blues/Pepsi/Fanta/Sprite non classificarla come acqua: categoria soft_drinks, unit bt/lattina. Pesto/salsa/BBQ/ketchup/maionese/condimento = sauces_condiments; olio/aceto = oil_vinegar; yogurt/kefir = yogurt; cioccolata/dolci = chocolate_sweets; crema spalmabile = spreads; marmellata/miele = jams_honey; cibo animali = pet_food; bucato/piatti/pulizia/carta casa hanno categorie dedicate; barattolo/vasetto/bottiglia/flacone sono solo confezione, non categoria se il testo dice altro. Schema JSON: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","variant":"","productType":"","packageType":"","estimatedSize":"","sizeDetectedRaw":"","sizeConfidence":0,"quantity":1,"unit":"pz","category":"food","confidence":0.1,"isLiquid":false,"isDamaged":false,"damageType":"","expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"barcode":"","detectedText":[],"visibleEvidence":[],"detailQuestion":"","reason":""}`;
+        primaryRaw = await visionJsonCall('Solo JSON valido. Analisi rapida prodotto.', fastProductPrompt, openAiTeacherImage, {maxTokens:520});
         detailRaw = null;
       }else if(stageName==='expiry'){
         const expiryPrompt=`OCR mirato sulla scadenza. Rispondi SOLO JSON valido. Leggi solo data/TMC/EXP/scadenza/lotto se presente. Non cambiare nome prodotto se non è chiarissimo. Schema: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","estimatedSize":"","expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"detectedText":[],"visibleEvidence":[],"confidence":0.1,"category":"food","reason":""}`;
-        primaryRaw = await visionJsonCall('Solo JSON valido. OCR scadenza.', expiryPrompt, image, {maxTokens:340});
+        primaryRaw = await visionJsonCall('Solo JSON valido. OCR scadenza.', expiryPrompt, openAiTeacherImage, {maxTokens:340});
         detailRaw = null;
       }else if(stageName==='label'){
         const labelPrompt=`OCR mirato etichetta/ingredienti. Rispondi SOLO JSON valido e compatto. Leggi nome, marca, variante, formato, categoria reale, ingredienti e allergeni se visibili. Non analizzare due volte e non inventare. Categoria: cola/bibita = soft_drinks; acqua = water; latte = milk_drinks; yogurt/kefir = yogurt; pesto/salsa/BBQ/ketchup/maionese/sugo = sauces_condiments; crema spalmabile = spreads; olio/aceto = oil_vinegar; candeggina/detersivo/pulizia = cleaning/laundry/dishwashing. Schema: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","variant":"","productType":"","packageType":"","estimatedSize":"","sizeDetectedRaw":"","sizeConfidence":0,"category":"food","ingredients":[],"allergens":[],"possibleAllergens":[],"barcode":"","detectedText":[],"visibleEvidence":[],"confidence":0.1,"reason":""}`;
-        primaryRaw = await visionJsonCall('Solo JSON valido. OCR etichetta low-cost.', labelPrompt, image, {maxTokens:620});
+        primaryRaw = await visionJsonCall('Solo JSON valido. OCR etichetta low-cost.', labelPrompt, openAiTeacherImage, {maxTokens:620});
+        detailRaw = null;
+      }else if(stageName==='barcode'){
+        const barcodePrompt=`OCR mirato SOLO codice a barre/EAN/UPC. Rispondi SOLO JSON valido e compatto. Cerca numeri sotto o vicino al barcode: 8-14 cifre. Non analizzare prodotto, ingredienti o scadenza se non servono. Se il barcode o eventuale testo collegato permette di migliorare nome, marca, formato o categoria, puoi proporli, ma non inventare. Schema: {"needsRetake":false,"needsManual":true,"barcode":"","ean":"","code":"","productCode":"","productName":"","brand":"","estimatedSize":"","category":"food","detectedText":[],"visibleEvidence":[],"confidence":0.1,"reason":""}`;
+        primaryRaw = await visionJsonCall('Solo JSON valido. OCR barcode.', barcodePrompt, openAiTeacherImage, {maxTokens:300});
         detailRaw = null;
       }else{
         // V28.03: anche in auto evito doppia chiamata pesante. Una sola analisi completa compatta.
-        primaryRaw = await visionJsonCall('Rispondi solo con JSON valido. Analisi completa low-cost.', oneShotPrompt, image, {maxTokens:760});
+        primaryRaw = await visionJsonCall('Rispondi solo con JSON valido. Analisi completa low-cost.', oneShotPrompt, openAiTeacherImage, {maxTokens:760});
         detailRaw = null;
       }
     }catch(firstErr){
-      const shortPrompt=`Analizza la foto. Rispondi SOLO JSON. Riconosci solo prodotti alimentari/casa/farmacia/animali/acquario. Se vedi cane, vestiti, telecomando, TV, mobili o oggetti non consumabili rispondi {"needsRetake":true,"notConsumable":true,"reason":"Oggetto non idoneo","productName":"","confidence":0}. Riconosci prodotto, marca, testo etichetta, capienza, categoria reale, scadenza, danni. Categoria: usa regole realtà professionali v27.96: scegli per prove dell etichetta, non per forma generica; confezione è solo indizio. Bevanda solo se è davvero da bere (acqua, cola, bibita gassata, succo, latte da bere). Se leggi Cola/Blues/Pepsi/Fanta/Sprite non classificarla come acqua: categoria soft_drinks, unit bt/lattina. Pesto/salsa/BBQ/ketchup/maionese/condimento = sauces_condiments; olio/aceto = oil_vinegar; yogurt/kefir = yogurt; cioccolata/dolci = chocolate_sweets; crema spalmabile = spreads; marmellata/miele = jams_honey; cibo animali = pet_food; bucato/piatti/pulizia/carta casa hanno categorie dedicate; barattolo/vasetto/bottiglia/flacone sono solo confezione, non categoria se il testo dice altro. Non inventare. Se capienza non leggibile lascia estimatedSize "Capienza da confermare". Se è bottiglia d'acqua, productName acqua naturale o acqua in bottiglia, category water, unit bt. Se è Cola/Blues/Pepsi/Fanta/Sprite, category soft_drinks, mai water. Schema: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","variant":"","estimatedSize":"","sizeDetectedRaw":"","sizeConfidence":0,"quantity":1,"unit":"pz","category":"food","confidence":0.1,"isLiquid":false,"isDamaged":false,"damageType":"","expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"detectedText":[],"visibleEvidence":[],"detailQuestion":"","reason":""}`;
-      primaryRaw = await visionJsonCall('Solo JSON valido.', shortPrompt, image, {maxTokens:560});
+      const shortPrompt=`Analizza la foto. Rispondi SOLO JSON. PRIORITÀ: prodotto centrale/più grande; ignora persone, piatti, tavolo, sfondo e oggetti laterali. Riconosci solo prodotti alimentari/casa/farmacia/animali/acquario. Se vedi cane, vestiti, telecomando, TV, mobili o oggetti non consumabili rispondi {"needsRetake":true,"notConsumable":true,"reason":"Oggetto non idoneo","productName":"","confidence":0}. Riconosci prodotto, marca, testo etichetta, capienza, categoria reale, scadenza, danni. Categoria: usa regole realtà professionali v27.96: scegli per prove dell etichetta, non per forma generica; confezione è solo indizio. Bevanda solo se è davvero da bere (acqua, cola, bibita gassata, succo, latte da bere). Se leggi Cola/Blues/Pepsi/Fanta/Sprite non classificarla come acqua: categoria soft_drinks, unit bt/lattina. Pesto/salsa/BBQ/ketchup/maionese/condimento = sauces_condiments; olio/aceto = oil_vinegar; yogurt/kefir = yogurt; cioccolata/dolci = chocolate_sweets; crema spalmabile = spreads; marmellata/miele = jams_honey; cibo animali = pet_food; bucato/piatti/pulizia/carta casa hanno categorie dedicate; barattolo/vasetto/bottiglia/flacone sono solo confezione, non categoria se il testo dice altro. Non inventare. Se capienza non leggibile lascia estimatedSize "Capienza da confermare". Se è bottiglia d'acqua, productName acqua naturale o acqua in bottiglia, category water, unit bt. Se è Cola/Blues/Pepsi/Fanta/Sprite, category soft_drinks, mai water. Schema: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","variant":"","estimatedSize":"","sizeDetectedRaw":"","sizeConfidence":0,"quantity":1,"unit":"pz","category":"food","confidence":0.1,"isLiquid":false,"isDamaged":false,"damageType":"","expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"detectedText":[],"visibleEvidence":[],"detailQuestion":"","reason":""}`;
+      primaryRaw = await visionJsonCall('Solo JSON valido.', shortPrompt, openAiTeacherImage, {maxTokens:560});
       detailRaw = null;
     }
     if(!primaryRaw && !detailRaw) throw new Error('empty_json_from_openai');
     let result=mergeVisionOutputs(primaryRaw||{}, detailRaw||{});
     result=applyVisionMatching(result, candidates);
     result=enrichVisionDetails(result);
+    result=repairCentralConsumableV2828(primaryRaw||{}, result);
     result.cloudVision=true;
     result.cloudOffline=false;
     result.cloudError='';
     if(!result.reason) result.reason='Cloud OpenAI ha analizzato la foto.';
+    result.visionPipelineV2829={serverFullImage:true, openAiTeacherImage:!!teacherImage, teacherMeta, policy:'server_full_first_openai_slim_last'};
     return result;
   }catch(err){
     return {needsManual:true, shouldAskConfirmation:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.16, cloudVision:false, cloudOffline:true, cloudError:'', cloudFallback:true, teacherInactive:true, teacherInactiveReason:'Docente OpenAI non attivo: risposta non disponibile dal server.', reason:'Docente OpenAI non attivo: Vision locale prudente, controlla e completa i dati prima di salvare.'};
@@ -2746,7 +2792,7 @@ const server = http.createServer(async (req,res)=>{
         dbMode,
         databaseConnected: dbMode !== 'file',
         memoryReady: dbMode !== 'file',
-        globalLearning: 'server_global_product_memory', globalProductMemory: publicGlobalProductMemory(10), knowledgeFeeder: db.assistantBrain.knowledgeFeeder||null, knowledgeCache:{entries:Object.keys(db.assistantBrain?.knowledgeCache?.entries||{}).length,hits:db.assistantBrain?.knowledgeCache?.hits||0,barcodeHits:db.assistantBrain?.knowledgeCache?.barcodeHits||0,updatedAt:db.assistantBrain?.knowledgeCache?.updatedAt||0}, barcodeBrain:db.assistantBrain?.barcodeBrain||null, categoryBrainV95:db.assistantBrain?.categoryBrainV95||null, monsterBrainV96:db.assistantBrain?.monsterBrainV96||null, ultraBrainV97:db.assistantBrain?.ultraBrainV97||null, errorLearning:{corrections:(db.assistantBrain?.errorLearning?.corrections||[]).length,patterns:Object.keys(db.assistantBrain?.errorLearning?.patterns||{}).length,updatedAt:db.assistantBrain?.errorLearning?.updatedAt||0}, learningQuality:{dedupe:'canonical_key_plus_barcode_conflict_guard', teacherBypass:'after_confirmations_barcode_and_field_confidence', knowledgeFeeder:'open_facts_family_with_barcode_and_cache_after_user_confirmation', storesPhotos:false, storesVisualSignature:true, categoryEngine:'ultra_error_reduction_core_v27_97', costGuardV2804:db.assistantBrain?.costGuardV2804||null, ultraErrorReduction:'active', preflightStability:'v28_04_cost_guard_pro', barcodePriority:'barcode > label > memory > teacher', fieldConfidence:'per_field_v97'},
+        globalLearning: 'server_global_product_memory', globalProductMemory: publicGlobalProductMemory(10), knowledgeFeeder: db.assistantBrain.knowledgeFeeder||null, knowledgeCache:{entries:Object.keys(db.assistantBrain?.knowledgeCache?.entries||{}).length,hits:db.assistantBrain?.knowledgeCache?.hits||0,barcodeHits:db.assistantBrain?.knowledgeCache?.barcodeHits||0,updatedAt:db.assistantBrain?.knowledgeCache?.updatedAt||0}, barcodeBrain:db.assistantBrain?.barcodeBrain||null, categoryBrainV95:db.assistantBrain?.categoryBrainV95||null, monsterBrainV96:db.assistantBrain?.monsterBrainV96||null, ultraBrainV97:db.assistantBrain?.ultraBrainV97||null, errorLearning:{corrections:(db.assistantBrain?.errorLearning?.corrections||[]).length,patterns:Object.keys(db.assistantBrain?.errorLearning?.patterns||{}).length,updatedAt:db.assistantBrain?.errorLearning?.updatedAt||0}, learningQuality:{dedupe:'canonical_key_plus_barcode_conflict_guard', teacherBypass:'after_confirmations_barcode_and_field_confidence', knowledgeFeeder:'open_facts_family_with_barcode_and_cache_after_user_confirmation', storesPhotos:false, storesVisualSignature:true, categoryEngine:'ultra_error_reduction_core_v27_97', costGuardV2804:db.assistantBrain?.costGuardV2804||null, ultraErrorReduction:'active', preflightStability:'v28_04_cost_guard_pro', barcodePriority:'barcode > label > memory > teacher', fieldConfidence:'per_field_v97', visionPipelineV2829:'server_full_image_openai_slim_teacher_barcode_step_v2830'},
         smsReady: PHONE_VERIFY_READY,
         seedMemory:{version:VISION_SEED_MEMORY.version||'', products:(VISION_SEED_MEMORY.products||[]).length, totalProfiles:Number(VISION_MEGA_INDEX.totalProfiles||1000000), megaVersion:VISION_MEGA_INDEX.version||'', categories:(VISION_SEED_MEMORY.categories||[]).length, loaded:(VISION_SEED_MEMORY.products||[]).length>0},
         twilioVerifyReady: TWILIO_VERIFY_ENABLED,
@@ -3026,14 +3072,14 @@ const server = http.createServer(async (req,res)=>{
     }
 
     if(req.method === 'POST' && pathName === '/api/ai/vision'){
-      const { image='', catalog=[], settings={}, memory={}, stage='auto' } = body;
+      const { image='', teacherImage='', teacherImageMeta=null, focusInstruction='', primarySubjectMode='', localGuess=null, catalog=[], settings={}, memory={}, stage='auto' } = body;
       if(!image || !String(image).startsWith('data:image/')) return send(res, 400, { error:'image_required' });
       let h=null;
       const householdId=String(body.householdId||'').trim();
       const bearer=(req.headers.authorization||'').replace(/^Bearer\s+/,'').trim();
       if(householdId && db.households[householdId] && db.households[householdId].token===bearer) h=db.households[householdId];
       const activeMemory=h ? ensureHouseholdMemory(h) : memory;
-      const result = await visionAnalyze({image,catalog:h?(h.items||[]):catalog,settings:h?(h.settings||{}):settings,memory:activeMemory,stage});
+      const result = await visionAnalyze({image:teacherImage&&String(teacherImage).startsWith('data:image/')?teacherImage:image, teacherImage, fullImage:image, teacherImageMeta, focusInstruction, primarySubjectMode, localGuess, catalog:h?(h.items||[]):catalog,settings:h?(h.settings||{}):settings,memory:activeMemory,stage});
       result.cloudVision = !!result.cloudVision && !result.cloudError;
       result.cloudOffline = !result.cloudVision;
       result.cloudFallback = false;
