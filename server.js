@@ -1207,10 +1207,33 @@ function contentType(file){
     '.ico':'image/x-icon', '.txt':'text/plain; charset=utf-8', '.md':'text/markdown; charset=utf-8'
   })[ext] || 'application/octet-stream';
 }
+function serveFileDirect(req,res,fileName){
+  if(req.method !== 'GET' && req.method !== 'HEAD') return false;
+  const candidates=[path.join(STATIC_DIR,fileName), path.join(process.cwd(),fileName), path.join(process.cwd(),'public',fileName)];
+  const file=candidates.find(f=>fs.existsSync(f) && fs.statSync(f).isFile());
+  if(!file) return false;
+  try{
+    const data=fs.readFileSync(file);
+    res.writeHead(200,{
+      'Content-Type':contentType(file),
+      'Content-Length':data.length,
+      'Cache-Control':'no-store, no-cache, must-revalidate, max-age=0',
+      'Pragma':'no-cache',
+      'Expires':'0',
+      'X-Robots-Tag':'noindex, nofollow, noarchive'
+    });
+    if(req.method === 'HEAD') return res.end();
+    res.end(data);
+    return true;
+  }catch{ return false; }
+}
 function serveStatic(req,res,url){
   if(req.method !== 'GET' && req.method !== 'HEAD') return false;
   if(url.pathname.startsWith('/api/')) return false;
   let pathname = decodeURIComponent(url.pathname);
+  if(pathname === '/debug' || pathname === '/debug/') return serveFileDirect(req,res,'debug.html');
+  if(pathname === '/debug.html') return serveFileDirect(req,res,'debug.html');
+  if(pathname === '/clear-cache' || pathname === '/clear-cache/') return serveFileDirect(req,res,'clear-cache.html');
   if(pathname === '/') pathname = '/index.html';
   const target = path.normalize(path.join(STATIC_DIR, pathname));
   if(!target.startsWith(STATIC_DIR)) return false;
@@ -2668,6 +2691,14 @@ const server = http.createServer(async (req,res)=>{
   const body = await readBody(req);
 
   try {
+    if((req.method === 'GET' || req.method === 'HEAD') && (pathName === '/debug.html' || pathName === '/debug' || pathName === '/debug/')){
+      if(serveFileDirect(req,res,'debug.html')) return;
+      return send(res,404,{error:'debug_page_missing',hint:'debug.html non trovato nel deploy'});
+    }
+    if((req.method === 'GET' || req.method === 'HEAD') && (pathName === '/clear-cache.html' || pathName === '/clear-cache' || pathName === '/clear-cache/')){
+      if(serveFileDirect(req,res,'clear-cache.html')) return;
+      return send(res,404,{error:'clear_cache_missing'});
+    }
     if(req.method === 'GET' && pathName === '/api/health') return send(res, 200, { ok:true, service:'spesa-pronta-cloud', dbMode, dbConnected: dbMode !== 'file', time:new Date().toISOString() });
 
     if(req.method === 'GET' && pathName === '/api/db/status') {

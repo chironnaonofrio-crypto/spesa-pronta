@@ -1,1 +1,167 @@
-<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta http-equiv='Cache-Control' content='no-store, no-cache, must-revalidate, max-age=0'><meta http-equiv='Pragma' content='no-cache'><meta http-equiv='Expires' content='0'><title>Pulizia cache Spesa Pronta V27.51</title></head><body style='font-family:Inter,Arial,sans-serif;display:grid;place-items:center;min-height:100vh;background:linear-gradient(135deg,#eef6ff,#ffffff);color:#0b1d37;margin:0'><main style='text-align:center;max-width:760px;padding:24px'><h1 style='font-size:2rem;margin:0 0 10px;text-transform:uppercase;letter-spacing:.04em'>Cache pulita</h1><p style='font-weight:900;color:#526b91;line-height:1.45;text-transform:uppercase'>Ho eliminato cache e service worker vecchi. Ora apro Spesa Pronta V27.51 con UI premium, bug overlay risolto e Core Vision 1.000.000.</p><p style='font-weight:1000;color:#123f8a;text-transform:uppercase'>Versione attesa: V27.51 Premium Core 1M</p><button id='go' style='margin-top:18px;border:0;border-radius:18px;background:#1266f1;color:white;font-weight:1000;padding:16px 22px;font-size:1rem;text-transform:uppercase'>Apri Spesa Pronta V27.51</button></main><script>(async()=>{try{if('serviceWorker' in navigator){const regs=await navigator.serviceWorker.getRegistrations();for(const r of regs){await r.unregister();}}if(window.caches){const ks=await caches.keys();for(const k of ks){await caches.delete(k);}}localStorage.setItem('spesaProntaLastCleanVersion','V27.51');sessionStorage.clear();}catch(e){}const go=()=>location.replace('/?v=2804&t='+Date.now());document.getElementById('go').onclick=go;setTimeout(go,900);})();</script></body></html>
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Spesa Pronta · Aggiorna cache</title>
+  <style>
+    :root{
+      --blue:#1266f1;
+      --blue2:#0b54d5;
+      --ink:#0b1d37;
+      --muted:#5b6f8a;
+      --line:#dce8f7;
+      --ok:#17b26a;
+      --warn:#f59e0b;
+      --bg1:#edf6ff;
+      --bg2:#ffffff;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      color:var(--ink);
+      background:
+        radial-gradient(circle at 15% 8%,rgba(18,102,241,.18),transparent 32%),
+        radial-gradient(circle at 86% 20%,rgba(23,178,106,.14),transparent 30%),
+        linear-gradient(135deg,var(--bg1),var(--bg2));
+      display:grid;
+      place-items:center;
+      padding:22px;
+      min-height:100svh;
+    }
+    .shell{width:min(720px,100%)}
+    .card{
+      position:relative;
+      overflow:hidden;
+      border:1px solid rgba(18,102,241,.14);
+      border-radius:34px;
+      background:rgba(255,255,255,.86);
+      box-shadow:0 28px 70px rgba(10,38,84,.14);
+      backdrop-filter:blur(18px);
+      padding:26px;
+    }
+    .card:before{
+      content:"";
+      position:absolute;
+      inset:-40% -40% auto auto;
+      width:360px;height:360px;border-radius:50%;
+      background:radial-gradient(circle,rgba(18,102,241,.12),transparent 68%);
+      pointer-events:none;
+    }
+    .brand{display:flex;align-items:center;gap:12px;margin-bottom:18px;position:relative;z-index:1}
+    .logo{width:54px;height:54px;border-radius:18px;display:grid;place-items:center;background:linear-gradient(135deg,#1266f1,#18bf72);box-shadow:0 16px 36px rgba(18,102,241,.22);color:#fff;font-size:26px;font-weight:1000}
+    .brand small{display:block;color:var(--blue);font-weight:1000;letter-spacing:.12em;text-transform:uppercase;font-size:.72rem}
+    .brand strong{display:block;font-size:1.2rem;letter-spacing:-.02em}
+    h1{margin:0 0 10px;font-size:clamp(2rem,8vw,3.4rem);line-height:.98;letter-spacing:-.07em;position:relative;z-index:1}
+    .lead{margin:0 0 20px;color:var(--muted);font-size:1.05rem;font-weight:760;line-height:1.45;position:relative;z-index:1}
+    .status{
+      display:flex;align-items:flex-start;gap:12px;
+      border:1px solid rgba(23,178,106,.18);
+      background:linear-gradient(180deg,#effcf6,#f8fffb);
+      border-radius:24px;
+      padding:16px;
+      margin:18px 0;
+      position:relative;z-index:1;
+    }
+    .status-icon{width:38px;height:38px;flex:0 0 38px;border-radius:14px;display:grid;place-items:center;background:#dcfae6;color:#067647;font-weight:1000;font-size:22px}
+    .status strong{display:block;font-size:1.02rem;margin-bottom:3px}
+    .status p{margin:0;color:#47705c;font-weight:760;line-height:1.35}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:18px 0;position:relative;z-index:1}
+    .mini{padding:14px;border:1px solid var(--line);border-radius:22px;background:linear-gradient(180deg,#fff,#f8fbff)}
+    .mini span{display:block;text-transform:uppercase;color:#667895;font-weight:950;letter-spacing:.08em;font-size:.68rem;margin-bottom:5px}
+    .mini b{display:block;font-size:1.02rem}
+    .actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px;position:relative;z-index:1}
+    button,a.btn{
+      min-height:58px;border-radius:22px;border:1px solid var(--line);font:inherit;font-weight:1000;text-decoration:none;display:flex;align-items:center;justify-content:center;text-align:center;padding:14px 16px;cursor:pointer;
+    }
+    .primary{border:0!important;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;box-shadow:0 18px 38px rgba(18,102,241,.26)}
+    .secondary{background:#fff;color:#173b68}
+    .ghost{background:#f8fbff;color:#173b68}
+    .log{margin-top:16px;position:relative;z-index:1;background:#071b34;color:#eaf3ff;border-radius:22px;padding:14px 16px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.82rem;line-height:1.4;white-space:pre-wrap;max-height:190px;overflow:auto}
+    .foot{margin:14px 4px 0;color:#6b7f9d;font-weight:760;font-size:.86rem;text-align:center;position:relative;z-index:1}
+    @media(max-width:560px){body{padding:14px}.card{border-radius:28px;padding:20px}.grid,.actions{grid-template-columns:1fr}.brand strong{font-size:1.05rem}.lead{font-size:.98rem}.log{font-size:.76rem}}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="card" aria-live="polite">
+      <div class="brand">
+        <div class="logo">🛒</div>
+        <div><small>Spesa Pronta</small><strong>Aggiornamento sicuro</strong></div>
+      </div>
+      <h1>Cache & versione pulite</h1>
+      <p class="lead">Questa pagina rimuove service worker, cache vecchie e dati temporanei della sessione, così il telefono carica l’ultima build senza bug grafici o file vecchi.</p>
+      <div class="status" id="statusBox">
+        <div class="status-icon" id="statusIcon">⏳</div>
+        <div><strong id="statusTitle">Pulizia in corso...</strong><p id="statusText">Sto cancellando cache, service worker e riferimenti temporanei.</p></div>
+      </div>
+      <div class="grid">
+        <div class="mini"><span>Versione attesa</span><b>V28.09</b></div>
+        <div class="mini"><span>Brain</span><b>Ultra + Debug Safe</b></div>
+        <div class="mini"><span>Cache eliminate</span><b id="cacheCount">0</b></div>
+        <div class="mini"><span>Service worker</span><b id="swCount">0</b></div>
+      </div>
+      <div class="actions">
+        <button class="primary" id="cleanAgain" type="button">Pulisci di nuovo</button>
+        <a class="btn secondary" id="openApp" href="/?v=2809">Apri Spesa Pronta</a>
+        <a class="btn ghost" href="/debug.html?v=2809">Apri Diagnosi AI</a>
+        <a class="btn ghost" href="/api/ai/status" target="_blank" rel="noopener">Stato server</a>
+      </div>
+      <div class="log" id="log">Preparazione pulizia cache...</div>
+      <p class="foot">Pagina tecnica temporanea · Non indicizzabile · Usa questa pagina dopo ogni nuovo upload.</p>
+    </section>
+  </main>
+  <script>
+    const VERSION='V28.09';
+    const logEl=document.getElementById('log');
+    const statusIcon=document.getElementById('statusIcon');
+    const statusTitle=document.getElementById('statusTitle');
+    const statusText=document.getElementById('statusText');
+    const cacheCount=document.getElementById('cacheCount');
+    const swCount=document.getElementById('swCount');
+    const openApp=document.getElementById('openApp');
+    const write=(msg)=>{logEl.textContent += '\n' + new Date().toLocaleTimeString('it-IT') + ' · ' + msg; logEl.scrollTop=logEl.scrollHeight;};
+    async function clean(){
+      logEl.textContent='Avvio pulizia cache Spesa Pronta...';
+      let cachesDeleted=0, swDeleted=0;
+      try{
+        if('serviceWorker' in navigator){
+          const regs=await navigator.serviceWorker.getRegistrations();
+          for(const r of regs){ await r.unregister(); swDeleted++; }
+          write('Service worker rimossi: '+swDeleted);
+        }else write('Service worker non disponibile su questo browser.');
+        if(window.caches){
+          const keys=await caches.keys();
+          for(const k of keys){ await caches.delete(k); cachesDeleted++; }
+          write('Cache eliminate: '+cachesDeleted);
+        }else write('Cache API non disponibile su questo browser.');
+        try{ sessionStorage.clear(); write('Session storage pulito.'); }catch(e){ write('Session storage non pulito: '+e.message); }
+        try{
+          localStorage.setItem('spesaProntaLastCleanVersion',VERSION);
+          localStorage.setItem('spesaProntaLastCleanAt',String(Date.now()));
+          write('Versione pulita registrata: '+VERSION);
+        }catch(e){ write('Local storage non aggiornato: '+e.message); }
+        cacheCount.textContent=String(cachesDeleted);
+        swCount.textContent=String(swDeleted);
+        statusIcon.textContent='✓';
+        statusTitle.textContent='Pulizia completata';
+        statusText.textContent='Ora puoi aprire Spesa Pronta o Diagnosi AI con la build aggiornata.';
+        openApp.href='/?v=2809&t='+Date.now();
+      }catch(e){
+        statusIcon.textContent='!';
+        statusTitle.textContent='Pulizia non completata';
+        statusText.textContent='C’è stato un problema: '+(e&&e.message?e.message:'errore sconosciuto');
+        write('Errore: '+(e&&e.stack?e.stack:e));
+      }
+    }
+    document.getElementById('cleanAgain').addEventListener('click',clean);
+    clean();
+  </script>
+</body>
+</html>
