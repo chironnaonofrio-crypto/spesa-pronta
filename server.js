@@ -2242,7 +2242,7 @@ function hasCentralConsumableEvidenceV2828(obj={}, result={}){
     ...(Array.isArray(obj.detectedText)?obj.detectedText:[]), ...(Array.isArray(obj.visibleEvidence)?obj.visibleEvidence:[]),
     ...(Array.isArray(result.detectedText)?result.detectedText:[]), ...(Array.isArray(result.visibleEvidence)?result.visibleEvidence:[])
   ].join(' '));
-  return /(coca\s*cola|coca-cola|cola|pepsi|fanta|sprite|bibita|bevanda|acqua|latte|bottiglia|lattina|pesto|salsa|bbq|ketchup|maionese|sugo|condimento|olio|aceto|yogurt|kefir|detersivo|candeggina|shampoo|sapone|prodotto|etichetta|marca)/.test(text);
+  return /\b(coca\s*cola|coca-cola|cola|pepsi|fanta|sprite|bibita|bevanda|acqua|latte|bottiglia|lattina|pesto|salsa|bbq|ketchup|maionese|sugo|condimento|olio|aceto|yogurt|kefir|detersivo|candeggina|shampoo|sapone|prodotto|etichetta|marca)\b/.test(text);
 }
 function repairCentralConsumableV2828(obj={}, result={}){
   if(!hasCentralConsumableEvidenceV2828(obj,result)) return result;
@@ -2250,13 +2250,13 @@ function repairCentralConsumableV2828(obj={}, result={}){
   result.needsRetake=false;
   result.needsManual=true;
   result.shouldAskConfirmation=true;
-  if(/(coca\s*cola|coca-cola)/.test(text)){
+  if(/\b(coca\s*cola|coca-cola)\b/.test(text)){
     result.productName=result.productName||'Coca-Cola';
     result.brand=result.brand||'Coca-Cola';
     result.category='soft_drinks';
     result.isLiquid=true;
     result.unit=result.unit&&result.unit!=='pz'?result.unit:'bt';
-  }else if(/cola/.test(text)){
+  }else if(/\bcola\b/.test(text)){
     result.productName=result.productName||'Cola';
     result.category='soft_drinks';
     result.isLiquid=true;

@@ -2711,7 +2711,7 @@ function cleanFileProductName(fileName=''){
   const lower=raw.toLowerCase();
   // nomi tecnici generati dalla live/camera: non devono mai diventare nomi prodotto
   if(/^(image|img|photo|foto|screenshot|camera|whatsapp|signal|telegram|pxl|dsc|dcim|screen|received|manual live|auto live|live|capture|scan|scanner|blob|file)/i.test(lower)) return '';
-  if(/(manual|auto|live|scanner|capture|photo|foto|image)/i.test(lower)) return '';
+  if(/\b(manual|auto|live|scanner|capture|photo|foto|image)\b/i.test(lower)) return '';
   if(/^\d{5,}$/.test(raw.replace(/\s+/g,''))) return '';
   if(raw.length>34 && /\d/.test(raw)) return '';
   if(raw.replace(/\d/g,'').trim().length<3) return '';

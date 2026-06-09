@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v28.26-cloud-voice-icons-inline';
+window.SPESA_PRONTA_VERSION='v28.34-preflight-bug-sweep';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -1770,14 +1770,18 @@ async function getVisionBackendStatus(force=false){
   const now=Date.now();
   if(!force && visionBackendStatus && now-visionBackendStatusAt<15000) return visionBackendStatus;
   const base=visionApiBase ? visionApiBase() : ((settings.apiEndpoint||'/api').replace(/\/$/,''));
+  const controller = typeof AbortController!=='undefined' ? new AbortController() : null;
+  const timer = controller ? setTimeout(()=>controller.abort(), 2500) : null;
   try{
-    const res=await fetch(`${base}/ai/status`,{cache:'no-store'});
+    const res=await fetch(`${base}/ai/status`,{cache:'no-store', signal:controller?.signal});
     if(!res.ok) throw new Error('status_'+res.status);
     const data=await res.json();
     visionBackendStatus=Object.assign({reachable:true}, data);
   }catch(err){
-    visionBackendStatus={reachable:false, connected:false, visionReady:false, provider:'offline', error:String(err?.message||err)};
-  }
+    // V28.32: non bloccare più scanner/diretta se lo status tarda o fallisce.
+    // La chiamata /ai/vision farà comunque il tentativo reale server-first.
+    visionBackendStatus={reachable:false, connected:false, visionReady:false, provider:'checking', softStatusFail:true, error:String(err?.message||err)};
+  }finally{ if(timer) clearTimeout(timer); }
   visionBackendStatusAt=now;
   return visionBackendStatus;
 }
@@ -3728,7 +3732,6 @@ async function captureLiveFrame(manual=false){
   liveScanCaptureLockUntil=Date.now()+2600;
   const video=$('#liveScanVideo'); if(!video || video.readyState<2){ if(manual) toast('Videocamera non pronta'); return; }
   liveScanBusy=true;
-  // V27.73: appena parte un'analisi blocco il loop, così non partono due foto dello stesso prodotto.
   if(liveScanActive && !existingLabelTarget) liveScanPendingResult=true;
   liveScanReadySince=0; liveScanStableCount=0;
   const guides=$('#liveScanGuides'); if(guides) guides.className='live-scan-guides scanning';
@@ -3745,24 +3748,38 @@ async function captureLiveFrame(manual=false){
   const compressed=await compressImage(raw,1080,0.78).catch(()=>raw);
   const labelTarget = existingLabelTarget || (manual && liveScanActive ? getLiveLabelTarget() : null);
   const followStep = labelTarget ? getLiveFollowupStep(labelTarget) : '';
-  setScannerStatus(labelTarget ? (followStep==='expiry' ? 'Sto analizzando lo scatto della scadenza...' : 'Sto analizzando lo scatto dell’etichetta...') : (manual ? 'Sto analizzando lo scatto manuale...' : 'Prodotto centrato: scatto automatico in corso, sto leggendo marca, quantità e stato.'), labelTarget ? (followStep==='expiry' ? voiceLine('manual_expiry_scan',['Perfetto, controllo la data di scadenza.','Ok, provo a leggere la scadenza.']) : voiceLine('manual_label_scan',['Perfetto, controllo l etichetta.','Ok, provo a leggere nome, marca e formato.'])) : (manual ? voiceLine('manual_scan',['Sto analizzando la foto.','Perfetto, controllo subito lo scatto.']) : voiceLine('auto_scan',['Perfetto. Ho scattato. Ora analizzo il prodotto.','Scatto eseguito. Sto leggendo etichetta, marca e dettagli del prodotto.'])), true);
-  if(!labelTarget && liveScanActive){
-    const gate=await classifyConsumableCandidateDataUrl(compressed, null, true).catch(()=>({eligible:true}));
-    if(!gate.eligible){
-      liveScanBusy=false; liveScanStableCount=0; liveScanReadySince=0; liveScanCooldownUntil=Date.now()+1200;
-      if(guides) guides.className='live-scan-guides wait';
-      setScannerStatus('Non scatto: non sembra un prodotto alimentare/casa/farmacia/animali/acquario. Inquadra una confezione o un alimento.', voiceLine('not_product_wait',['Non sembra un prodotto di consumo. Aspetto una confezione o un alimento.','Questo non sembra un prodotto da spesa o casa, quindi non lo salvo. Mostrami il prodotto giusto.']), true);
-      if(liveScanActive) queueLiveScanLoop();
-      return;
+  setScannerStatus(labelTarget ? (followStep==='expiry' ? 'Sto analizzando lo scatto della scadenza...' : (followStep==='barcode' ? 'Sto analizzando il barcode...' : 'Sto analizzando lo scatto dell’etichetta...')) : (manual ? 'Sto analizzando lo scatto manuale...' : 'Prodotto centrato: scatto automatico in corso, sto leggendo marca, quantità e stato.'), labelTarget ? (followStep==='expiry' ? voiceLine('manual_expiry_scan',['Perfetto, controllo la data di scadenza.','Ok, provo a leggere la scadenza.']) : (followStep==='barcode' ? voiceLine('manual_barcode_scan',['Perfetto, controllo il barcode.','Ok, provo a leggere il codice a barre.']) : voiceLine('manual_label_scan',['Perfetto, controllo l etichetta.','Ok, provo a leggere nome, marca e formato.']))) : (manual ? voiceLine('manual_scan',['Sto analizzando la foto.','Perfetto, controllo subito lo scatto.']) : voiceLine('auto_scan',['Perfetto. Ho scattato. Ora analizzo il prodotto.','Scatto eseguito. Sto leggendo etichetta, marca e dettagli del prodotto.'])), true);
+  try{
+    if(!labelTarget && liveScanActive){
+      const gate=await classifyConsumableCandidateDataUrl(compressed, null, true).catch(()=>({eligible:true}));
+      if(!gate.eligible){
+        liveScanBusy=false; liveScanStableCount=0; liveScanReadySince=0; liveScanCooldownUntil=Date.now()+1200;
+        if(guides) guides.className='live-scan-guides wait';
+        setScannerStatus('Non scatto: non sembra un prodotto alimentare/casa/farmacia/animali/acquario. Inquadra una confezione o un alimento.', voiceLine('not_product_wait',['Non sembra un prodotto di consumo. Aspetto una confezione o un alimento.','Questo non sembra un prodotto da spesa o casa, quindi non lo salvo. Mostrami il prodotto giusto.']), true);
+        if(liveScanActive) queueLiveScanLoop();
+        return;
+      }
     }
+    if(labelTarget) await analyzeLabelFrameForActiveResult(compressed, labelTarget, scanSig);
+    else await analyzeGroceryDataUrl(compressed, manual?'manual-live.jpg':'auto-live.jpg', scanSig);
+  }catch(err){
+    try{ logAiDiagnosticV98?.('live-capture-analysis-error-v2832',{message:String(err?.message||err).slice(0,180), followStep}); }catch(_){ }
+    if(labelTarget){
+      setScannerStatus('Lo scatto non è stato completato: puoi riprovare questo dettaglio oppure correggerlo manualmente.', '', false);
+    }else{
+      const fallback=await guessScanFallback(manual?'manual-live.jpg':'auto-live.jpg', compressed, {cloudError:String(err?.message||err).slice(0,120)}).catch(()=>({needsManual:true,productName:'',quantity:1,unit:'pz',category:'food',confidence:.18,reason:'Analisi non completata: compila manualmente o rifai la foto.'}));
+      fallback.dataUrl=compressed;
+      presentVisionResults(fallback, compressed);
+      setScannerStatus('Analisi recuperata: il server non ha completato in tempo, ma puoi controllare la scheda o rifare lo scatto.', '', false);
+    }
+  }finally{
+    liveScanBusy=false; liveScanStableCount=0; liveScanReadySince=0;
+    liveScanCaptureLockUntil = Date.now() + (labelTarget ? 2400 : 5200);
+    liveScanCooldownUntil = Date.now() + (labelTarget ? 4200 : (manual ? 3200 : 5200));
+    if(liveScanActive && !liveScanPendingResult && !hasPendingUnconfirmedScan()) queueLiveScanLoop();
   }
-  if(labelTarget) await analyzeLabelFrameForActiveResult(compressed, labelTarget, scanSig);
-  else await analyzeGroceryDataUrl(compressed, manual?'manual-live.jpg':'auto-live.jpg', scanSig);
-  liveScanBusy=false; liveScanStableCount=0; liveScanReadySince=0;
-  liveScanCaptureLockUntil = Date.now() + (labelTarget ? 2400 : 5200);
-  liveScanCooldownUntil = Date.now() + (labelTarget ? 4200 : (manual ? 3200 : 5200));
-  if(liveScanActive && !liveScanPendingResult && !hasPendingUnconfirmedScan()) queueLiveScanLoop();
 }
+
 
 async function handleGroceryFiles(files){
   const arr=[...(files||[])]; if(!arr.length) return;
@@ -3829,7 +3846,16 @@ async function imageQuality(dataUrl){
 async function analyzeGroceryPhoto(file){
   const original=await fileToDataUrl(file);
   const dataUrl=await compressImage(original,1080,0.78);
-  await analyzeGroceryDataUrl(dataUrl,file?.name||'photo.jpg');
+  try{
+    await analyzeGroceryDataUrl(dataUrl,file?.name||'photo.jpg');
+  }catch(err){
+    try{ logAiDiagnosticV98?.('photo-analysis-error-v2832',{message:String(err?.message||err).slice(0,180), file:file?.name||''}); }catch(_){ }
+    const fallback=await guessScanFallback(file?.name||'photo.jpg',dataUrl,{cloudError:String(err?.message||err).slice(0,120)}).catch(()=>({needsManual:true,productName:'',quantity:1,unit:'pz',category:'food',confidence:.18,reason:'Analisi non completata: compila manualmente o rifai la foto.'}));
+    fallback.dataUrl=dataUrl;
+    presentVisionResults(fallback,dataUrl);
+    setScannerStatus('Scatto recuperato: controlla la scheda o rifai la foto se non è corretta.', '', false);
+    document.querySelector('.scanning-preview')?.remove();
+  }
 }
 
 function splitVisionResults(result,dataUrl){
@@ -4874,13 +4900,18 @@ async function improveVisionWithLocalLearning(dataUrl='', result={}){
 }
 
 async function guessScanFallback(fileName='',dataUrl='',previous=null){
+  const cleanPrev=Object.assign({}, previous||{});
+  // V28.32: se il server/OpenAI non risponde, non lasciare la scheda bloccata o marcata
+  // come "docente non attivo" quando stiamo comunque producendo una scheda locale compilabile.
+  delete cleanPrev.teacherInactive; delete cleanPrev.teacherInactiveReason;
+  cleanPrev.cloudVision=false; cleanPrev.cloudOffline=false; cleanPrev.cloudFallback=true;
   const auto=await autonomousVisionGuess(dataUrl);
-  if(auto) return {...previous,...auto, needsManual:Number(auto.confidence||0)<.91, shouldAskConfirmation:Number(auto.confidence||0)<.94, cloudOffline:false, cloudFallback:true, autonomousVision:true};
+  if(auto) return {...cleanPrev,...auto, needsManual:Number(auto.confidence||0)<.91, shouldAskConfirmation:Number(auto.confidence||0)<.94, cloudOffline:false, cloudFallback:true, autonomousVision:true, reason:auto.reason||'Vision server/local-first: controlla la scheda e conferma.'};
   const visual=await guessProductFromImage(dataUrl);
-  if(visual) return {...previous,...visual, needsManual:true, shouldAskConfirmation:true, cloudOffline:false, cloudFallback:true, confidence:Math.min(Number(visual.confidence||0),.58)};
+  if(visual) return {...cleanPrev,...visual, needsManual:true, shouldAskConfirmation:true, cloudOffline:false, cloudFallback:true, confidence:Math.min(Number(visual.confidence||0),.58)};
   const fromName=cleanFileProductName(fileName);
-  if(fromName) return {...previous, needsManual:true, productName:fromName, quantity:1, unit:'pz', category:'food', confidence:.32, productPlaceholder:'Nome prodotto', cloudOffline:false, cloudFallback:true, reason:'Riconoscimento locale prudente: stima da controllare.'};
-  return {...previous, needsManual:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.18, productPlaceholder:'Es. Coca-Cola, latte, acqua...', cloudOffline:false, cloudFallback:true, reason:'Riconoscimento locale prudente: inserisci manualmente nome e quantità. Non userò nomi tecnici tipo manual-live.'};
+  if(fromName) return {...cleanPrev, needsManual:true, productName:fromName, quantity:1, unit:'pz', category:'food', confidence:.32, productPlaceholder:'Nome prodotto', cloudOffline:false, cloudFallback:true, reason:'Vision server/local-first: stima da controllare.'};
+  return {...cleanPrev, needsManual:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.18, productPlaceholder:'Es. Coca-Cola, latte, acqua...', cloudOffline:false, cloudFallback:true, reason:'Vision server/local-first: inserisci manualmente nome e quantità. Non userò nomi tecnici tipo manual-live.'};
 }
 function visionApiBase(){
   const raw=(settings.apiEndpoint || '/api').trim() || '/api';
@@ -4941,20 +4972,21 @@ async function askServerGlobalMemoryForLocalPrediction(pred={}){
 }
 
 async function askVisionAi(dataUrl, opts={}){
-  const st=await getVisionBackendStatus(false);
-  if(!(st.connected && st.visionReady)){
-    const e=new Error('cloud_vision_not_ready');
-    e.visionError=st;
-    e.userSilent=true;
-    throw e;
-  }
+  // V28.32: server-first reale. Non bloccare più Diretta/Scatta foto solo perché
+  // lo status OpenAI è lento/non pronto. Il server decide: memoria/cache/regole prima,
+  // OpenAI solo se disponibile e necessario.
+  const st=await getVisionBackendStatus(false).catch(()=>({softStatusFail:true}));
   const catalog=state.map(i=>({id:i.id,names:i.names,unit:i.unit,unitOptions:i.unitOptions,category:i.category,qty:i.qty}));
   const endpoint=visionApiBase();
+  const controller = typeof AbortController!=='undefined' ? new AbortController() : null;
+  const timeoutMs = String(opts?.stage||'auto').toLowerCase()==='expiry' ? 12000 : 18000;
+  const timer = controller ? setTimeout(()=>controller.abort(), timeoutMs) : null;
   let res=null;
   try{
     res=await fetch(`${endpoint}/ai/vision`,{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token||''}`},
+      signal:controller?.signal,
       body:JSON.stringify({
         image:dataUrl,
         teacherImage: opts.teacherImageV2829 || opts.teacherImage || opts.openAiImage || '',
@@ -4962,17 +4994,18 @@ async function askVisionAi(dataUrl, opts={}){
         focusInstruction: opts.focusInstruction || '',
         primarySubjectMode: opts.primarySubjectMode || '',
         localGuess: opts.localGuess || null,
+        clientStatus: st || null,
         catalog,settings,memory:aiMemory,householdId:settings.householdId,stage:opts.stage||'auto'
       })
     });
   }catch(fetchErr){
     visionBackendStatus=null;
     visionBackendStatusAt=0;
-    const e=new Error('cloud_vision_unreachable');
-    e.visionError={error:'cloud_vision_unreachable', detail:String(fetchErr?.message||fetchErr||'network_error')};
+    const e=new Error(fetchErr?.name==='AbortError'?'vision_api_timeout':'vision_api_unreachable');
+    e.visionError={error:e.message, detail:String(fetchErr?.message||fetchErr||'network_error'), status:st||null};
     e.userSilent=true;
     throw e;
-  }
+  }finally{ if(timer) clearTimeout(timer); }
   if(!res.ok){
     const err=await res.json().catch(()=>({}));
     const e=new Error(err.error||'vision_api_error');
@@ -4991,13 +5024,17 @@ async function askVisionAi(dataUrl, opts={}){
   const r=data.result || data;
   if(r) {
     r.cloudVision=!!r.cloudVision && !r.cloudOffline && !r.cloudError;
-    r.cloudOffline=!!r.cloudOffline || !r.cloudVision;
-    if(r.cloudOffline || r.cloudError) Object.assign(r, markTeacherInactive(r, r));
-    else { r.teacherInactive=false; r.cloudError=''; }
+    r.cloudOffline=!!r.cloudOffline && !r.cloudVision;
+    if(r.cloudOffline || r.cloudError){
+      // Non bloccare la scheda: se il server risponde senza docente, torna comunque al fallback locale.
+      r.teacherInactive=!!r.teacherInactive;
+    } else { r.teacherInactive=false; r.cloudError=''; }
   }
   if(r && r.productName && /^(image|img|foto|photo|screenshot|whatsapp|camera|pxl|dsc|dcim|manual-live|auto-live|manual|auto|live|\d{5,})/i.test(String(r.productName).replace(/\s+/g,''))) r.productName='';
   return r;
 }
+
+
 function scanEvidenceHtml(result){
   result=purgeContradictoryMemoryAndFormat(result||{});
   const bits=[];
@@ -5370,11 +5407,12 @@ console.log('[Spesa Pronta] V27.64 premium-mega-vision loaded: cloud fallback pu
 /* V27.84 Guided Scan UX - stepper, safe rescan controls and clean provisional card */
 function guidedStepMeta(step){
   const map={
-    product:{idx:1,total:4,kicker:'STEP 1/4',title:'Inquadra prodotto',desc:'Fai vedere il prodotto intero. La scheda resta provvisoria finché non completi etichetta e scadenza.'},
-    label:{idx:2,total:4,kicker:'STEP 2/4',title:'Etichetta e ingredienti',desc:'Inquadra nome, marca, formato e ingredienti. Questi dati vengono salvati nella memoria interna prodotto.'},
-    expiry:{idx:3,total:4,kicker:'STEP 3/4',title:'Scadenza',desc:'Inquadra solo la data di scadenza oppure dilla a voce, per esempio 09/2025.'},
-    confirm:{idx:4,total:4,kicker:'STEP 4/4',title:'Conferma articolo',desc:'Controlla i dati e premi Conferma e aggiungi in casa. Da lì il server impara questo articolo.'},
-    done:{idx:4,total:4,kicker:'ARTICOLO OK',title:'Articolo aggiunto',desc:'Prodotto salvato. Puoi passare al prossimo senza contaminare la scheda precedente.'}
+    product:{idx:1,total:5,kicker:'STEP 1/5',title:'Inquadra prodotto',desc:'Fai vedere il prodotto intero. La scheda resta provvisoria finché non completi etichetta, scadenza e barcode.'},
+    label:{idx:2,total:5,kicker:'STEP 2/5',title:'Etichetta e ingredienti',desc:'Inquadra nome, marca, formato e ingredienti. Questi dati vengono salvati nella memoria interna prodotto.'},
+    expiry:{idx:3,total:5,kicker:'STEP 3/5',title:'Scadenza',desc:'Inquadra solo la data di scadenza oppure dilla a voce, per esempio 09/2025.'},
+    barcode:{idx:4,total:5,kicker:'STEP 4/5',title:'Barcode / EAN',desc:'Inquadra solo il codice a barre. Può migliorare nome, marca, formato e categoria, ma le tue correzioni restano prioritarie.'},
+    confirm:{idx:5,total:5,kicker:'STEP 5/5',title:'Conferma articolo',desc:'Controlla i dati e premi Conferma e aggiungi in casa. Da lì il server impara questo articolo.'},
+    done:{idx:5,total:5,kicker:'ARTICOLO OK',title:'Articolo aggiunto',desc:'Prodotto salvato. Puoi passare al prossimo senza contaminare la scheda precedente.'}
   };
   return map[step]||map.product;
 }
@@ -5386,7 +5424,7 @@ function ensureGuidedScanUx(){
   if(!panel){
     preview.insertAdjacentHTML('beforebegin', `<section class="guided-scan-panel" id="guidedScanPanel" aria-live="polite">
       <div class="guided-scan-top">
-        <div><small data-guided-kicker>STEP 1/4</small><h4 data-guided-title>Inquadra prodotto</h4><p data-guided-desc>Fai vedere il prodotto intero. Poi ti chiederò etichetta e scadenza.</p></div>
+        <div><small data-guided-kicker>STEP 1/5</small><h4 data-guided-title>Inquadra prodotto</h4><p data-guided-desc>Fai vedere il prodotto intero. Poi ti chiederò etichetta, scadenza e barcode.</p></div>
         <div class="guided-step-badge" data-guided-counter>1/5</div>
       </div>
       <div class="guided-stepper" data-guided-stepper>
@@ -6384,7 +6422,7 @@ try{
 
 
 // V28.21 Language Cloud Pro
-window.SPESA_PRONTA_VERSION='v28.26-cloud-voice-icons-inline';
+window.SPESA_PRONTA_VERSION='v28.34-preflight-bug-sweep';
 
 
 // =============================================================
@@ -6410,7 +6448,7 @@ window.SPESA_PRONTA_VERSION='v28.26-cloud-voice-icons-inline';
           // Se il docente ha letto una bevanda/prodotto centrale ma ha marcato non idoneo per elementi di sfondo,
           // trasformo in scheda manuale invece di bloccare la scansione.
           const ev=[res.productName,res.brand,res.variant,res.reason,res.productType,res.packageType,...(res.detectedText||[]),...(res.visibleEvidence||[])].join(' ').toLowerCase();
-          const hasProductEvidence=/(coca\s*cola|coca-cola|cola|pepsi|fanta|sprite|bibita|bevanda|acqua|latte|bottiglia|lattina|salsa|pesto|ketchup|maionese|detersivo|candeggina|shampoo|yogurt)/.test(ev);
+          const hasProductEvidence=/\b(coca\s*cola|coca-cola|cola|pepsi|fanta|sprite|bibita|bevanda|acqua|latte|bottiglia|lattina|salsa|pesto|ketchup|maionese|detersivo|candeggina|shampoo|yogurt)\b/.test(ev);
           if(hasProductEvidence && res.needsRetake && /non idoneo|persona|sfondo|tavolo|piatto|pavimento/i.test(String(res.reason||''))){
             res.needsRetake=false; res.needsManual=true; res.shouldAskConfirmation=true;
             res.reason='Ho rilevato un prodotto centrale, ma lo sfondo poteva confondere: controlla e conferma la scheda.';
@@ -6681,4 +6719,205 @@ window.SPESA_PRONTA_VERSION='v28.26-cloud-voice-icons-inline';
   window.addEventListener('beforeunload',()=>saveScanDraftNow('beforeunload'));
   window.spesaProntaScanDraftV2831={save:saveScanDraftNow,load:readDraft,clear:clearDraft,show:()=>showDraftRecoveryIfNeeded(true),restore:restoreDraft};
   try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.31', scanDraftRecovery:'autosave_resume_unconfirmed_items'}); }catch(_){ }
+})();
+
+
+// =============================================================
+// V28.32 LIVE + PHOTO STABILITY FIX
+// - Status OpenAI non blocca più Diretta/Scatta foto.
+// - La chiamata Vision passa sempre dal server con timeout.
+// - Se server/docente non risponde, viene generata una scheda locale compilabile.
+// - Stepper corretto a 5 fasi con Barcode.
+// =============================================================
+try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.32', scanStability:'live_photo_server_first_timeout_fallback', guidedSteps:'5_with_barcode'}); }catch(_){ }
+
+
+// =============================================================
+// V28.33 FINAL STABILITY GUARD
+// - OpenAI inattivo non viene più mostrato come blocco utente: resta server-first/local-first.
+// - Watchdog anti-blocco per Scatta foto / Carica foto / Diretta AI.
+// - Reset sicuro dei lock live se una scansione va in errore o timeout.
+// - Risultato fallback compilabile invece di schermata ferma.
+// =============================================================
+(function(){
+  const V='V28.33';
+  const PHOTO_TIMEOUT_MS=34000;
+  let activeGuard=null;
+  let lastFallbackAt=0;
+  function now(){ return Date.now(); }
+  function softTeacherResult(result={}){
+    const r=Object.assign({}, result||{});
+    if(r.teacherInactive && !r.cloudVision){
+      r.teacherInactive=false;
+      r.teacherInactiveReason='';
+      r.cloudOffline=false;
+      r.cloudFallback=true;
+      r.localFirst=true;
+      r.serverFirst=true;
+      r.needsManual = r.needsManual!==false;
+      r.shouldAskConfirmation = true;
+      if(!String(r.reason||'').trim() || /docente openai|chiave api|cloud_vision|failed to fetch|server ai non raggiungibile/i.test(String(r.reason||''))){
+        r.reason='Server-first attivo: ho creato una scheda compilabile con memoria, regole e visione locale. Controlla i dati e conferma.';
+      }
+    }
+    return r;
+  }
+  function resetScannerLocks(label=''){
+    try{ document.querySelectorAll('.scanning-preview').forEach(n=>n.remove()); }catch(_){ }
+    try{ liveScanBusy=false; }catch(_){ }
+    try{ liveScanStableCount=0; }catch(_){ }
+    try{ liveScanReadySince=0; }catch(_){ }
+    try{ liveScanCaptureLockUntil=now()+900; }catch(_){ }
+    try{ if(!document.querySelector('#scannerResults .scan-result:not(.confirmed):not(.bad)')) liveScanPendingResult=false; }catch(_){ }
+    try{ if(typeof logAiDiagnosticV98==='function') logAiDiagnosticV98('scan-lock-reset-v2833',{label}); }catch(_){ }
+    try{ if(liveScanActive && typeof queueLiveScanLoop==='function') queueLiveScanLoop(); }catch(_){ }
+  }
+  function beginGuard(mode='scan', dataUrl='', fileName=''){
+    const id='guard_'+Math.random().toString(36).slice(2,9)+'_'+now();
+    activeGuard={id,mode,dataUrl,fileName,startedAt:now(),done:false};
+    setTimeout(()=>{
+      const g=activeGuard;
+      if(!g || g.id!==id || g.done) return;
+      const hasCard=!!document.querySelector('#scannerResults .scan-result:not(.confirmed):not(.bad)');
+      resetScannerLocks('watchdog-timeout-'+mode);
+      if(!hasCard){
+        setScannerStatus('Scansione recuperata: l’analisi stava impiegando troppo. Puoi rifare la foto oppure compilare la scheda manualmente.', '', false);
+        if(g.dataUrl && now()-lastFallbackAt>5000){
+          lastFallbackAt=now();
+          Promise.resolve(typeof guessScanFallback==='function' ? guessScanFallback(g.fileName||'photo.jpg', g.dataUrl, {cloudError:'watchdog_timeout_v2833'}) : null)
+            .then(fb=>{
+              fb=softTeacherResult(Object.assign({needsManual:true,productName:'',quantity:1,unit:'pz',category:'food',confidence:.18,reason:'Analisi lenta: scheda recuperabile da compilare o rifare.'}, fb||{}));
+              fb.dataUrl=g.dataUrl;
+              if(typeof presentVisionResults==='function') presentVisionResults(fb,g.dataUrl);
+            }).catch(()=>{});
+        }
+      }
+    }, PHOTO_TIMEOUT_MS);
+    return id;
+  }
+  function finishGuard(id,label=''){
+    if(activeGuard && (!id || activeGuard.id===id)){ activeGuard.done=true; activeGuard=null; }
+    resetScannerLocks(label||'finish');
+  }
+  try{
+    if(typeof scanLearningAuditBadges==='function' && !scanLearningAuditBadges.__v2833){
+      const __badges=scanLearningAuditBadges;
+      scanLearningAuditBadges=function(result={}, confirmed=false){
+        const clean=softTeacherResult(result||{});
+        const rows=__badges.call(this, clean, confirmed)||[];
+        const filtered=rows.filter(b=>!/Docente OpenAI non attivo/i.test(String(b?.text||'')));
+        if(result?.teacherInactive && !result?.cloudVision && !filtered.some(b=>/Server-first/i.test(String(b?.text||'')))) filtered.push({cls:'server',text:'Server-first attivo'});
+        return filtered;
+      };
+      scanLearningAuditBadges.__v2833=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof markTeacherInactive==='function' && !markTeacherInactive.__v2833){
+      const __mark=markTeacherInactive;
+      markTeacherInactive=function(result={}, statusOrError=null){ return softTeacherResult(__mark.call(this,result,statusOrError)); };
+      markTeacherInactive.__v2833=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof addScannerResult==='function' && !addScannerResult.__v2833){
+      const __add=addScannerResult;
+      addScannerResult=function(result){ return __add.call(this, softTeacherResult(result||{})); };
+      addScannerResult.__v2833=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof presentVisionResults==='function' && !presentVisionResults.__v2833){
+      const __present=presentVisionResults;
+      presentVisionResults=function(result,dataUrl){
+        if(Array.isArray(result?.items)) result=Object.assign({},result,{items:result.items.map(x=>softTeacherResult(x||{}))});
+        else result=softTeacherResult(result||{});
+        return __present.call(this,result,dataUrl);
+      };
+      presentVisionResults.__v2833=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof analyzeGroceryPhoto==='function' && !analyzeGroceryPhoto.__v2833){
+      const __photo=analyzeGroceryPhoto;
+      analyzeGroceryPhoto=async function(file){
+        let dataUrl=''; let id='';
+        try{
+          const original=await fileToDataUrl(file);
+          dataUrl=await compressImage(original,1080,0.78).catch(()=>original);
+          id=beginGuard('photo',dataUrl,file?.name||'photo.jpg');
+          // Usiamo la pipeline originale, ma il watchdog ha già una copia della foto in caso di blocco.
+          return await __photo.call(this,file);
+        }catch(err){
+          try{ logAiDiagnosticV98?.('photo-hard-error-v2833',{message:String(err?.message||err).slice(0,180)}); }catch(_){ }
+          if(dataUrl && now()-lastFallbackAt>2500){
+            lastFallbackAt=now();
+            const fb=softTeacherResult(await guessScanFallback(file?.name||'photo.jpg',dataUrl,{cloudError:String(err?.message||err).slice(0,120)}).catch(()=>({needsManual:true,productName:'',quantity:1,unit:'pz',category:'food',confidence:.18,reason:'Scatto recuperato: compila manualmente o rifai la foto.'})));
+            fb.dataUrl=dataUrl; presentVisionResults(fb,dataUrl);
+            setScannerStatus('Scatto recuperato: controlla la scheda o rifai la foto.', '', false);
+          }else{
+            setScannerStatus('Scatto non completato: riprova con una foto più chiara.', '', false);
+          }
+        }finally{ finishGuard(id,'photo-finally'); }
+      };
+      analyzeGroceryPhoto.__v2833=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof analyzeGroceryFileAsFollowup==='function' && !analyzeGroceryFileAsFollowup.__v2833){
+      const __follow=analyzeGroceryFileAsFollowup;
+      analyzeGroceryFileAsFollowup=async function(file,target=null){
+        let id=''; let dataUrl='';
+        try{
+          const original=await fileToDataUrl(file);
+          dataUrl=await compressImage(original,1080,0.78).catch(()=>original);
+          id=beginGuard('followup',dataUrl,file?.name||'followup.jpg');
+          return await __follow.call(this,file,target);
+        }catch(err){
+          try{ logAiDiagnosticV98?.('followup-hard-error-v2833',{message:String(err?.message||err).slice(0,180)}); }catch(_){ }
+          setScannerStatus('Dettaglio non completato: puoi rifare questo step o inserirlo manualmente. La scheda prodotto resta recuperabile.', '', false);
+        }finally{ finishGuard(id,'followup-finally'); }
+      };
+      analyzeGroceryFileAsFollowup.__v2833=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof captureLiveFrame==='function' && !captureLiveFrame.__v2833){
+      const __cap=captureLiveFrame;
+      captureLiveFrame=async function(manual=false){
+        const id=beginGuard(manual?'live-manual':'live-auto','','live-frame.jpg');
+        try{ return await __cap.call(this,manual); }
+        catch(err){
+          try{ logAiDiagnosticV98?.('live-frame-hard-error-v2833',{message:String(err?.message||err).slice(0,180),manual:!!manual}); }catch(_){ }
+          setScannerStatus('Diretta recuperata: lo scatto non si è completato. Puoi premere di nuovo Scatta adesso o usare Scatta foto.', '', false);
+        }finally{ finishGuard(id,'live-finally'); }
+      };
+      captureLiveFrame.__v2833=true;
+    }
+  }catch(_){ }
+  setInterval(()=>{
+    try{
+      const txt=String(document.querySelector('#scannerPreview')?.textContent||'')+' '+String(document.querySelector('#scannerStatus')?.textContent||'');
+      const stuck=/sta leggendo|analisi in corso|sto analizzando/i.test(txt);
+      const started=activeGuard?.startedAt||0;
+      if(stuck && started && now()-started>PHOTO_TIMEOUT_MS+4000) resetScannerLocks('interval-stuck-cleanup');
+    }catch(_){ }
+  },4200);
+  try{ window.spesaProntaStabilityV2833={reset:()=>resetScannerLocks('manual'),guard:()=>activeGuard,softTeacherResult}; }catch(_){ }
+  try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:V, finalStability:'teacher_soft_photo_live_watchdog'}); }catch(_){ }
+  try{ logAiDiagnosticV98?.('final-stability-v2833-ready',{watchdogMs:PHOTO_TIMEOUT_MS}); }catch(_){ }
+})();
+
+
+// =============================================================
+// V28.34 PREFLIGHT BUG SWEEP
+// Pre-upload audit: fixed regex word-boundary control chars, refreshed cache/version,
+// and exposes a visible diagnostic marker for debug.html.
+// =============================================================
+(function(){
+  try{
+    window.SPESA_PRONTA_VERSION='v28.34-preflight-bug-sweep';
+    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.34', preflightBugSweep:'regex_boundary_cache_runtime_marker'});
+    if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('preflight-bug-sweep-v2834-ready',{regexBoundaryFixed:true,cache:'v2834',loadedScript:'app.v27-48-premium-mega-vision'}),900);
+  }catch(_){ }
 })();
