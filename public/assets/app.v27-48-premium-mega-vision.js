@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v28.25-cloud-email-sync-premium';
+window.SPESA_PRONTA_VERSION='v28.26-cloud-voice-icons-inline';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -640,7 +640,7 @@ async function performCloudSyncV2821(){
 function downloadBackupV2821(){
   const backup={
     app:'Spesa Pronta',
-    version:'V28.25 Cloud Email Sync Premium',
+    version:'V28.26 Cloud Voice Icons Inline',
     exportedAt:new Date().toISOString(),
     items:state,
     settings,
@@ -6283,4 +6283,4 @@ try{
 
 
 // V28.21 Language Cloud Pro
-window.SPESA_PRONTA_VERSION='v28.25-cloud-email-sync-premium';
+window.SPESA_PRONTA_VERSION='v28.26-cloud-voice-icons-inline';

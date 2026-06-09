@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v28.25-cloud-email-sync-premium';
+window.SPESA_PRONTA_VERSION='v28.26-cloud-voice-icons-inline';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -640,7 +640,7 @@ async function performCloudSyncV2821(){
 function downloadBackupV2821(){
   const backup={
     app:'Spesa Pronta',
-    version:'V28.25 Cloud Email Sync Premium',
+    version:'V28.26 Cloud Voice Icons Inline',
     exportedAt:new Date().toISOString(),
     items:state,
     settings,
@@ -4909,7 +4909,7 @@ function guidedMarkCardConfirmed(el){
 // =============================================================
 // V27.98 Preflight Stability Check - UI, diagnostics and sync guards
 // =============================================================
-window.SPESA_PRONTA_VERSION='v28.25-cloud-email-sync-premium';
+window.SPESA_PRONTA_VERSION='v28.26-cloud-voice-icons-inline';
 window.SPESA_PRONTA_BUILD={version:'V27.98',brain:'Ultra Error Reduction Core + Preflight Stability Check',categoryEngine:'ultra_error_reduction_core_v27_97',preflight:'v27_98'};
 function v2798Now(){ return Date.now(); }
 function v2798SafeText(v){ return String(v==null?'':v); }
@@ -5739,4 +5739,4 @@ try{
 
 
 // V28.21 Language Cloud Pro
-window.SPESA_PRONTA_VERSION='v28.25-cloud-email-sync-premium';
+window.SPESA_PRONTA_VERSION='v28.26-cloud-voice-icons-inline';
