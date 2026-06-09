@@ -1959,16 +1959,17 @@ body{color-scheme:light;}
 }
 
 
-/* V28.12 - first inventory session + no sticky final buttons */
+/* V28.13 - First inventory safe flow fix */
 #markVerifyBtn,.verify-action-btn,.secondary-pill-verify{display:none!important}
-.scanner-footer{position:static!important;bottom:auto!important;z-index:auto!important;background:transparent!important;padding:18px 0 0!important;margin-top:22px!important}
-@media(max-width:820px){.scanner-footer{position:static!important;bottom:auto!important;z-index:auto!important;background:transparent!important;padding:18px 0 0!important}}
-.first-inventory-session-card{margin:14px 0;padding:16px;border-radius:24px;background:linear-gradient(180deg,#eef7ff,#f7fbff);border:1px solid rgba(13,110,253,.16);box-shadow:0 16px 32px rgba(12,45,94,.06);color:#15395f}
-.first-inventory-session-card strong{display:block;font-size:1.04rem;font-weight:1000;color:#12335f;margin-bottom:5px}
-.first-inventory-session-card p{margin:.15rem 0 .75rem;color:#4b6380;font-weight:760;line-height:1.35}
-.first-inventory-session-card ul{margin:.25rem 0 .8rem;padding-left:1.1rem;color:#274969;font-weight:850;display:grid;gap:3px}
-.first-inventory-session-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.slim-pill{min-height:48px!important;border-radius:999px!important;font-size:.86rem!important;padding:.75rem 1rem!important}
-.danger-soft{color:#8a4800!important;background:#fff8eb!important;border-color:rgba(218,161,0,.26)!important}
-.first-inventory-session-card.expired{background:linear-gradient(180deg,#fff7ed,#fffdf8);border-color:rgba(218,120,0,.22)}
-@media(max-width:520px){.first-inventory-session-actions{grid-template-columns:1fr}.first-inventory-session-card{padding:14px;border-radius:20px}}
+.scanner-footer{position:static!important;bottom:auto!important;z-index:auto!important;background:transparent!important;box-shadow:none!important;padding:14px 0 0!important;margin-top:20px!important}
+.scanner-footer .primary-btn,.scanner-footer .outline-btn{position:static!important}
+.first-inventory-session-card{margin:16px 0;padding:16px;border-radius:24px;border:1px solid rgba(13,110,253,.16);background:linear-gradient(180deg,#f8fbff,#eef7ff);box-shadow:0 18px 36px rgba(12,45,94,.06);color:#15375f;font-weight:850}
+.first-inventory-session-card.expired{background:linear-gradient(180deg,#fff8ed,#fff2db);border-color:rgba(219,154,20,.22)}
+.first-inventory-session-card strong{display:block;font-size:1.05rem;color:#102849;margin-bottom:6px}
+.first-inventory-session-card p{margin:0 0 10px;color:#516987;line-height:1.35;font-weight:750}
+.first-inventory-session-card ul{margin:10px 0 12px;padding-left:18px;color:#183a64}
+.first-inventory-session-actions{display:grid;grid-template-columns:1fr;gap:10px;margin-top:10px}
+.slim-pill{min-height:48px!important;border-radius:999px!important;font-size:.88rem!important;padding:.7rem 1rem!important}
+.danger-soft{background:#fff!important;border-color:rgba(210,70,70,.22)!important;color:#9b2c2c!important}
+.inventory-required .dashboard-locked-note{display:block!important}
+.dashboard-locked-note{display:none;margin:14px 0;padding:14px 16px;border-radius:22px;background:linear-gradient(180deg,#eef7ff,#f7fbff);border:1px solid rgba(13,110,253,.16);font-weight:850;color:#173a65}
