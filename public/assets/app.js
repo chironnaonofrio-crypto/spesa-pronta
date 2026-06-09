@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v28.36-openai-connection-guard';
+window.SPESA_PRONTA_VERSION='v28.39-openai-home-pro';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -5013,7 +5013,7 @@ function guidedMarkCardConfirmed(el){
 // =============================================================
 // V27.98 Preflight Stability Check - UI, diagnostics and sync guards
 // =============================================================
-window.SPESA_PRONTA_VERSION='v28.36-openai-connection-guard';
+window.SPESA_PRONTA_VERSION='v28.39-openai-home-pro';
 window.SPESA_PRONTA_BUILD={version:'V27.98',brain:'Ultra Error Reduction Core + Preflight Stability Check',categoryEngine:'ultra_error_reduction_core_v27_97',preflight:'v27_98'};
 function v2798Now(){ return Date.now(); }
 function v2798SafeText(v){ return String(v==null?'':v); }
@@ -5859,7 +5859,7 @@ try{
 
 
 // V28.21 Language Cloud Pro
-window.SPESA_PRONTA_VERSION='v28.36-openai-connection-guard';
+window.SPESA_PRONTA_VERSION='v28.39-openai-home-pro';
 
 
 // =============================================================
@@ -6353,8 +6353,8 @@ try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, 
 // =============================================================
 (function(){
   try{
-    window.SPESA_PRONTA_VERSION='v28.36-openai-connection-guard';
-    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.36', preflightBugSweep:'regex_boundary_cache_runtime_marker'});
+    window.SPESA_PRONTA_VERSION='v28.39-openai-home-pro';
+    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.39', preflightBugSweep:'regex_boundary_cache_runtime_marker'});
     if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('openai-connection-guard-v2836-ready',{regexBoundaryFixed:true,cache:'v2836',loadedScript:'app.v27-48-premium-mega-vision'}),900);
   }catch(_){ }
 })();
@@ -6363,8 +6363,8 @@ try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, 
 // V28.36 - Diagnosi OpenAI reale: verifica chiave server + modello + endpoint Responses.
 (function(){
   try{
-    window.SPESA_PRONTA_VERSION='v28.36-openai-connection-guard';
-    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.36', openAiConnectionGuard:'server_key_aliases_real_healthcheck_model_fallback'});
+    window.SPESA_PRONTA_VERSION='v28.39-openai-home-pro';
+    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.39', openAiConnectionGuard:'server_key_aliases_real_healthcheck_model_fallback'});
     function endpointV2836(path){ const base=((window.settings&&settings.apiEndpoint)||'/api').replace(/\/$/,''); return base+path; }
     async function runOpenAiCheckV2836(){
       const btn=document.querySelector('[data-openai-check-v2836]');
@@ -6398,5 +6398,110 @@ try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, 
     document.addEventListener('DOMContentLoaded',()=>setTimeout(installOpenAiCheckButtonV2836,900));
     setInterval(installOpenAiCheckButtonV2836,2500);
     if(typeof window.logAiDiagnosticV98==='function') setTimeout(()=>window.logAiDiagnosticV98('openai-connection-guard-v2836-ready',{endpoint:'/api/ai/openai-check',aliases:['OPENAI_API_KEY','OPENAI_KEY','OPENAI_SECRET_KEY','OPENAI_TOKEN']}),1200);
+  }catch(_){ }
+})();
+
+
+// =============================================================
+// V28.38 OCR BOOST PRO
+// Migliora lettura etichetta/scadenza/barcode senza mandare la foto piena a OpenAI.
+// Server: foto piena. Docente: crop OCR ad alta leggibilità.
+// =============================================================
+(function(){
+  const V='V28.38';
+  function dataUrlBytesV2838(s=''){ return Math.round(String(s||'').length*0.75); }
+  function loadImgV2838(dataUrl){ return new Promise((res,rej)=>{ const img=new Image(); img.onload=()=>res(img); img.onerror=rej; img.src=dataUrl; }); }
+  function clampV2838(v){ return Math.max(0, Math.min(255, v)); }
+  function enhanceOcrPixelsV2838(ctx,w,h,mode){
+    try{
+      const img=ctx.getImageData(0,0,w,h);
+      const d=img.data;
+      const contrast = mode==='barcode' ? 1.75 : (mode==='expiry' ? 1.55 : 1.38);
+      const brightness = mode==='barcode' ? 10 : 6;
+      for(let i=0;i<d.length;i+=4){
+        let r=d[i], g=d[i+1], b=d[i+2];
+        if(mode==='barcode'){
+          const y=.299*r+.587*g+.114*b;
+          const v=clampV2838((y-128)*contrast+128+brightness);
+          d[i]=d[i+1]=d[i+2]=v;
+        }else{
+          d[i]=clampV2838((r-128)*contrast+128+brightness);
+          d[i+1]=clampV2838((g-128)*contrast+128+brightness);
+          d[i+2]=clampV2838((b-128)*contrast+128+brightness);
+        }
+      }
+      ctx.putImageData(img,0,0);
+    }catch(_){ }
+  }
+  async function prepareOcrTeacherImageV2838(dataUrl, opts={}){
+    try{
+      const stage=String(opts.stage||'auto').toLowerCase();
+      if(!/^(label|expiry|barcode|ingredients)$/.test(stage)) return {dataUrl,skipped:true,reason:'not_ocr_stage'};
+      if(!/^data:image\//i.test(String(dataUrl||''))) return {dataUrl,skipped:true,reason:'not_data_image'};
+      const img=await loadImgV2838(dataUrl);
+      if(!img.width || !img.height) return {dataUrl,skipped:true,reason:'bad_image'};
+      let rw=.98, rh=.94;
+      if(stage==='expiry'){ rw=.98; rh=.86; }
+      if(stage==='barcode'){ rw=.96; rh=.82; }
+      if(img.width/img.height>1.45){ rw=stage==='barcode'?0.90:0.96; rh=0.96; }
+      if(img.height/img.width>1.45){ rw=0.98; rh=stage==='expiry'?0.90:0.94; }
+      const sw=Math.max(1,Math.round(img.width*rw));
+      const sh=Math.max(1,Math.round(img.height*rh));
+      const sx=Math.max(0,Math.round((img.width-sw)/2));
+      const sy=Math.max(0,Math.round((img.height-sh)/2));
+      const maxSide = stage==='barcode' ? 1500 : (stage==='expiry' ? 1600 : 1700);
+      const scale=Math.min(1.35, maxSide/Math.max(sw,sh));
+      const w=Math.max(1,Math.round(sw*scale));
+      const h=Math.max(1,Math.round(sh*scale));
+      const canvas=document.createElement('canvas'); canvas.width=w; canvas.height=h;
+      const ctx=canvas.getContext('2d',{willReadFrequently:true});
+      try{ ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high'; }catch(_){ }
+      // Primo passaggio: immagine naturale ma più grande.
+      ctx.drawImage(img,sx,sy,sw,sh,0,0,w,h);
+      // Secondo passaggio: aumento leggibilità dei caratteri piccoli.
+      enhanceOcrPixelsV2838(ctx,w,h, stage==='ingredients'?'label':stage);
+      const q = stage==='barcode' ? .90 : .88;
+      const out=canvas.toDataURL('image/jpeg', q);
+      const before=dataUrlBytesV2838(dataUrl), after=dataUrlBytesV2838(out);
+      const meta={
+        version:V, stage, before, after,
+        source:`${img.width}x${img.height}`,
+        sent:`${w}x${h}`,
+        profile:`ocr-boost-${stage}-highres-contrast`,
+        savedPercent: before>0 ? Math.round((1-after/before)*100) : 0
+      };
+      try{ logAiDiagnosticV98?.('ocr-boost-v2838',meta); }catch(_){ }
+      return {dataUrl:out,skipped:false,meta};
+    }catch(err){
+      try{ logAiDiagnosticV98?.('ocr-boost-v2838-error',{message:String(err?.message||err)}); }catch(_){ }
+      return {dataUrl,skipped:true,reason:String(err?.message||err)};
+    }
+  }
+  try{
+    if(typeof askVisionAi==='function' && !window.__v2838OcrBoostWrapped){
+      const prevAsk=askVisionAi;
+      askVisionAi=async function(dataUrl, opts={}){
+        const stage=String(opts?.stage||'auto').toLowerCase();
+        if(/^(label|expiry|barcode|ingredients)$/.test(stage)){
+          const prepared=await prepareOcrTeacherImageV2838(dataUrl,{stage});
+          if(prepared && !prepared.skipped){
+            const nextOpts=Object.assign({}, opts, {
+              teacherCroppedV2805:true,
+              teacherImageV2829: prepared.dataUrl,
+              teacherImageMetaV2829: Object.assign({}, opts.teacherImageMetaV2829||{}, prepared.meta||{}, {source:'client_ocr_boost_v2838'}),
+              ocrBoostV2838: prepared.meta||true
+            });
+            return prevAsk.call(this,dataUrl,nextOpts);
+          }
+        }
+        return prevAsk.call(this,dataUrl,opts);
+      };
+      window.__v2838OcrBoostWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    window.SPESA_PRONTA_VERSION='v28.39-openai-home-pro';
+    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.39', ocrBoostPro:'highres_contrast_teacher_image_label_expiry_barcode', openaiHomePro:'premium_landing_fridge_mount'});
+    if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('ocr-boost-ready-v2838',{version:V, stages:['label','expiry','barcode','ingredients']}),1400);
   }catch(_){ }
 })();

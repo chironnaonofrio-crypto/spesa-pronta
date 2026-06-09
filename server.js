@@ -48,7 +48,7 @@ const VISION_SEED_MEMORY = loadVisionSeedMemory();
 const VISION_MEGA_INDEX = loadVisionMegaIndex();
 const WHATSAPP_ENABLED = !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_WHATSAPP_FROM);
 
-// V28.36 - OpenAI connection guard: chiave solo lato server, diagnostica reale e fallback modelli.
+// V28.38 - OpenAI connection guard: chiave solo lato server, diagnostica reale e fallback modelli.
 let lastOpenAiRuntimeV2836 = { ok:null, testedAt:0, model:'', status:'not_tested', message:'Connessione OpenAI non ancora testata', source:'', maskedKey:'' };
 function pickEnvValueV2836(names=[]){
   for(const name of names){
@@ -2451,6 +2451,80 @@ function normalizeVisionResult(obj={}){
   if(result.confidence<0.72 && !result.needsRetake) result.shouldAskConfirmation=true;
   return result;
 }
+
+
+// V28.38 OCR heuristics: recupera formato/scadenza/barcode da detectedText/visibleEvidence
+// quando il modello vede il testo ma non compila bene i campi strutturati.
+function normalizeOcrDateV2838(s=''){
+  const raw=String(s||'').trim();
+  let m=raw.match(/\b(\d{1,2})[\.\/-](\d{1,2})[\.\/-](\d{2,4})\b/);
+  if(m){
+    let d=m[1].padStart(2,'0'), mo=m[2].padStart(2,'0'), y=m[3];
+    if(y.length===2) y=(Number(y)<50?'20':'19')+y;
+    return `${d}/${mo}/${y}`;
+  }
+  m=raw.match(/\b(\d{1,2})[\.\/-](\d{2,4})\b/);
+  if(m){ let mo=m[1].padStart(2,'0'), y=m[2]; if(y.length===2) y=(Number(y)<50?'20':'19')+y; return `${mo}/${y}`; }
+  return '';
+}
+function applyOcrTextHeuristicsV2838(result={}, stage='auto'){
+  try{
+    const out=Object.assign({}, result||{});
+    const parts=[out.productName,out.brand,out.variant,out.productType,out.packageType,out.estimatedSize,out.sizeDetectedRaw,out.expiryDetectedRaw,out.reason]
+      .concat(Array.isArray(out.detectedText)?out.detectedText:[])
+      .concat(Array.isArray(out.visibleEvidence)?out.visibleEvidence:[])
+      .filter(Boolean).map(x=>String(x));
+    const joined=parts.join(' | ');
+    const lower=joined.toLowerCase();
+    const sizeMatch=joined.match(/\b(\d{1,3}(?:[,.]\d{1,3})?)\s*(l|lt|litri|ml|cl|g|gr|kg)\b/i);
+    if(sizeMatch && (!out.estimatedSize || /capienza|formato|confermare|non legg/i.test(String(out.estimatedSize)))){
+      const n=sizeMatch[1].replace('.',',');
+      let u=sizeMatch[2].toLowerCase();
+      if(u==='litri'||u==='lt') u='L'; else if(u==='gr') u='g';
+      else u = (u==='l'?'L':u);
+      out.estimatedSize=`${n} ${u}`;
+      out.sizeDetectedRaw=sizeMatch[0];
+      out.sizeConfidence=Math.max(Number(out.sizeConfidence||0), .78);
+    }
+    const dateCandidate=(joined.match(/(?:scad|exp|tmc|entro|preferibilmente|lotto)?\s*\b\d{1,2}[\.\/-]\d{1,2}[\.\/-]\d{2,4}\b/i)||[])[0]
+      || (joined.match(/(?:scad|exp|tmc|entro|preferibilmente)?\s*\b\d{1,2}[\.\/-]\d{2,4}\b/i)||[])[0] || '';
+    const normDate=normalizeOcrDateV2838(dateCandidate);
+    if(normDate && (!out.expiryDate || String(stage).toLowerCase()==='expiry')){
+      out.expiryDate=normDate;
+      out.expiryDetectedRaw=dateCandidate.trim();
+      out.expiryConfidence=Math.max(Number(out.expiryConfidence||0), .74);
+    }
+    const codeCandidates=(joined.match(/(?:\d[\s\-\.]*){8,14}/g)||[])
+      .map(x=>x.replace(/\D/g,''))
+      .filter(x=>x.length>=8 && x.length<=14);
+    if(codeCandidates.length && (!out.barcode || String(stage).toLowerCase()==='barcode')){
+      out.barcode=codeCandidates.sort((a,b)=>b.length-a.length)[0];
+      out.ean=out.ean||out.barcode;
+    }
+    if(/\b(acqua|naturale|minerale|oligominerale|sepina|vera|levissima|lete|sant\s*anna|uliveto|rocchetta)\b/i.test(joined)){
+      if(!out.productName || /manual|prodotto|nome|salta|ora/i.test(String(out.productName))) out.productName='Acqua naturale';
+      if(/sepina/i.test(joined) && !out.brand) out.brand='Sepina';
+      out.category='water'; out.unit=out.unit||'bt'; out.isLiquid=true;
+      out.confidence=Math.max(Number(out.confidence||0), .62);
+      out.needsRetake=false; out.notConsumable=false;
+    }
+    if(/\b(coca\s*cola|coca-cola|cola|pepsi|fanta|sprite)\b/i.test(joined)){
+      if(/coca/i.test(joined)){ out.productName=out.productName && !/manual|prodotto|nome|salta|ora/i.test(String(out.productName)) ? out.productName : 'Coca-Cola'; out.brand=out.brand||'Coca-Cola'; }
+      out.category='soft_drinks'; out.unit=out.unit||'bt'; out.isLiquid=true;
+      out.confidence=Math.max(Number(out.confidence||0), .66);
+      out.needsRetake=false; out.notConsumable=false;
+    }
+    const extracted=[];
+    if(out.estimatedSize) extracted.push('formato'); if(out.expiryDate) extracted.push('scadenza'); if(out.barcode) extracted.push('barcode');
+    if(extracted.length){
+      out.ocrHeuristicsV2838={extracted, stage:String(stage||'auto')};
+      out.visibleEvidence=Array.isArray(out.visibleEvidence)?out.visibleEvidence:[];
+      out.visibleEvidence.push(`OCR boost: ${extracted.join(', ')}`);
+    }
+    return out;
+  }catch(_){ return result||{}; }
+}
+
 async function visionAnalyze({image,teacherImage='',fullImage='',teacherImageMeta=null,focusInstruction='',primarySubjectMode='',localGuess=null,catalog,settings,memory,stage='auto'}){
   if(!aiConnected()){
     return { needsManual:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.25, shouldAskConfirmation:true, cloudVision:false, cloudOffline:true, cloudError:'missing_openai_key', teacherInactive:true, teacherInactiveReason:'Docente OpenAI non attivo: chiave API mancante sul server.', reason:'Docente OpenAI non attivo: uso riconoscimento locale prudente.' };
@@ -2493,24 +2567,25 @@ Output SOLO JSON con gli stessi campi, includendo anche ingredients, allergens, 
 - detectedText deve contenere tutti i frammenti letti, anche incompleti.
 - Se leggi una lista ingredienti o allergeni, copiala in forma sintetica negli array dedicati. Non inventare allergeni non visibili, salvo quelli evidenti dal nome del prodotto e marcali come possibili se non certi.
 JSON: {"productName":"","brand":"","variant":"","estimatedSize":"","sizeDetectedRaw":"","sizeConfidence":0,"expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"ingredients":[],"allergens":[],"possibleAllergens":[],"colors":[],"nutrition":{},"ingredientsVerified":false,"detectedText":[],"visibleEvidence":[],"detailQuestion":"","needsManual":true,"shouldAskConfirmation":true,"confidence":0.1}`;
+  const stageNameV2838=String(stage||'auto').toLowerCase();
   try{
     let primaryRaw=null, detailRaw=null;
     try{
-      const stageName=String(stage||'auto').toLowerCase();
+      const stageName=stageNameV2838;
       if(stageName==='product'){
         const fastProductPrompt=`Analizza la foto prodotto. Rispondi SOLO JSON valido. PRIORITÀ: scegli il prodotto centrale/più grande, non oggetti laterali o sfondo. Se al centro c'è una bottiglia Coca-Cola/cola o altra confezione idonea, analizza quella e ignora persone/piatti/tavolo/salse laterali. Devi essere veloce: riconosci prodotto, marca, tipo, formato se leggibile e categoria reale. Non cercare di leggere tutta la tabella ingredienti se non è visibile. Se vedi cane, vestiti, telecomando, TV, mobili o oggetti non consumabili rispondi {"needsRetake":true,"notConsumable":true,"reason":"Oggetto non idoneo","productName":"","confidence":0}. Categoria: usa regole realtà professionali v27.96: scegli per prove dell etichetta, non per forma generica; confezione è solo indizio. Bevanda solo se è davvero da bere (acqua, cola, bibita gassata, succo, latte da bere). Se leggi Cola/Blues/Pepsi/Fanta/Sprite non classificarla come acqua: categoria soft_drinks, unit bt/lattina. Pesto/salsa/BBQ/ketchup/maionese/condimento = sauces_condiments; olio/aceto = oil_vinegar; yogurt/kefir = yogurt; cioccolata/dolci = chocolate_sweets; crema spalmabile = spreads; marmellata/miele = jams_honey; cibo animali = pet_food; bucato/piatti/pulizia/carta casa hanno categorie dedicate; barattolo/vasetto/bottiglia/flacone sono solo confezione, non categoria se il testo dice altro. Schema JSON: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","variant":"","productType":"","packageType":"","estimatedSize":"","sizeDetectedRaw":"","sizeConfidence":0,"quantity":1,"unit":"pz","category":"food","confidence":0.1,"isLiquid":false,"isDamaged":false,"damageType":"","expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"barcode":"","detectedText":[],"visibleEvidence":[],"detailQuestion":"","reason":""}`;
         primaryRaw = await visionJsonCall('Solo JSON valido. Analisi rapida prodotto.', fastProductPrompt, openAiTeacherImage, {maxTokens:520});
         detailRaw = null;
       }else if(stageName==='expiry'){
-        const expiryPrompt=`OCR mirato sulla scadenza. Rispondi SOLO JSON valido. Leggi solo data/TMC/EXP/scadenza/lotto se presente. Non cambiare nome prodotto se non è chiarissimo. Schema: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","estimatedSize":"","expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"detectedText":[],"visibleEvidence":[],"confidence":0.1,"category":"food","reason":""}`;
+        const expiryPrompt=`OCR mirato SOLO scadenza V28.38. Rispondi SOLO JSON valido. Cerca date vicino a: SCAD, Scadenza, EXP, TMC, Da consumarsi entro, Preferibilmente entro, Lotto/L. Accetta formati dd/mm/yyyy, dd-mm-yyyy, dd.mm.yyyy, dd/mm/yy, mm/yyyy. Se vedi più date, scegli quella più vicina a SCAD/EXP/TMC; il lotto va in detectedText ma non in expiryDate. Non riscrivere nome/marca/categoria. detectedText deve contenere tutti i frammenti leggibili. Schema: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","estimatedSize":"","expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"detectedText":[],"visibleEvidence":[],"confidence":0.1,"category":"food","reason":""}`;
         primaryRaw = await visionJsonCall('Solo JSON valido. OCR scadenza.', expiryPrompt, openAiTeacherImage, {maxTokens:340});
         detailRaw = null;
       }else if(stageName==='label'){
-        const labelPrompt=`OCR mirato etichetta/ingredienti. Rispondi SOLO JSON valido e compatto. Leggi nome, marca, variante, formato, categoria reale, ingredienti e allergeni se visibili. Non analizzare due volte e non inventare. Categoria: cola/bibita = soft_drinks; acqua = water; latte = milk_drinks; yogurt/kefir = yogurt; pesto/salsa/BBQ/ketchup/maionese/sugo = sauces_condiments; crema spalmabile = spreads; olio/aceto = oil_vinegar; candeggina/detersivo/pulizia = cleaning/laundry/dishwashing. Schema: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","variant":"","productType":"","packageType":"","estimatedSize":"","sizeDetectedRaw":"","sizeConfidence":0,"category":"food","ingredients":[],"allergens":[],"possibleAllergens":[],"barcode":"","detectedText":[],"visibleEvidence":[],"confidence":0.1,"reason":""}`;
+        const labelPrompt=`OCR mirato etichetta/ingredienti V28.38. Rispondi SOLO JSON valido e compatto. Concentrati SOLO sul prodotto principale e sulla sua etichetta, ignorando sfondo e oggetti vicini. Leggi con priorità: nome commerciale, marca/logo, variante/gusto, formato/capienza netta, categoria reale, ingredienti, allergeni, possibili tracce, barcode se visibile. detectedText deve contenere le righe/frammenti OCR letti anche se incompleti, senza inventare. Correggi solo errori OCR evidenti: O/0, I/1, l/1, S/5 quando serve per date, capienze e barcode. Se non sei sicuro lascia campo vuoto e spiega cosa rifotografare. Categoria: cola/bibita = soft_drinks; acqua = water; latte = milk_drinks; yogurt/kefir = yogurt; pesto/salsa/BBQ/ketchup/maionese/sugo = sauces_condiments; crema spalmabile = spreads; olio/aceto = oil_vinegar; candeggina/detersivo/pulizia = cleaning/laundry/dishwashing. Schema: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","variant":"","productType":"","packageType":"","estimatedSize":"","sizeDetectedRaw":"","sizeConfidence":0,"category":"food","ingredients":[],"allergens":[],"possibleAllergens":[],"barcode":"","detectedText":[],"visibleEvidence":[],"confidence":0.1,"reason":""}`;
         primaryRaw = await visionJsonCall('Solo JSON valido. OCR etichetta low-cost.', labelPrompt, openAiTeacherImage, {maxTokens:620});
         detailRaw = null;
       }else if(stageName==='barcode'){
-        const barcodePrompt=`OCR mirato SOLO codice a barre/EAN/UPC. Rispondi SOLO JSON valido e compatto. Cerca numeri sotto o vicino al barcode: 8-14 cifre. Non analizzare prodotto, ingredienti o scadenza se non servono. Se il barcode o eventuale testo collegato permette di migliorare nome, marca, formato o categoria, puoi proporli, ma non inventare. Schema: {"needsRetake":false,"needsManual":true,"barcode":"","ean":"","code":"","productCode":"","productName":"","brand":"","estimatedSize":"","category":"food","detectedText":[],"visibleEvidence":[],"confidence":0.1,"reason":""}`;
+        const barcodePrompt=`OCR mirato SOLO codice a barre/EAN/UPC V28.38. Rispondi SOLO JSON valido. Cerca la sequenza numerica sotto o vicino al barcode: 8, 12, 13 o 14 cifre. Rimuovi spazi/trattini/punti e restituisci il codice completo in barcode/ean. Non inventare cifre mancanti. Se trovi testo prodotto collegato al barcode puoi proporre nome, marca, formato e categoria come miglioramento, ma non toccare ingredienti/scadenza. detectedText deve includere anche il numero grezzo letto. Schema: {"needsRetake":false,"needsManual":true,"barcode":"","ean":"","code":"","productCode":"","productName":"","brand":"","estimatedSize":"","category":"food","detectedText":[],"visibleEvidence":[],"confidence":0.1,"reason":""}`;
         primaryRaw = await visionJsonCall('Solo JSON valido. OCR barcode.', barcodePrompt, openAiTeacherImage, {maxTokens:300});
         detailRaw = null;
       }else{
@@ -2527,6 +2602,7 @@ JSON: {"productName":"","brand":"","variant":"","estimatedSize":"","sizeDetected
     let result=mergeVisionOutputs(primaryRaw||{}, detailRaw||{});
     result=applyVisionMatching(result, candidates);
     result=enrichVisionDetails(result);
+    result=applyOcrTextHeuristicsV2838(result, stageNameV2838);
     result=repairCentralConsumableV2828(primaryRaw||{}, result);
     result.cloudVision=true;
     result.cloudOffline=false;
@@ -2837,7 +2913,7 @@ function preflightSnapshotV98(){
   const keyDiag=openAiKeyDiagnosticV2836();
   const teacherUsable=openAiTeacherIsUsableV2836();
   const teacherMsg=openAiTeacherMessageV2836();
-  const brain={version:'V28.36',name:'OpenAI Connection Guard + Final Test Tools',base:'Ultra Error Reduction Core V27.97 + Sync Handshake V27.99',categoryEngine:'ultra_error_reduction_core_v27_97', costGuardV2804:db.assistantBrain?.costGuardV2804||null,barcodePriority:'barcode > label > user correction > server memory > teacher',syncPolicy:'single item confirm + retry queue',testTools:'diagnostics_copy + server_sync_test + openai_live_check'};
+  const brain={version:'V28.38',name:'OpenAI Connection Guard + Debug OpenAI Test',base:'Ultra Error Reduction Core V27.97 + Sync Handshake V27.99',categoryEngine:'ultra_error_reduction_core_v27_97', costGuardV2804:db.assistantBrain?.costGuardV2804||null,barcodePriority:'barcode > label > user correction > server memory > teacher',syncPolicy:'single item confirm + retry queue',testTools:'diagnostics_copy + server_sync_test + openai_live_check'};
   const checks=[
     {id:'openai_teacher',label:'Docente OpenAI',ok:teacherUsable,message:teacherMsg,diagnostics:keyDiag,lastRuntime:lastOpenAiRuntimeV2836},
     {id:'vision_backend',label:'Vision backend',ok:teacherUsable,message:teacherUsable?'Vision pronta dal backend':'Vision docente non disponibile: '+teacherMsg},
@@ -2849,7 +2925,7 @@ function preflightSnapshotV98(){
   ];
   const ok=checks.filter(c=>c.ok).length;
   const status= ok===checks.length ? 'ready' : (ok>=4?'warn':'bad');
-  return {ok:true,version:'V28.36',status,ready:status==='ready',brain,checks,teacherActive:teacherUsable,teacherConfigured:keyDiag.configured,teacherMessage:teacherMsg,openAiDiagnostics:keyDiag,lastOpenAiRuntime:lastOpenAiRuntimeV2836,dbMode,databaseConnected:dbMode!=='file',memoryReady:dbMode!=='file',globalProductMemory:gpm,knowledgeCache:{entries:Object.keys(kCache.entries||{}).length,hits:kCache.hits||0,barcodeHits:kCache.barcodeHits||0,updatedAt:kCache.updatedAt||0},barcodeBrain:db.assistantBrain?.barcodeBrain||null,errorLearning:{corrections:(db.assistantBrain?.errorLearning?.corrections||[]).length,patterns:Object.keys(db.assistantBrain?.errorLearning?.patterns||{}).length,updatedAt:db.assistantBrain?.errorLearning?.updatedAt||0},learningAudit:(db.assistantBrain.learningAudit||[]).slice(0,15),generatedAt:Date.now()};
+  return {ok:true,version:'V28.38',status,ready:status==='ready',brain,checks,teacherActive:teacherUsable,teacherConfigured:keyDiag.configured,teacherMessage:teacherMsg,openAiDiagnostics:keyDiag,lastOpenAiRuntime:lastOpenAiRuntimeV2836,dbMode,databaseConnected:dbMode!=='file',memoryReady:dbMode!=='file',globalProductMemory:gpm,knowledgeCache:{entries:Object.keys(kCache.entries||{}).length,hits:kCache.hits||0,barcodeHits:kCache.barcodeHits||0,updatedAt:kCache.updatedAt||0},barcodeBrain:db.assistantBrain?.barcodeBrain||null,errorLearning:{corrections:(db.assistantBrain?.errorLearning?.corrections||[]).length,patterns:Object.keys(db.assistantBrain?.errorLearning?.patterns||{}).length,updatedAt:db.assistantBrain?.errorLearning?.updatedAt||0},learningAudit:(db.assistantBrain.learningAudit||[]).slice(0,15),generatedAt:Date.now()};
 }
 
 const server = http.createServer(async (req,res)=>{
@@ -2893,7 +2969,7 @@ const server = http.createServer(async (req,res)=>{
 
     if((req.method === 'GET' || req.method === 'POST') && (pathName === '/api/ai/openai-check' || pathName === '/ai/openai-check')) {
       const result=await openAiHealthCheckV2836();
-      return send(res, result.ok ? 200 : 200, Object.assign({type:'openai-check-v2836'}, result));
+      return send(res, result.ok ? 200 : 200, Object.assign({type:'openai-check-v2837'}, result));
     }
 
     if(req.method === 'GET' && (pathName === '/api/ai/preflight' || pathName === '/ai/preflight')) {
