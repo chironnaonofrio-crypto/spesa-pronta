@@ -640,7 +640,7 @@ async function performCloudSyncV2821(){
 function downloadBackupV2821(){
   const backup={
     app:'Spesa Pronta',
-    version:'V28.26 Cloud Voice Icons Inline',
+    version:'V28.27 Cloud Voice Icons Inline',
     exportedAt:new Date().toISOString(),
     items:state,
     settings,
@@ -3336,7 +3336,7 @@ async function captureLiveFrame(manual=false){
   }
   const raw=c.toDataURL('image/jpeg',0.92);
   setScannerStatus(manual ? 'Sto analizzando lo scatto manuale...' : 'Prodotto centrato: scatto automatico in corso, sto leggendo marca, scadenza, quantità e stato.', manual ? voiceLine('manual_scan',['Sto analizzando la foto.','Perfetto, controllo subito lo scatto.']) : voiceLine('auto_scan',['Perfetto. Ho scattato. Ora analizzo il prodotto.','Scatto eseguito. Sto leggendo etichetta, marca e dettagli del prodotto.']), true);
-  const compressed=await compressImage(raw,720,0.72).catch(()=>raw);
+  const compressed=await compressImage(raw,1080,0.78).catch(()=>raw);
   await analyzeGroceryDataUrl(compressed, manual?'manual-live.jpg':'auto-live.jpg', scanSig);
   liveScanBusy=false; liveScanStableCount=0; liveScanReadySince=0;
   liveScanCooldownUntil = Date.now() + (manual ? 2800 : 3600);
@@ -3363,7 +3363,7 @@ async function analyzeGroceryFileAsFollowup(file, target=null){
   const el=target || getLiveLabelTarget?.();
   if(!el){ return analyzeGroceryPhoto(file); }
   const original=await fileToDataUrl(file);
-  const dataUrl=await compressImage(original,760,0.74);
+  const dataUrl=await compressImage(original,1080,0.78);
   const step=getLiveFollowupStep(el);
   setScannerStatus(
     step==='expiry'
@@ -3396,13 +3396,14 @@ async function imageQuality(dataUrl){
   const avg=sum/lum.length; const contrast=Math.sqrt(lum.reduce((s,l)=>s+(l-avg)**2,0)/lum.length);
   let edge=0; for(let y=1;y<h;y++){ for(let x=1;x<w;x++){ const a=lum[y*w+x], b=lum[y*w+x-1], c2=lum[(y-1)*w+x]; edge+=Math.abs(a-b)+Math.abs(a-c2); }}
   edge=edge/(w*h);
-  const ok=img.width>=480 && img.height>=480 && avg>35 && avg<230 && contrast>14 && edge>5;
-  const reason = !ok ? (img.width<480||img.height<480?'foto troppo piccola':avg<=35?'foto troppo scura':avg>=230?'foto troppo chiara':contrast<=14?'poco contrasto / prodotto poco visibile':'foto un po’ sfocata') : 'foto leggibile';
-  return {ok,reason,width:img.width,height:img.height,avg,contrast,edge};
+  const longSide=Math.max(img.width,img.height), shortSide=Math.min(img.width,img.height);
+  const ok=longSide>=720 && shortSide>=360 && avg>35 && avg<235 && contrast>12 && edge>4;
+  const reason = !ok ? (longSide<720||shortSide<360?'foto troppo piccola':avg<=35?'foto troppo scura':avg>=235?'foto troppo chiara':contrast<=12?'poco contrasto / prodotto poco visibile':'foto un po’ sfocata') : 'foto leggibile';
+  return {ok,reason,width:img.width,height:img.height,longSide,shortSide,avg,contrast,edge};
 }
 async function analyzeGroceryPhoto(file){
   const original=await fileToDataUrl(file);
-  const dataUrl=await compressImage(original,760,0.74);
+  const dataUrl=await compressImage(original,1080,0.78);
   await analyzeGroceryDataUrl(dataUrl,file?.name||'photo.jpg');
 }
 
@@ -5558,8 +5559,10 @@ try{
       const originalCompress=compressImage;
       compressImage=async function(dataUrl,max=1280,quality=.86){
         // immagini più piccole = meno costo Vision. La qualità resta sufficiente per etichette grandi.
-        const hardMax=Math.min(Number(max)||640, 620);
-        const hardQuality=Math.min(Number(quality)||.62, .56);
+        const requested=Number(max)||1080;
+        // V28.27: non scendere sotto una dimensione utile, altrimenti lo scanner rifiuta la foto come troppo piccola.
+        const hardMax=Math.max(requested, 1080);
+        const hardQuality=Math.max(Math.min(Number(quality)||.78, .78), .68);
         return originalCompress.call(this,dataUrl,hardMax,hardQuality);
       };
       window.__v2804CompressWrapped=true;
@@ -5633,16 +5636,16 @@ try{
   function loadImgV2805(dataUrl){ return new Promise((res,rej)=>{ const img=new Image(); img.onload=()=>res(img); img.onerror=rej; img.src=dataUrl; }); }
   function cropProfile(stage='auto'){
     stage=String(stage||'auto').toLowerCase();
-    if(stage==='expiry') return {w:.92,h:.70,max:460,q:.50,label:'expiry-date'};
-    if(stage==='label') return {w:.92,h:.82,max:520,q:.52,label:'label'};
-    if(stage==='ingredients') return {w:.94,h:.86,max:560,q:.52,label:'ingredients'};
-    return {w:.84,h:.84,max:520,q:.52,label:'product-center'};
+    if(stage==='expiry') return {w:.96,h:.82,max:820,q:.68,label:'expiry-date-safe'};
+    if(stage==='label') return {w:.96,h:.90,max:920,q:.70,label:'label-safe'};
+    if(stage==='ingredients') return {w:.96,h:.92,max:960,q:.70,label:'ingredients-safe'};
+    return {w:.90,h:.90,max:900,q:.70,label:'product-center-safe'};
   }
   async function cropCentralForTeacherV2805(dataUrl, opts={}){
     try{
       if(!/^data:image\//i.test(String(dataUrl||''))) return {dataUrl,skipped:true,reason:'not_data_image'};
       const img=await loadImgV2805(dataUrl);
-      if(!img.width || !img.height || Math.min(img.width,img.height)<260) return {dataUrl,skipped:true,reason:'too_small'};
+      if(!img.width || !img.height || Math.min(img.width,img.height)<420) return {dataUrl,skipped:true,reason:'source_too_small_keep_full'};
       const prof=cropProfile(opts.stage||opts.kind||'auto');
       let cw=Math.round(img.width*prof.w), ch=Math.round(img.height*prof.h);
       // Se la foto è molto verticale, non tagliare troppo in altezza: spesso etichette e scadenze sono sopra/sotto il centro.
