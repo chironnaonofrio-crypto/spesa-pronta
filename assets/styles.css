@@ -1957,26 +1957,3 @@ body{color-scheme:light;}
     height:82px!important;
   }
 }
-
-
-/* V28.14 - controllo obbligatorio: niente "Fatta da verificare" e footer non sticky */
-.scanner-footer,
-.scanner-card .scanner-footer,
-.scanner-modal .scanner-footer,
-.scanner-card-premium .scanner-footer{
-  position:static!important;
-  bottom:auto!important;
-  top:auto!important;
-  z-index:auto!important;
-  background:#fff!important;
-  padding:18px 0 0!important;
-  margin-top:22px!important;
-  border-top:1px solid rgba(210,225,245,.9)!important;
-}
-.scanner-footer .primary-btn,
-.scanner-footer .outline-btn{
-  width:100%!important;
-}
-#markVerifyBtn,.verify-action-btn,.secondary-pill-verify{display:none!important;}
-.scanner-secondary-actions{grid-template-columns:1fr!important;}
-.scanner-secondary-actions #scannerCaptureNowBtn{width:100%!important;}
