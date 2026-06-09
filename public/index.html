@@ -14,7 +14,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="assets/styles.css?v=2821">
+  <link rel="stylesheet" href="assets/styles.css?v=2825">
   <title>Spesa Pronta</title>
 
 <style id="v27-56-premium-clean">
@@ -499,30 +499,62 @@
         <button class="cloud-close-pro" id="cloudCloseBtn" type="button" aria-label="Chiudi centro sincronizzazione">×</button>
       </header>
 
-      <div class="cloud-status-pro" id="cloudStatusBox">
+      <div class="cloud-status-pro cloud-status-premium" id="cloudStatusBox">
         <span class="cloud-live-dot" id="cloudLiveDot"></span>
-        <div>
-          <strong id="cloudStatusTitle">Cloud online</strong>
-          <p id="cloudStatusText">Sincronizzazione server pronta.</p>
+        <div class="cloud-status-content-pro">
+          <strong id="cloudStatusTitle">Cloud collegato</strong>
+          <p id="cloudStatusText">Server attivo e inventario cloud disponibile.</p>
+          <div class="cloud-status-chips-pro" aria-label="Stato servizi cloud">
+            <span id="cloudServerChip">Server attivo</span>
+            <span id="cloudBackupChip">Backup pronto</span>
+            <span id="cloudVoiceChip">Assistenti da collegare</span>
+          </div>
         </div>
       </div>
 
+      <div class="cloud-account-pro" id="cloudAccountBox">
+        <span class="cloud-account-label">ACCOUNT CLOUD</span>
+        <strong id="cloudUserEmail">Nessuna email collegata</strong>
+        <p id="cloudUserEmailHint">Accedi con questa email anche su un altro dispositivo e ritroverai inventario, backup e sincronizzazione.</p>
+      </div>
+
       <div class="cloud-metrics-pro">
-        <article><span>ULTIMA SYNC</span><strong id="cloudLastSync">Mai</strong></article>
-        <article><span>PRODOTTI</span><strong id="cloudProductCount">0</strong></article>
+        <article><span>ULTIMA SINCR.</span><strong id="cloudLastSync">Mai</strong></article>
+        <article class="cloud-product-metric-pro"><span>PRODOTTI SYNC</span><strong id="cloudProductCount">0</strong><small id="cloudProductHint">Articoli presenti nel tuo inventario cloud</small></article>
         <article><span>BACKUP LOCALE</span><strong id="cloudBackupStatus">Pronto</strong></article>
-        <article><span>HOUSEHOLD</span><strong id="cloudHouseholdId">Locale</strong></article>
+        <article><span>CASA CLOUD</span><strong id="cloudHouseholdId">Locale</strong></article>
       </div>
 
       <div class="cloud-endpoint-pro">
-        <span>ENDPOINT CLOUD</span>
-        <strong id="cloudEndpointValue">/api</strong>
+        <span>SERVER CLOUD</span>
+        <strong id="cloudEndpointValue">Attivo</strong>
       </div>
 
       <button class="cloud-action-main" id="cloudSyncRunBtn" type="button">↻ <span>Sincronizza ora</span></button>
       <button class="cloud-action-soft" id="cloudDownloadBackupBtn" type="button">↓ <span>Scarica backup</span></button>
       <button class="cloud-action-soft" id="cloudRestoreBackupBtn" type="button">↑ <span>Ripristina backup</span></button>
       <input id="cloudRestoreBackupInput" type="file" accept="application/json,.json" hidden>
+
+      <div class="cloud-voice-links-pro">
+        <span class="cloud-voice-title">ASSISTENTI VOCALI</span>
+        <div class="cloud-voice-grid">
+          <button class="cloud-voice-btn alexa" id="cloudAlexaLinkBtn" type="button">
+            <img src="assets/illustrations/alexa.png" alt="Alexa">
+            <span class="cloud-voice-copy">
+              <strong>Alexa</strong>
+              <small id="cloudAlexaStatus">Collega e copia endpoint</small>
+            </span>
+          </button>
+          <button class="cloud-voice-btn google" id="cloudGoogleHomeLinkBtn" type="button">
+            <img src="assets/illustrations/google-assistant.png" alt="Google Home">
+            <span class="cloud-voice-copy">
+              <strong>Google Home</strong>
+              <small id="cloudGoogleHomeStatus">Collega e copia endpoint</small>
+            </span>
+          </button>
+        </div>
+      </div>
+
       <button class="cloud-action-soft" id="cloudCopyIdBtn" type="button">▣ <span>Copia ID cloud</span></button>
     </section>
   </dialog>
@@ -644,8 +676,8 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/vision-seed-memory.js?v=2821" defer></script>
-  <script src="assets/vision-mega-index.js?v=2821" defer></script>
-  <script src="assets/app.v27-48-premium-mega-vision.js?v=2821" defer></script>
+  <script src="assets/vision-seed-memory.js?v=2825" defer></script>
+  <script src="assets/vision-mega-index.js?v=2825" defer></script>
+  <script src="assets/app.v27-48-premium-mega-vision.js?v=2825" defer></script>
 </body>
 </html>

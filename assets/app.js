@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v28.21-language-cloud-pro';
+window.SPESA_PRONTA_VERSION='v28.25-cloud-email-sync-premium';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -574,16 +574,46 @@ function renderCloudCenterV2821(){
   if(!dialog) return;
   const ready=isCloudReadyV2821();
   const online=navigator.onLine !== false;
+  const totalProducts=Array.isArray(state) ? state.length : 0;
+  const alexaReady=!!settings.alexaConnected;
+  const googleReady=!!settings.googleAssistantConnected;
+  const voiceReady=alexaReady && googleReady;
+  const userEmail=(session?.user?.email || settings?.profile?.email || '').trim();
   const box=$('#cloudStatusBox');
   if(box) box.classList.toggle('offline', !online || !ready);
   const title=$('#cloudStatusTitle'), text=$('#cloudStatusText');
-  if(title) title.textContent = ready && online ? 'Cloud online' : (online ? 'Cloud non configurato' : 'Offline');
-  if(text) text.textContent = ready && online ? `Sincronizzazione server pronta per ${state.length} prodotti.` : (online ? 'Accedi o registrati per collegare il server cloud.' : 'Connessione assente: puoi usare backup locale e riprovare dopo.');
+  if(title) title.textContent = ready && online ? 'Cloud collegato' : (online ? 'Cloud non configurato' : 'Offline');
+  if(text){
+    if(ready && online){
+      text.textContent = totalProducts > 0
+        ? `Server attivo. Inventario cloud aggiornato con ${totalProducts} prodotti salvati.`
+        : 'Server attivo. Inventario cloud pronto, nessun prodotto salvato al momento.';
+    }else if(online){
+      text.textContent = 'Accedi o registrati per collegare il server cloud.';
+    }else{
+      text.textContent = 'Connessione assente: puoi usare backup locale e riprovare dopo.';
+    }
+  }
+  const serverChip=$('#cloudServerChip'); if(serverChip) serverChip.textContent = ready && online ? 'Server attivo' : (online ? 'Server da collegare' : 'Offline');
+  const backupChip=$('#cloudBackupChip'); if(backupChip) backupChip.textContent = localBackupStatusV2821()==='Pronto' ? 'Backup pronto' : 'Backup bloccato';
+  const voiceChip=$('#cloudVoiceChip'); if(voiceChip) voiceChip.textContent = voiceReady ? 'Alexa e Google collegati' : (alexaReady ? 'Alexa collegata' : (googleReady ? 'Google collegato' : 'Assistenti da collegare'));
+  const cloudEmail=$('#cloudUserEmail'); if(cloudEmail) cloudEmail.textContent = userEmail || 'Nessuna email collegata';
+  const cloudEmailHint=$('#cloudUserEmailHint');
+  if(cloudEmailHint){
+    cloudEmailHint.textContent = userEmail
+      ? 'Accedi con questa email anche dal dispositivo di casa e ritroverai tutto: inventario, backup e sincronizzazione cloud.'
+      : 'Quando colleghi un account email, potrai accedere da altri dispositivi e ritrovare tutti i tuoi dati sincronizzati.';
+  }
   const last=$('#cloudLastSync'); if(last) last.textContent=formatCloudTimeV2821(cloudLastSyncTsV2821());
-  const count=$('#cloudProductCount'); if(count) count.textContent=String(state.length);
+  const count=$('#cloudProductCount'); if(count) count.textContent=String(totalProducts);
+  const productHint=$('#cloudProductHint'); if(productHint) productHint.textContent = totalProducts===1 ? 'Articolo presente nel tuo inventario cloud' : 'Articoli presenti nel tuo inventario cloud';
   const backup=$('#cloudBackupStatus'); if(backup) backup.textContent=localBackupStatusV2821();
   const household=$('#cloudHouseholdId'); if(household) household.textContent=settings.householdId || 'Locale';
-  const endpoint=$('#cloudEndpointValue'); if(endpoint) endpoint.textContent=settings.apiEndpoint || '/api';
+  const endpoint=$('#cloudEndpointValue'); if(endpoint) endpoint.textContent = ready ? 'Attivo' : (online ? 'Da collegare' : 'Offline');
+  const alexaBtn=$('#cloudAlexaLinkBtn'); if(alexaBtn) alexaBtn.classList.toggle('connected', alexaReady);
+  const googleBtn=$('#cloudGoogleHomeLinkBtn'); if(googleBtn) googleBtn.classList.toggle('connected', googleReady);
+  const alexaStatus=$('#cloudAlexaStatus'); if(alexaStatus) alexaStatus.textContent = alexaReady ? 'Collegata e pronta' : 'Collega e copia endpoint';
+  const googleStatus=$('#cloudGoogleHomeStatus'); if(googleStatus) googleStatus.textContent = googleReady ? 'Collegato e pronto' : 'Collega e copia endpoint';
 }
 function openCloudCenterV2821(){
   renderCloudCenterV2821();
@@ -610,7 +640,7 @@ async function performCloudSyncV2821(){
 function downloadBackupV2821(){
   const backup={
     app:'Spesa Pronta',
-    version:'V28.21 Language Cloud Pro',
+    version:'V28.25 Cloud Email Sync Premium',
     exportedAt:new Date().toISOString(),
     items:state,
     settings,
@@ -664,6 +694,32 @@ async function copyCloudIdV2821(){
   try{ await navigator.clipboard.writeText(id); }catch{}
   toast(t('copied'));
 }
+async function linkAlexaCloudV2822(){
+  if(!isCloudReadyV2821()){
+    toast('Prima attiva il cloud per collegare Alexa');
+    return;
+  }
+  settings.alexaConnected=true;
+  saveAll();
+  try{ await navigator.clipboard.writeText(voiceEndpoint('alexa')); }catch{}
+  await syncCloud(false);
+  render();
+  renderCloudCenterV2821();
+  toast('Alexa collegata ✅ Endpoint copiato');
+}
+async function linkGoogleHomeCloudV2822(){
+  if(!isCloudReadyV2821()){
+    toast('Prima attiva il cloud per collegare Google Home');
+    return;
+  }
+  settings.googleAssistantConnected=true;
+  saveAll();
+  try{ await navigator.clipboard.writeText(voiceEndpoint('google-assistant')); }catch{}
+  await syncCloud(false);
+  render();
+  renderCloudCenterV2821();
+  toast('Google Home collegato ✅ Endpoint copiato');
+}
 function bindLanguageCloudProV2821(){
   $('#languageMenuBtn')?.addEventListener('click', openLanguageMenuV2821);
   $('#languageCloseBtn')?.addEventListener('click', closeLanguageMenuV2821);
@@ -676,6 +732,8 @@ function bindLanguageCloudProV2821(){
   $('#cloudRestoreBackupBtn')?.addEventListener('click', restoreBackupV2821);
   $('#cloudRestoreBackupInput')?.addEventListener('change', handleBackupRestoreFileV2821);
   $('#cloudCopyIdBtn')?.addEventListener('click', copyCloudIdV2821);
+  $('#cloudAlexaLinkBtn')?.addEventListener('click', linkAlexaCloudV2822);
+  $('#cloudGoogleHomeLinkBtn')?.addEventListener('click', linkGoogleHomeCloudV2822);
 }
 
 function setBusyButton(btn, busy, text){
@@ -4851,7 +4909,7 @@ function guidedMarkCardConfirmed(el){
 // =============================================================
 // V27.98 Preflight Stability Check - UI, diagnostics and sync guards
 // =============================================================
-window.SPESA_PRONTA_VERSION='v28.21-language-cloud-pro';
+window.SPESA_PRONTA_VERSION='v28.25-cloud-email-sync-premium';
 window.SPESA_PRONTA_BUILD={version:'V27.98',brain:'Ultra Error Reduction Core + Preflight Stability Check',categoryEngine:'ultra_error_reduction_core_v27_97',preflight:'v27_98'};
 function v2798Now(){ return Date.now(); }
 function v2798SafeText(v){ return String(v==null?'':v); }
@@ -5681,4 +5739,4 @@ try{
 
 
 // V28.21 Language Cloud Pro
-window.SPESA_PRONTA_VERSION='v28.21-language-cloud-pro';
+window.SPESA_PRONTA_VERSION='v28.25-cloud-email-sync-premium';

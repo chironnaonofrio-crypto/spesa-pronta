@@ -14,7 +14,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="assets/styles.css?v=2821">
+  <link rel="stylesheet" href="assets/styles.css?v=2825">
   <title>Spesa Pronta</title>
 
 <style id="v27-56-premium-clean">
@@ -499,24 +499,35 @@
         <button class="cloud-close-pro" id="cloudCloseBtn" type="button" aria-label="Chiudi centro sincronizzazione">×</button>
       </header>
 
-      <div class="cloud-status-pro" id="cloudStatusBox">
+      <div class="cloud-status-pro cloud-status-premium" id="cloudStatusBox">
         <span class="cloud-live-dot" id="cloudLiveDot"></span>
-        <div>
-          <strong id="cloudStatusTitle">Cloud online</strong>
-          <p id="cloudStatusText">Sincronizzazione server pronta.</p>
+        <div class="cloud-status-content-pro">
+          <strong id="cloudStatusTitle">Cloud collegato</strong>
+          <p id="cloudStatusText">Server attivo e inventario cloud disponibile.</p>
+          <div class="cloud-status-chips-pro" aria-label="Stato servizi cloud">
+            <span id="cloudServerChip">Server attivo</span>
+            <span id="cloudBackupChip">Backup pronto</span>
+            <span id="cloudVoiceChip">Assistenti da collegare</span>
+          </div>
         </div>
       </div>
 
+      <div class="cloud-account-pro" id="cloudAccountBox">
+        <span class="cloud-account-label">ACCOUNT CLOUD</span>
+        <strong id="cloudUserEmail">Nessuna email collegata</strong>
+        <p id="cloudUserEmailHint">Accedi con questa email anche su un altro dispositivo e ritroverai inventario, backup e sincronizzazione.</p>
+      </div>
+
       <div class="cloud-metrics-pro">
-        <article><span>ULTIMA SYNC</span><strong id="cloudLastSync">Mai</strong></article>
-        <article><span>PRODOTTI</span><strong id="cloudProductCount">0</strong></article>
+        <article><span>ULTIMA SINCR.</span><strong id="cloudLastSync">Mai</strong></article>
+        <article class="cloud-product-metric-pro"><span>PRODOTTI SYNC</span><strong id="cloudProductCount">0</strong><small id="cloudProductHint">Articoli presenti nel tuo inventario cloud</small></article>
         <article><span>BACKUP LOCALE</span><strong id="cloudBackupStatus">Pronto</strong></article>
-        <article><span>HOUSEHOLD</span><strong id="cloudHouseholdId">Locale</strong></article>
+        <article><span>CASA CLOUD</span><strong id="cloudHouseholdId">Locale</strong></article>
       </div>
 
       <div class="cloud-endpoint-pro">
-        <span>ENDPOINT CLOUD</span>
-        <strong id="cloudEndpointValue">/api</strong>
+        <span>SERVER CLOUD</span>
+        <strong id="cloudEndpointValue">Attivo</strong>
       </div>
 
       <button class="cloud-action-main" id="cloudSyncRunBtn" type="button">↻ <span>Sincronizza ora</span></button>

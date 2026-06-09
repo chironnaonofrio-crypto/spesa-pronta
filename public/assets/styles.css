@@ -2123,13 +2123,38 @@ body{color-scheme:light;}
 .cloud-status-pro.offline .cloud-live-dot{background:#f59e0b;box-shadow:0 0 0 12px rgba(245,158,11,.15)}
 .cloud-status-pro strong{display:block;font-size:1.38rem;color:#0b2448}
 .cloud-status-pro p{margin:5px 0 0;color:#60738d;font-weight:900;line-height:1.22}
+.cloud-status-premium{position:relative;overflow:hidden;background:linear-gradient(135deg,#ecfff7 0%,#f7fbff 58%,#eef6ff 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.92),0 16px 34px rgba(26,96,177,.08)}
+.cloud-status-premium:after{content:'';position:absolute;right:-44px;top:-54px;width:150px;height:150px;border-radius:50%;background:radial-gradient(circle,rgba(36,116,255,.18),transparent 68%);pointer-events:none}
+.cloud-status-content-pro{position:relative;z-index:1;min-width:0}
+.cloud-status-chips-pro{display:flex;flex-wrap:wrap;gap:8px;margin-top:11px}
+.cloud-status-chips-pro span{border:1px solid rgba(31,103,191,.13);background:rgba(255,255,255,.82);border-radius:999px;padding:7px 10px;color:#1c5fb2;font-size:.78rem;font-weight:1000;letter-spacing:0;text-transform:none;box-shadow:0 7px 16px rgba(11,35,72,.06)}
+.cloud-status-pro.offline .cloud-status-chips-pro span{color:#9a5b08;border-color:rgba(245,158,11,.22);background:rgba(255,251,235,.9)}
+.cloud-product-metric-pro small{display:block;margin-top:7px;color:#6a7e98;font-size:.72rem;line-height:1.2;font-weight:850;letter-spacing:0;text-transform:none}
+
 .cloud-metrics-pro{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
 .cloud-metrics-pro article{min-height:86px;border:1px solid #dfe9f6;border-radius:22px;background:#fff;box-shadow:0 12px 26px rgba(12,45,94,.04);padding:16px}
 .cloud-metrics-pro span,.cloud-endpoint-pro span{display:block;text-transform:uppercase;letter-spacing:.10em;color:#708199;font-size:.82rem;font-weight:1000}
 .cloud-metrics-pro strong{display:block;margin-top:8px;color:#1c66c7;font-size:1.35rem;line-height:1.08;overflow-wrap:anywhere}
 .cloud-endpoint-pro{border:1px dashed #b8cee8;background:#f1f8ff;border-radius:24px;padding:18px 20px;margin-bottom:18px}
 .cloud-endpoint-pro strong{display:block;margin-top:8px;font-size:1.15rem;color:#12213a;overflow-wrap:anywhere}
+.cloud-account-pro{margin:14px 0 16px;padding:16px 18px;border:1px solid #dce8f8;border-radius:22px;background:linear-gradient(180deg,#f8fbff,#ffffff);box-shadow:0 10px 24px rgba(12,28,55,.06)}
+.cloud-account-label{display:block;font-size:.8rem;font-weight:900;letter-spacing:.11em;color:#6d7f9f;margin-bottom:8px}
+.cloud-account-pro strong{display:block;font-size:1.08rem;line-height:1.18;color:#123b7a;word-break:break-word}
+.cloud-account-pro p{margin:8px 0 0;color:#5d708f;font-weight:700;line-height:1.35;font-size:.95rem}
+
 .cloud-action-main,.cloud-action-soft{width:100%;min-height:64px;border-radius:23px;font-weight:1000;display:flex;align-items:center;justify-content:center;gap:12px;margin-top:12px;font-size:1rem}
+.cloud-voice-links-pro{margin-top:14px;padding:14px 14px 4px;border:1px solid #dce8f8;border-radius:24px;background:linear-gradient(180deg,#f8fbff,#ffffff)}
+.cloud-voice-title{display:block;font-size:.82rem;font-weight:900;letter-spacing:.11em;color:#6d7f9f;margin:0 0 12px}
+.cloud-voice-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.cloud-voice-btn{border:1px solid #dce8f8;background:linear-gradient(180deg,#ffffff,#f6faff);border-radius:22px;padding:14px;display:flex;align-items:center;gap:12px;text-align:left;min-height:92px;box-shadow:0 10px 24px rgba(12,28,55,.08);color:#10264a}
+.cloud-voice-btn img{width:52px;height:52px;object-fit:contain;filter:drop-shadow(0 10px 16px rgba(10,30,60,.18))}
+.cloud-voice-btn strong{display:block;font-size:1.03rem;line-height:1.05}
+.cloud-voice-btn small{display:block;margin-top:4px;color:#60738f;font-weight:800;line-height:1.25}
+.cloud-voice-btn.alexa{background:linear-gradient(180deg,#fafdff,#eef8ff)}
+.cloud-voice-btn.google{background:linear-gradient(180deg,#ffffff,#f7fbff)}
+.cloud-voice-btn.connected{border-color:#bfe3cf;background:linear-gradient(180deg,#f4fff7,#ecfbf1)}
+.cloud-voice-copy{min-width:0}
+
 .cloud-action-main{border:0;background:linear-gradient(135deg,#1266f1,#1e72ff);color:#fff;box-shadow:0 16px 34px rgba(18,102,241,.24)}
 .cloud-action-soft{border:1px solid #dce8f8;background:linear-gradient(180deg,#fff,#f8fbff);color:#1b5db4}
 .cloud-action-main:disabled,.cloud-action-soft:disabled{opacity:.62;cursor:not-allowed}
@@ -2162,8 +2187,13 @@ body{color-scheme:light;}
   .language-option-pro .copy b{font-size:1.13rem}.language-option-pro .copy span{font-size:.90rem}
   .cloud-head-pro{gap:10px}.cloud-logo-pro{width:58px;height:58px}
   .cloud-status-pro{min-height:86px;border-radius:22px;padding:14px}
+  .cloud-status-chips-pro{gap:6px;margin-top:8px}
+  .cloud-status-chips-pro span{font-size:.68rem;padding:6px 8px}
+  .cloud-product-metric-pro small{font-size:.62rem;margin-top:5px}
+
   .cloud-metrics-pro{grid-template-columns:1fr 1fr;gap:8px}
   .cloud-metrics-pro span,.cloud-endpoint-pro span{font-size:.66rem}
   .cloud-metrics-pro strong{font-size:1.02rem}
   .cloud-action-main,.cloud-action-soft{min-height:56px;border-radius:20px}
+  .cloud-voice-grid{grid-template-columns:1fr}
 }
