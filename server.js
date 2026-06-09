@@ -29,6 +29,7 @@ const DB_PATH = path.resolve(process.env.DB_PATH || './cloud-db.json');
 const STATIC_DIR = path.resolve(process.env.STATIC_DIR || './public');
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.5';
 const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || OPENAI_MODEL;
+const OPENAI_MODEL_FALLBACKS = String(process.env.OPENAI_MODEL_FALLBACKS || 'gpt-5.5,gpt-5.4-mini,gpt-5.4-nano').split(',').map(s=>s.trim()).filter(Boolean);
 const OPENAI_TIMEOUT_MS = Number(process.env.OPENAI_TIMEOUT_MS || 45000);
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const APP_BASE_URL = (process.env.APP_BASE_URL || process.env.PUBLIC_URL || 'https://spesa-pronta.it').replace(/\/$/, '');
@@ -46,6 +47,94 @@ const PHONE_VERIFY_READY = SMS_ENABLED || TWILIO_VERIFY_ENABLED;
 const VISION_SEED_MEMORY = loadVisionSeedMemory();
 const VISION_MEGA_INDEX = loadVisionMegaIndex();
 const WHATSAPP_ENABLED = !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_WHATSAPP_FROM);
+
+// V28.36 - OpenAI connection guard: chiave solo lato server, diagnostica reale e fallback modelli.
+let lastOpenAiRuntimeV2836 = { ok:null, testedAt:0, model:'', status:'not_tested', message:'Connessione OpenAI non ancora testata', source:'', maskedKey:'' };
+function pickEnvValueV2836(names=[]){
+  for(const name of names){
+    const raw=process.env[name];
+    if(raw!==undefined && raw!==null && String(raw).trim()) return {name,value:String(raw).trim()};
+  }
+  return {name:'',value:''};
+}
+function isPlaceholderOpenAiKeyV2836(value=''){
+  const v=String(value||'').trim();
+  if(!v) return true;
+  return /^(INSERISCI|METTI|YOUR_|LA_TUA|sk-xxx|xxx|none|null|undefined|changeme)/i.test(v) || v.length<20;
+}
+function maskOpenAiKeyV2836(value=''){
+  const v=String(value||'').trim();
+  if(!v) return '';
+  if(v.length<=12) return '***';
+  return v.slice(0,7)+'…'+v.slice(-4);
+}
+function openAiKeyDiagnosticV2836(){
+  const found=pickEnvValueV2836(['OPENAI_API_KEY','OPENAI_KEY','OPENAI_SECRET_KEY','OPENAI_TOKEN']);
+  const valid=!!found.value && !isPlaceholderOpenAiKeyV2836(found.value);
+  return {
+    configured: valid,
+    source: found.name || '',
+    maskedKey: valid ? maskOpenAiKeyV2836(found.value) : '',
+    reason: valid ? 'key_configured_server_side' : (found.value ? 'placeholder_or_invalid_key_value' : 'missing_openai_api_key'),
+    expectedEnv: 'OPENAI_API_KEY',
+    acceptedEnvAliases: ['OPENAI_API_KEY','OPENAI_KEY','OPENAI_SECRET_KEY','OPENAI_TOKEN']
+  };
+}
+function getOpenAiKeyV2836(){
+  const found=pickEnvValueV2836(['OPENAI_API_KEY','OPENAI_KEY','OPENAI_SECRET_KEY','OPENAI_TOKEN']);
+  return (!found.value || isPlaceholderOpenAiKeyV2836(found.value)) ? '' : found.value;
+}
+function openAiModelCandidatesV2836(primary=''){
+  const out=[];
+  for(const m of [primary, OPENAI_VISION_MODEL, OPENAI_MODEL, ...OPENAI_MODEL_FALLBACKS]){
+    const clean=String(m||'').trim();
+    if(clean && !out.includes(clean)) out.push(clean);
+  }
+  return out;
+}
+function isRetryableOpenAiModelErrorV2836(status, text=''){
+  const t=String(text||'').toLowerCase();
+  return [400,403,404].includes(Number(status)) && /(model|does not exist|not found|unsupported|permission|access|not available|invalid.*model)/i.test(t);
+}
+function classifyOpenAiErrorV2836(err){
+  const msg=String(err?.message||err||'').slice(0,700);
+  if(/missing_openai_api_key|missing_openai_key/i.test(msg)) return {code:'missing_openai_api_key', message:'OPENAI_API_KEY mancante sul server'};
+  if(/401|unauthorized|incorrect api key|invalid api key/i.test(msg)) return {code:'invalid_openai_api_key', message:'Chiave OpenAI non valida o non autorizzata'};
+  if(/429|quota|billing|insufficient_quota|rate limit/i.test(msg)) return {code:'openai_quota_or_rate_limit', message:'Quota/billing/rate limit OpenAI da controllare'};
+  if(/model|does not exist|not found|unsupported|permission|access|not available/i.test(msg)) return {code:'openai_model_unavailable', message:'Modello OpenAI non disponibile per questa chiave'};
+  if(/abort|timeout|timed out|network|fetch failed|econn/i.test(msg)) return {code:'openai_network_timeout', message:'Timeout o rete tra server e OpenAI'};
+  return {code:'openai_unknown_error', message:msg || 'Errore OpenAI non classificato'};
+}
+function openAiTeacherIsUsableV2836(){
+  if(!getOpenAiKeyV2836()) return false;
+  if(lastOpenAiRuntimeV2836.testedAt && lastOpenAiRuntimeV2836.ok===false) return false;
+  return true;
+}
+function openAiTeacherMessageV2836(){
+  const diag=openAiKeyDiagnosticV2836();
+  if(!diag.configured) return 'Docente OpenAI non attivo: OPENAI_API_KEY mancante sul server';
+  if(lastOpenAiRuntimeV2836.testedAt && lastOpenAiRuntimeV2836.ok===false) return 'Docente OpenAI configurato ma non raggiungibile: '+(lastOpenAiRuntimeV2836.message||'controlla Diagnosi OpenAI');
+  if(lastOpenAiRuntimeV2836.testedAt && lastOpenAiRuntimeV2836.ok===true) return 'Docente OpenAI attivo e testato ('+(lastOpenAiRuntimeV2836.model||OPENAI_VISION_MODEL)+')';
+  return 'Docente OpenAI configurato sul server: pronto al test reale';
+}
+async function openAiHealthCheckV2836(){
+  const diag=openAiKeyDiagnosticV2836();
+  if(!diag.configured){
+    lastOpenAiRuntimeV2836={ok:false,testedAt:Date.now(),model:'',status:diag.reason,message:'OPENAI_API_KEY mancante o placeholder',source:diag.source,maskedKey:diag.maskedKey};
+    return {ok:false, connected:false, teacherActive:false, status:diag.reason, message:lastOpenAiRuntimeV2836.message, diagnostics:diag, model:OPENAI_MODEL, visionModel:OPENAI_VISION_MODEL};
+  }
+  try{
+    const resp=await openAiResponse({model:OPENAI_MODEL,max_output_tokens:8,input:[{role:'user',content:'Rispondi solo OK'}]}, {kind:'health'});
+    const txt=outputText(resp).trim();
+    lastOpenAiRuntimeV2836=Object.assign({},lastOpenAiRuntimeV2836,{ok:true,testedAt:Date.now(),status:'active',message:'OpenAI raggiunto correttamente',source:diag.source,maskedKey:diag.maskedKey});
+    return {ok:true, connected:true, teacherActive:true, status:'active', message:'OpenAI raggiunto correttamente', output:txt.slice(0,40), diagnostics:diag, model:lastOpenAiRuntimeV2836.model||OPENAI_MODEL, visionModel:OPENAI_VISION_MODEL, testedAt:lastOpenAiRuntimeV2836.testedAt};
+  }catch(err){
+    const c=classifyOpenAiErrorV2836(err);
+    lastOpenAiRuntimeV2836={ok:false,testedAt:Date.now(),model:lastOpenAiRuntimeV2836.model||OPENAI_MODEL,status:c.code,message:c.message,source:diag.source,maskedKey:diag.maskedKey,raw:String(err?.message||err||'').slice(0,500)};
+    return {ok:false, connected:false, teacherActive:false, status:c.code, message:c.message, diagnostics:diag, model:lastOpenAiRuntimeV2836.model||OPENAI_MODEL, visionModel:OPENAI_VISION_MODEL, testedAt:lastOpenAiRuntimeV2836.testedAt};
+  }
+}
+
 let db = { users:{}, households:{} };
 let dbMode = 'file';
 let pgPool = null;
@@ -1531,25 +1620,46 @@ function localAiReply({message,state=[],settings={},memory={}}){
   if(q.includes('foto') || q.includes('fotografa') || q.includes('frigo')) return 'Apri Foto spesa: fotografa un articolo alla volta, controllo qualità immagine, nome e quantità, poi aggiorno la scorta.';
   return 'Ho capito. Posso ragionare sui tuoi consumi, ricordare preferenze, modificare la lista e analizzare foto se il backend è collegato a una chiave AI.';
 }
-function aiConnected(){ return Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'INSERISCI_LA_TUA_CHIAVE_OPENAI'); }
-async function openAiResponse(payload){
-  const key=process.env.OPENAI_API_KEY;
-  if(!aiConnected()) return null;
-  const ctrl = new AbortController();
-  const timeout = setTimeout(()=>ctrl.abort(), OPENAI_TIMEOUT_MS);
-  try{
-    const res=await fetch('https://api.openai.com/v1/responses',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},
-      body:JSON.stringify(payload),
-      signal:ctrl.signal
-    });
-    if(!res.ok){
-      const errText=await res.text().catch(()=>'');
-      throw new Error('openai_error_'+res.status+'_'+errText.slice(0,300));
-    }
-    return await res.json();
-  } finally { clearTimeout(timeout); }
+function aiConnected(){ return Boolean(getOpenAiKeyV2836()); }
+async function openAiResponse(payload, opts={}){
+  const key=getOpenAiKeyV2836();
+  if(!key) throw new Error('missing_openai_api_key');
+  const candidates=openAiModelCandidatesV2836(payload?.model || (opts.kind==='vision'?OPENAI_VISION_MODEL:OPENAI_MODEL));
+  let lastErr=null;
+  for(const model of candidates){
+    const ctrl = new AbortController();
+    const timeout = setTimeout(()=>ctrl.abort(), OPENAI_TIMEOUT_MS);
+    try{
+      const body=JSON.stringify(Object.assign({}, payload, {model}));
+      const res=await fetch('https://api.openai.com/v1/responses',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},
+        body,
+        signal:ctrl.signal
+      });
+      if(!res.ok){
+        const errText=await res.text().catch(()=>'');
+        const err=new Error('openai_error_'+res.status+'_'+errText.slice(0,700));
+        if(isRetryableOpenAiModelErrorV2836(res.status, errText) && candidates.length>1){
+          lastErr=err;
+          continue;
+        }
+        throw err;
+      }
+      const json=await res.json();
+      const diag=openAiKeyDiagnosticV2836();
+      lastOpenAiRuntimeV2836={ok:true,testedAt:Date.now(),model,status:'active',message:'OpenAI raggiunto correttamente',source:diag.source,maskedKey:diag.maskedKey};
+      return json;
+    }catch(err){
+      lastErr=err;
+      const c=classifyOpenAiErrorV2836(err);
+      if(c.code==='openai_model_unavailable' && candidates.length>1) continue;
+      if(c.code==='openai_network_timeout' && opts.kind==='health') throw err;
+      if(c.code!=='openai_model_unavailable') throw err;
+    } finally { clearTimeout(timeout); }
+  }
+  if(lastErr) throw lastErr;
+  throw new Error('openai_no_model_candidate');
 }
 function outputText(resp){
   if(!resp) return '';
@@ -1559,8 +1669,7 @@ function outputText(resp){
   return chunks.join('\n').trim();
 }
 async function llmChatReply({message,state,settings,memory,globalMemory={}}){
-  const key=process.env.OPENAI_API_KEY;
-  if(!key) return localAiReply({message,state,settings,memory});
+  if(!getOpenAiKeyV2836()) return localAiReply({message,state,settings,memory});
   const compactState=(state||[]).map(i=>({id:i.id,name:itemName(i,settings?.lang||'it'),qty:i.qty,unit:i.unit,category:i.category,threshold:smartThreshold(i,settings,memory),recommended:recommendedQty(i,settings,memory),daysLeft:daysLeft(i,settings,memory)}));
   const payload={
     model:OPENAI_MODEL,
@@ -1569,8 +1678,15 @@ async function llmChatReply({message,state,settings,memory,globalMemory={}}){
       {role:'user',content:JSON.stringify({message,state:compactState,settings,memory:(memory||{}),globalAssistantExperience:globalMemory||{}}).slice(0,90000)}
     ]
   };
-  const resp=await openAiResponse(payload);
-  return outputText(resp) || localAiReply({message,state,settings,memory});
+  try{
+    const resp=await openAiResponse(payload,{kind:'chat'});
+    return outputText(resp) || localAiReply({message,state,settings,memory});
+  }catch(err){
+    const c=classifyOpenAiErrorV2836(err);
+    const diag=openAiKeyDiagnosticV2836();
+    lastOpenAiRuntimeV2836={ok:false,testedAt:Date.now(),model:lastOpenAiRuntimeV2836.model||OPENAI_MODEL,status:c.code,message:c.message,source:diag.source,maskedKey:diag.maskedKey,raw:String(err?.message||err||'').slice(0,500)};
+    return localAiReply({message,state,settings,memory});
+  }
 }
 function extractJsonObject(text=''){
   const raw=String(text||'').trim().replace(/^```(?:json)?\s*/i,'').replace(/```$/,'').trim();
@@ -2169,7 +2285,7 @@ function mergeVisionOutputs(primaryRaw, ocrRaw){
 function isJunkVisionName(name=''){
   const n=normalizeVisionText(name).replace(/\s+/g,' ').trim();
   if(!n || n.length<3) return true;
-  return /^(sto|ok|okay|si|no|conferma|prodotto|articolo|manual|live|manual live|auto live|foto|scatta|scatto|questo|questa|image|img|photo|camera|scanner)$/.test(n) || /^\d+$/.test(n);
+  return /^(sto|ok|okay|si|no|conferma|prodotto|articolo|manual|live|manual live|auto live|foto|scatta|scatto|questo|questa|image|img|photo|camera|scanner|salta|salta ora|skip|dopo|non so|non lo so|nessuno|nessuna|avanti|procedi)$/.test(n) || /^(salta|skip|dopo|continua dopo|non so|non lo so|nessuno|nessuna)(\s+ora|\s+per ora)?$/.test(n) || /^\d+$/.test(n);
 }
 function canonicalVisionVolume(raw=''){
   const s=String(raw||'').toLowerCase().replace(',', '.').replace(/\s+/g,' ').trim();
@@ -2419,7 +2535,10 @@ JSON: {"productName":"","brand":"","variant":"","estimatedSize":"","sizeDetected
     result.visionPipelineV2829={serverFullImage:true, openAiTeacherImage:!!teacherImage, teacherMeta, policy:'server_full_first_openai_slim_last'};
     return result;
   }catch(err){
-    return {needsManual:true, shouldAskConfirmation:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.16, cloudVision:false, cloudOffline:true, cloudError:'', cloudFallback:true, teacherInactive:true, teacherInactiveReason:'Docente OpenAI non attivo: risposta non disponibile dal server.', reason:'Docente OpenAI non attivo: Vision locale prudente, controlla e completa i dati prima di salvare.'};
+    const classified=classifyOpenAiErrorV2836(err);
+    const diag=openAiKeyDiagnosticV2836();
+    lastOpenAiRuntimeV2836={ok:false,testedAt:Date.now(),model:lastOpenAiRuntimeV2836.model||OPENAI_VISION_MODEL,status:classified.code,message:classified.message,source:diag.source,maskedKey:diag.maskedKey,raw:String(err?.message||err||'').slice(0,500)};
+    return {needsManual:true, shouldAskConfirmation:true, productName:'', quantity:1, unit:'pz', category:'food', confidence:.16, cloudVision:false, cloudOffline:true, cloudError:classified.code, cloudErrorMessage:classified.message, cloudFallback:true, teacherInactive:true, teacherInactiveReason:'Docente OpenAI non attivo: '+classified.message+'. Apri Diagnosi AI / OpenAI check per vedere la causa.', openAiDiagnostics:{keyConfigured:diag.configured,keySource:diag.source,maskedKey:diag.maskedKey,status:classified.code,message:classified.message}, reason:'Vision server/local-first attiva: controlla e completa i dati prima di salvare.'};
   }
 }
 
@@ -2715,10 +2834,13 @@ function preflightSnapshotV98(){
   const gpm = publicGlobalProductMemory ? publicGlobalProductMemory(12) : {count:0,confirmations:0,products:[]};
   const queueInfo={serverQueue:false};
   const kCache=db.assistantBrain?.knowledgeCache||{};
-  const brain={version:'V28.02',name:'Final Test Tools',base:'Ultra Error Reduction Core V27.97 + Sync Handshake V27.99',categoryEngine:'ultra_error_reduction_core_v27_97', costGuardV2804:db.assistantBrain?.costGuardV2804||null,barcodePriority:'barcode > label > user correction > server memory > teacher',syncPolicy:'single item confirm + retry queue',testTools:'diagnostics_copy + server_sync_test'};
+  const keyDiag=openAiKeyDiagnosticV2836();
+  const teacherUsable=openAiTeacherIsUsableV2836();
+  const teacherMsg=openAiTeacherMessageV2836();
+  const brain={version:'V28.36',name:'OpenAI Connection Guard + Final Test Tools',base:'Ultra Error Reduction Core V27.97 + Sync Handshake V27.99',categoryEngine:'ultra_error_reduction_core_v27_97', costGuardV2804:db.assistantBrain?.costGuardV2804||null,barcodePriority:'barcode > label > user correction > server memory > teacher',syncPolicy:'single item confirm + retry queue',testTools:'diagnostics_copy + server_sync_test + openai_live_check'};
   const checks=[
-    {id:'openai_teacher',label:'Docente OpenAI',ok:aiConnected(),message:aiConnected()?'Docente OpenAI attivo':'OPENAI_API_KEY mancante o non valida'},
-    {id:'vision_backend',label:'Vision backend',ok:aiConnected(),message:aiConnected()?'Vision pronta dal backend':'Vision docente non disponibile'},
+    {id:'openai_teacher',label:'Docente OpenAI',ok:teacherUsable,message:teacherMsg,diagnostics:keyDiag,lastRuntime:lastOpenAiRuntimeV2836},
+    {id:'vision_backend',label:'Vision backend',ok:teacherUsable,message:teacherUsable?'Vision pronta dal backend':'Vision docente non disponibile: '+teacherMsg},
     {id:'database',label:'Database persistente',ok:dbMode!=='file',message:dbMode!=='file'?'Supabase/Postgres attivo':'Modalità file: memoria non persistente'},
     {id:'global_memory',label:'Memoria globale',ok:!!db.assistantBrain?.globalProductMemory,message:`${gpm.count||0} prodotti globali / ${gpm.confirmations||0} conferme`},
     {id:'barcode_brain',label:'Barcode brain',ok:!!db.assistantBrain?.barcodeBrain,message:`${(db.assistantBrain?.barcodeBrain?.barcodes||0)} barcode indicizzati`},
@@ -2727,7 +2849,7 @@ function preflightSnapshotV98(){
   ];
   const ok=checks.filter(c=>c.ok).length;
   const status= ok===checks.length ? 'ready' : (ok>=4?'warn':'bad');
-  return {ok:true,version:'V28.02',status,ready:status==='ready',brain,checks,teacherActive:aiConnected(),teacherMessage:aiConnected()?'Docente OpenAI attivo':'Docente OpenAI non attivo',dbMode,databaseConnected:dbMode!=='file',memoryReady:dbMode!=='file',globalProductMemory:gpm,knowledgeCache:{entries:Object.keys(kCache.entries||{}).length,hits:kCache.hits||0,barcodeHits:kCache.barcodeHits||0,updatedAt:kCache.updatedAt||0},barcodeBrain:db.assistantBrain?.barcodeBrain||null,errorLearning:{corrections:(db.assistantBrain?.errorLearning?.corrections||[]).length,patterns:Object.keys(db.assistantBrain?.errorLearning?.patterns||{}).length,updatedAt:db.assistantBrain?.errorLearning?.updatedAt||0},learningAudit:(db.assistantBrain.learningAudit||[]).slice(0,15),generatedAt:Date.now()};
+  return {ok:true,version:'V28.36',status,ready:status==='ready',brain,checks,teacherActive:teacherUsable,teacherConfigured:keyDiag.configured,teacherMessage:teacherMsg,openAiDiagnostics:keyDiag,lastOpenAiRuntime:lastOpenAiRuntimeV2836,dbMode,databaseConnected:dbMode!=='file',memoryReady:dbMode!=='file',globalProductMemory:gpm,knowledgeCache:{entries:Object.keys(kCache.entries||{}).length,hits:kCache.hits||0,barcodeHits:kCache.barcodeHits||0,updatedAt:kCache.updatedAt||0},barcodeBrain:db.assistantBrain?.barcodeBrain||null,errorLearning:{corrections:(db.assistantBrain?.errorLearning?.corrections||[]).length,patterns:Object.keys(db.assistantBrain?.errorLearning?.patterns||{}).length,updatedAt:db.assistantBrain?.errorLearning?.updatedAt||0},learningAudit:(db.assistantBrain.learningAudit||[]).slice(0,15),generatedAt:Date.now()};
 }
 
 const server = http.createServer(async (req,res)=>{
@@ -2769,6 +2891,11 @@ const server = http.createServer(async (req,res)=>{
       return send(res,200,{ok:true,type:'test-sync',message:'Test sync riuscito: server, auth e database scrivono correttamente',dbMode,databaseConnected:dbMode!=='file',memoryReady:dbMode!=='file',globalProductMemory:before,generatedAt:Date.now()});
     }
 
+    if((req.method === 'GET' || req.method === 'POST') && (pathName === '/api/ai/openai-check' || pathName === '/ai/openai-check')) {
+      const result=await openAiHealthCheckV2836();
+      return send(res, result.ok ? 200 : 200, Object.assign({type:'openai-check-v2836'}, result));
+    }
+
     if(req.method === 'GET' && (pathName === '/api/ai/preflight' || pathName === '/ai/preflight')) {
       return send(res, 200, preflightSnapshotV98());
     }
@@ -2781,14 +2908,18 @@ const server = http.createServer(async (req,res)=>{
       return send(res, 200, {
         ok:true,
         preflight:preflightSnapshotV98(),
-        connected: aiConnected(),
-        provider: aiConnected() ? 'openai' : 'local-fallback',
+        connected: openAiTeacherIsUsableV2836(),
+        provider: openAiTeacherIsUsableV2836() ? 'openai' : 'local-fallback',
         model: OPENAI_MODEL,
         visionModel: OPENAI_VISION_MODEL,
-        visionReady: aiConnected(),
-        teacherActive: aiConnected(),
-        teacherStatus: aiConnected() ? 'active' : 'inactive',
-        teacherMessage: aiConnected() ? 'Docente OpenAI attivo' : 'Docente OpenAI non attivo: OPENAI_API_KEY mancante o non valida',
+        modelFallbacks: OPENAI_MODEL_FALLBACKS,
+        visionReady: openAiTeacherIsUsableV2836(),
+        teacherActive: openAiTeacherIsUsableV2836(),
+        teacherConfigured: openAiKeyDiagnosticV2836().configured,
+        teacherStatus: openAiTeacherIsUsableV2836() ? 'active' : 'inactive',
+        teacherMessage: openAiTeacherMessageV2836(),
+        openAiDiagnostics: openAiKeyDiagnosticV2836(),
+        lastOpenAiRuntime: lastOpenAiRuntimeV2836,
         dbMode,
         databaseConnected: dbMode !== 'file',
         memoryReady: dbMode !== 'file',
@@ -2798,7 +2929,7 @@ const server = http.createServer(async (req,res)=>{
         twilioVerifyReady: TWILIO_VERIFY_ENABLED,
         smsFromNumberReady: SMS_ENABLED,
         whatsappReady: WHATSAPP_ENABLED,
-        note: aiConnected() ? 'AI Chat + Vision attive dal backend' : 'Manca OPENAI_API_KEY: usa motore locale e inserimento guidato foto'
+        note: openAiTeacherIsUsableV2836() ? 'AI Chat + Vision attive dal backend' : openAiTeacherMessageV2836()
       });
     }
 

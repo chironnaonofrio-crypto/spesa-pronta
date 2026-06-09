@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v28.34-preflight-bug-sweep';
+window.SPESA_PRONTA_VERSION='v28.36-openai-connection-guard';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -170,7 +170,7 @@ let captcha = newCaptcha();
 let syncTimer = null;
 let aiMemory = loadAiMemory();
 let aiRecognition = null;
-let liveScanStream = null, liveScanTimer = null, liveScanBusy = false, liveScanActive = false, liveScanStableCount = 0, liveScanLastHint = '', liveScanLastMetrics = null, liveScanPrevSample = null, liveScanLastSpeechKey='', liveScanLastSpeechAt=0, liveScanSpeechEnabled=true, scannerMicEnabled=true, scannerMicListening=false, scannerMicRecognition=null, scannerMicShouldRestart=false, scannerMicCurrentResultId='', scannerMicStep='', scannerMicLastPrompt='', liveScanReadySince=0, liveScanCooldownUntil=0, liveScanPendingResult=false, liveScanAwaitNextOk=false, liveScanLastAcceptedSig='', liveScanLastAcceptedName='', liveScanNeedObjectChange=false, liveScanSameObjectWarnings=0, scannerMicEchoBlockUntil=0, liveScanCaptureLockUntil=0, scannerMicPausedBySpeech=false, scannerMicSpeechPauseToken=0;
+let liveScanStream = null, liveScanTimer = null, liveScanBusy = false, liveScanActive = false, liveScanStableCount = 0, liveScanLastHint = '', liveScanLastMetrics = null, liveScanPrevSample = null, liveScanLastSpeechKey='', liveScanLastSpeechAt=0, liveScanSpeechEnabled=true, scannerMicEnabled=false, scannerMicListening=false, scannerMicRecognition=null, scannerMicShouldRestart=false, scannerMicCurrentResultId='', scannerMicStep='', scannerMicLastPrompt='', liveScanReadySince=0, liveScanCooldownUntil=0, liveScanPendingResult=false, liveScanAwaitNextOk=false, liveScanLastAcceptedSig='', liveScanLastAcceptedName='', liveScanNeedObjectChange=false, liveScanSameObjectWarnings=0, scannerMicEchoBlockUntil=0, liveScanCaptureLockUntil=0, scannerMicPausedBySpeech=false, scannerMicSpeechPauseToken=0;
 let aiListening = false;
 let accountPendingAction = null;
 
@@ -1787,13 +1787,17 @@ async function getVisionBackendStatus(force=false){
 }
 function visionStatusLabel(st){
   if(st?.connected && st?.visionReady) return `Docente OpenAI attivo (${st.visionModel||st.model||'Vision'})`;
+  if(st?.teacherConfigured && st?.reachable!==false) return st?.teacherMessage || 'Docente OpenAI configurato: fai Test OpenAI in Diagnosi AI';
+  if(st?.openAiDiagnostics?.reason==='missing_openai_api_key') return 'Docente OpenAI non attivo: OPENAI_API_KEY mancante su Render/server';
+  if(st?.openAiDiagnostics?.reason==='placeholder_or_invalid_key_value') return 'Docente OpenAI non attivo: chiave placeholder o non valida';
+  if(st?.lastOpenAiRuntime?.message) return 'Docente OpenAI non attivo: '+st.lastOpenAiRuntime.message;
   if(st?.reachable) return 'Docente OpenAI non attivo: chiave API mancante o non valida';
   return 'Docente OpenAI non attivo: server AI non raggiungibile';
 }
 async function updateAiBackendStatus(){
   const el=$('#aiStatusText'); if(!el) return;
   const data=await getVisionBackendStatus(true);
-  el.textContent = data.connected && data.visionReady ? `Docente OpenAI attivo: chat + Vision AI attive (${data.visionModel||data.model}).` : `${visionStatusLabel(data)}. Il riconoscimento foto userà la visione locale prudente e chiederà conferma.`;
+  el.textContent = data.connected && data.visionReady ? `Docente OpenAI attivo: chat + Vision AI attive (${data.visionModel||data.model}).` : `${visionStatusLabel(data)}. Il riconoscimento foto userà server/memoria/local-first e chiederà conferma.`;
 }
 function closeAiPanel(){ $('#aiPanel').classList.add('hidden'); }
 function addAiMessage(role,text){
@@ -1896,7 +1900,7 @@ function setMicToggleUi(){
   btn.classList.toggle('active', !!scannerMicEnabled);
   btn.classList.toggle('listening', !!scannerMicListening);
   btn.classList.toggle('paused', !!scannerMicPausedBySpeech);
-  btn.textContent=!scannerMicEnabled ? 'Mic off' : (scannerMicPausedBySpeech ? 'Mic in pausa' : (scannerMicListening ? 'Mic in ascolto' : 'Mic attivo'));
+  btn.textContent=!scannerMicEnabled ? 'Microfono off' : (scannerMicPausedBySpeech ? 'Microfono in pausa' : (scannerMicListening ? 'Microfono in ascolto' : 'Microfono attivo'));
 }
 function getActiveScannerResult(){
   const current=scannerMicCurrentResultId ? document.getElementById(scannerMicCurrentResultId) : null;
@@ -2474,12 +2478,14 @@ function setScanVoiceHelper(el, text, mode='live'){
   box.className=`scan-voice-helper ${mode}`;
   box.innerHTML=`<span class="dot"></span><div><strong>Assistente live</strong><br>${esc(text)}</div>`;
 }
-const BAD_SCAN_NAMES = new Set(['sto','ok','okay','si','sì','no','conferma','confermo','prodotto','articolo','manual','live','manual live','auto live','foto','scatta','scatto','questo','questa','va bene']);
+const BAD_SCAN_NAMES = new Set(['sto','ok','okay','si','sì','no','conferma','confermo','prodotto','articolo','manual','live','manual live','auto live','foto','scatta','scatto','questo','questa','va bene','salta','salta ora','salta per ora','skip','dopo','continua dopo','non so','non lo so','nessuno','nessuna','boh','avanti','procedi']);
 function isBadScanName(value=''){
   const n=normalizeText(String(value||'').trim()).replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
   if(!n || n.length<3) return true;
   if(BAD_SCAN_NAMES.has(n)) return true;
-  if(/^(manual|auto|live|scanner|capture|photo|foto|image|img|sto|ok|si|no)$/.test(n)) return true;
+  if(/^(manual|auto|live|scanner|capture|photo|foto|image|img|sto|ok|si|no|salta|skip|dopo|procedi|avanti)$/.test(n)) return true;
+  if(/^(salta|skip|dopo|continua dopo|non so|non lo so|nessuno|nessuna|boh)(\s+ora|\s+per ora)?$/.test(n)) return true;
+  if(/^(attiva|disattiva|ferma|riattiva)\s+(microfono|mic|voce)$/.test(n)) return true;
   if(/^\d+$/.test(n)) return true;
   return false;
 }
@@ -2627,8 +2633,12 @@ function syncScanResultFromFields(el, result={}){
   const cat=read('[data-scan-cat]');
   const damage=read('[data-scan-damage]');
   const trustedFromEvidence = result.labelScanMerged ? deriveTrustedLabelFields(result) : {};
-  if(name && !/^es\./i.test(name)) result.productName=name;
-  if(brand) result.brand=brand;
+  if(name && !/^es\./i.test(name) && !isBadScanName(name)) result.productName=name;
+  else if(name && isBadScanName(name) && el.dataset.userNameEdited!=='1'){
+    const field=el.querySelector('[data-scan-name]'); if(field) field.value='';
+    if(isBadScanName(result.productName||'')) result.productName='';
+  }
+  if(brand && !isBadScanName(brand)) result.brand=brand;
   if(size) result.estimatedSize=size;
   if(hasStrongCurrentLabelEvidence(result)){
     if(el.dataset.userNameEdited!=='1' && trustedFromEvidence.productName && trustedFieldConflict(name, trustedFromEvidence.productName)) result.productName=trustedFromEvidence.productName;
@@ -2661,10 +2671,12 @@ function refreshScanResultCard(el, result={}){
 }
 function parseNameFromSpeech(raw=''){
   let s=String(raw||'').trim();
+  if(isBadScanName(s)) return '';
   const correction=s.match(/(?:non\s+(?:e|è)\s+.+?\s+(?:e|è)|ma\s+(?:e|è)|invece\s+(?:e|è)|correggi\s+(?:in|con)|metti\s+nome|cambia\s+in)\s+(.+)$/i);
   if(correction) s=correction[1].trim();
   s=s.replace(/^(no[, ]*)?(non e|non è|e|è|si chiama|nome|prodotto|correggi il nome in|correggi nome in|metti nome|metti)\s+/i,'').replace(/^(di marca)\s+/i,'').trim();
   s=s.replace(/\b(con|marca|brand|quantita|quantità|scadenza|categoria)\b.*$/i,'').trim();
+  if(isBadScanName(s)) return '';
   return s;
 }
 function parseBrandFromSpeech(raw=''){
@@ -2795,6 +2807,14 @@ function applyScannerMicAnswer(el, result={}, raw=''){
   }
 
   if(explicitName){
+    if(/^(salta|skip|dopo|continua dopo|non so|non lo so|nessuno|nessuna|boh)(\s+ora|\s+per ora)?$/.test(norm)){
+      el.dataset.voiceNameDone='1';
+      const field=el.querySelector('[data-scan-name]'); if(field && !el.dataset.userNameEdited) field.value='';
+      if(isBadScanName(result.productName||'')) result.productName='';
+      setScanVoiceHelper(el,'Nome lasciato da compilare: non salvo comandi vocali come nome prodotto.', 'warn');
+      refreshScanResultCard(el,result);
+      return true;
+    }
     const cleaned=parseNameFromSpeech(raw);
     if(cleaned && !isBadScanName(cleaned)){
       setScanFieldFromVoice(el,'[data-scan-name]', cleaned);
@@ -3534,20 +3554,26 @@ function scheduleCategoryInternetAssist(el,result={}){
 
 function teacherInactiveMessage(statusOrError=null){
   const st=statusOrError?.visionError || statusOrError || visionBackendStatus || {};
-  const detail=String(st.detail||st.error||st.message||'').toLowerCase();
-  if(st.connected===false && st.reachable===true) return 'Docente OpenAI non attivo: chiave API mancante o non valida sul server.';
-  if(detail.includes('missing_openai_key')) return 'Docente OpenAI non attivo: chiave API mancante sul server.';
+  const detail=String(st.detail||st.error||st.message||st.cloudError||st.cloudErrorMessage||'').toLowerCase();
+  if(st.openAiDiagnostics?.reason==='missing_openai_api_key' || detail.includes('missing_openai_api_key') || detail.includes('missing_openai_key')) return 'Docente OpenAI non attivo: OPENAI_API_KEY mancante sul server.';
+  if(st.lastOpenAiRuntime?.message) return 'Docente OpenAI non attivo: '+st.lastOpenAiRuntime.message;
+  if(st.connected===false && st.reachable===true) return 'Docente OpenAI non attivo: chiave API mancante/non valida o modello non disponibile.';
+  if(detail.includes('invalid_openai_api_key')) return 'Docente OpenAI non attivo: chiave OpenAI non valida.';
+  if(detail.includes('openai_model_unavailable')) return 'Docente OpenAI non attivo: modello non disponibile per questa chiave.';
   if(detail.includes('cloud_vision_not_ready')) return 'Docente OpenAI non attivo: server raggiunto ma Vision non pronta.';
   if(detail.includes('cloud_vision_unreachable') || st.reachable===false) return 'Docente OpenAI non attivo: server AI non raggiungibile.';
-  return 'Docente OpenAI non attivo: uso visione locale prudente.';
+  return 'Docente OpenAI non attivo: uso visione server/local-first prudente.';
 }
 function markTeacherInactive(result={}, statusOrError=null){
   const msg=teacherInactiveMessage(statusOrError);
+  // V28.35: OpenAI non disponibile non deve bloccare o contaminare la scheda utente.
+  // Lo teniamo come diagnostica interna, ma la UI continua in modalità server/local-first.
   return Object.assign({}, result||{}, {
-    teacherInactive:true,
+    teacherInactive:false,
+    teacherUnavailable:true,
     teacherInactiveReason:msg,
     cloudVision:false,
-    cloudOffline:true,
+    cloudOffline:false,
     cloudFallback:true,
     cloudError:''
   });
@@ -3577,10 +3603,15 @@ async function analyzeGroceryDataUrl(dataUrl,fileName='photo.jpg', visualSignatu
     if(result && result.cloudVision) distillCloudTeacherSample(dataUrl,result);
     const cloudActuallyFailed = !result || result.cloudError || result.cloudOffline;
     if(cloudActuallyFailed){
-      result=localPre || await guessScanFallback(fileName,dataUrl,result);
+      const usableLocalPre = localPre && (!isBadScanName(localPre.productName||'') || Number(localPre.confidence||0)>=.5 || localPre.localVision || localPre.autonomousVision);
+      result=usableLocalPre ? localPre : await guessScanFallback(fileName,dataUrl,result);
       result.cloudFallback=true;
-      result.cloudError = result.cloudError || visionError?.visionError?.error || visionError?.message || result.cloudError || '';
-      if(result.cloudError && !result.reason) result.reason='Cloud OpenAI chiamata ma risposta non utilizzabile: '+String(result.cloudError).slice(0,120);
+      result.teacherInactive=false;
+      result.teacherUnavailable=!!(visionError || result?.cloudError || result?.cloudOffline);
+      result.teacherInactiveReason=teacherInactiveMessage(visionError || result || visionBackendStatus);
+      result.cloudOffline=false;
+      result.cloudError='';
+      if(!result.reason || /Cloud OpenAI|Failed to fetch|cloud_|risposta non valida|Docente OpenAI/i.test(String(result.reason||''))) result.reason='Analisi server/local-first completata: controlla i dati e conferma.';
     } else {
       result.cloudVision=true; result.cloudOffline=false; result.cloudFallback=false;
     }
@@ -3657,10 +3688,11 @@ async function guessProductFromImage(dataUrl=''){
     // Regola principale: se il rosso è soprattutto nello sfondo e NON sul prodotto centrale, non chiamarlo Coca-Cola.
     // Per Coca-Cola serve rosso forte nel centro/etichetta + zona scura da label, non solo tovaglia rossa dietro.
     const redLikelyBackground = rr>.06 && centerRed < rr*.48 && labelRed < .055;
-    const waterLike = (verticalShape && centerRatio>.38 && (centerClear>.20 || centerWhite>.14 || centerBlue>.05 || br>.08 || wr>.18 || cr>.22)) || (centerWhite>.18 && labelBlue>.025 && centerRed<.07);
+    const bottleLikeVisual = verticalShape && centerRatio>.22 && centerDark<.66 && centerRed<.11 && labelRed<.09 && (centerClear>.10 || centerWhite>.08 || centerBlue>.018 || br>.035 || wr>.08 || cr>.13 || (labelWhite>.06 && labelBlue>.012));
+    const waterLike = bottleLikeVisual || (verticalShape && centerRatio>.34 && (centerClear>.16 || centerWhite>.10 || centerBlue>.035 || br>.055 || wr>.12 || cr>.16)) || (centerWhite>.12 && labelBlue>.016 && centerRed<.09);
     const cokeLike = !redLikelyBackground && centerRed>.11 && labelRed>.08 && (labelDark>.08 || centerDark>.12);
 
-    if(waterLike) return {needsManual:true, productName:'Acqua in bottiglia', brand:'', estimatedSize:'Capienza da confermare', sizeConfidence:.25, detailQuestion:'Non leggo la capienza: dimmi 2 litri, 1,5 litri o 500 ml.', quantity:1, unit:'bt', category:'drinks', confidence:.58, productPlaceholder:'Acqua in bottiglia', isLiquid:true, localVision:true, reason:'Riconoscimento locale prudente: sembra una bottiglia d’acqua. Conferma marca e capienza.'};
+    if(waterLike && !cokeLike) return {needsManual:true, productName:'Acqua in bottiglia', brand:'', estimatedSize:'Capienza da confermare', sizeConfidence:.35, detailQuestion:'Non leggo la capienza: dimmi 2 litri, 1,5 litri o 500 ml.', quantity:1, unit:'bt', category:'water', confidence:.66, productPlaceholder:'Acqua in bottiglia', isLiquid:true, localVision:true, reason:'Riconoscimento locale prudente: prodotto centrale simile a bottiglia d’acqua. Conferma marca e capienza.'};
     if(cokeLike) return {needsManual:true, productName:'Bibita tipo cola', brand:'', quantity:1, unit:'bt', category:'soft_drinks', confidence:.52, productPlaceholder:'Bibita tipo cola', isLiquid:true, localVision:true, reason:'Riconoscimento locale prudente: potrebbe essere una bibita tipo cola, ma conferma nome e marca.'};
     if(centerWhite>.32 && centerRed<.04 && centerDark<.38) return {needsManual:true, productName:'Latte', brand:'', quantity:1, unit:'pz', category:'drinks', confidence:.46, productPlaceholder:'Latte', isLiquid:true, localVision:true, reason:'Riconoscimento locale prudente: sembra latte. Controlla quantità e conferma.'};
     if(ratio(center,'green')>.16 && centerRed<.05) return {needsManual:true, productName:'Verdura', quantity:1, unit:'pz', category:'veg', confidence:.38, productPlaceholder:'Nome prodotto', localVision:true, reason:'Riconoscimento locale incerto: sembra verdura. Controlla nome e quantità.'};
@@ -3692,7 +3724,7 @@ const VISION_COMPETENCE_CORE={
     {rx:/(?:^|\b)(1|1[,.]0)\s*(?:l|lt|litri|litro)\b/i, value:'1 L'},
     {rx:/(?:^|\b)(500|0[,.]5)\s*(?:ml|milli|l|lt)\b/i, value:'500 ml'}
   ],
-  junkNames:['sto','ok','si','sì','no','conferma','prodotto','manual live','auto live','live','foto','scatta','scanner'],
+  junkNames:['sto','ok','si','sì','no','conferma','prodotto','manual live','auto live','live','foto','scatta','scanner','salta','salta ora','skip','non so','nessuna','nessuno','avanti','procedi'],
   categories:{
     water:['acqua','water','naturale','frizzante','oligominerale','vera','levissima','sant anna','san benedetto','lete','ferrarelle','rocchetta'],
     milk:['latte','milk','uht','parzialmente scremato','intero'],
@@ -4339,6 +4371,8 @@ async function improveVisionWithLocalLearning(dataUrl='', result={}){
 
 async function guessScanFallback(fileName='',dataUrl='',previous=null){
   const cleanPrev=Object.assign({}, previous||{});
+  if(isBadScanName(cleanPrev.productName||'')) cleanPrev.productName='';
+  if(isBadScanName(cleanPrev.brand||'')) cleanPrev.brand='';
   // V28.32: se il server/OpenAI non risponde, non lasciare la scheda bloccata o marcata
   // come "docente non attivo" quando stiamo comunque producendo una scheda locale compilabile.
   delete cleanPrev.teacherInactive; delete cleanPrev.teacherInactiveReason;
@@ -4979,7 +5013,7 @@ function guidedMarkCardConfirmed(el){
 // =============================================================
 // V27.98 Preflight Stability Check - UI, diagnostics and sync guards
 // =============================================================
-window.SPESA_PRONTA_VERSION='v28.34-preflight-bug-sweep';
+window.SPESA_PRONTA_VERSION='v28.36-openai-connection-guard';
 window.SPESA_PRONTA_BUILD={version:'V27.98',brain:'Ultra Error Reduction Core + Preflight Stability Check',categoryEngine:'ultra_error_reduction_core_v27_97',preflight:'v27_98'};
 function v2798Now(){ return Date.now(); }
 function v2798SafeText(v){ return String(v==null?'':v); }
@@ -5825,7 +5859,7 @@ try{
 
 
 // V28.21 Language Cloud Pro
-window.SPESA_PRONTA_VERSION='v28.34-preflight-bug-sweep';
+window.SPESA_PRONTA_VERSION='v28.36-openai-connection-guard';
 
 
 // =============================================================
@@ -6313,14 +6347,56 @@ try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, 
 
 
 // =============================================================
-// V28.34 PREFLIGHT BUG SWEEP
+// V28.36 PREFLIGHT BUG SWEEP
 // Pre-upload audit: fixed regex word-boundary control chars, refreshed cache/version,
 // and exposes a visible diagnostic marker for debug.html.
 // =============================================================
 (function(){
   try{
-    window.SPESA_PRONTA_VERSION='v28.34-preflight-bug-sweep';
-    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.34', preflightBugSweep:'regex_boundary_cache_runtime_marker'});
-    if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('preflight-bug-sweep-v2834-ready',{regexBoundaryFixed:true,cache:'v2834',loadedScript:'app.v27-48-premium-mega-vision'}),900);
+    window.SPESA_PRONTA_VERSION='v28.36-openai-connection-guard';
+    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.36', preflightBugSweep:'regex_boundary_cache_runtime_marker'});
+    if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('openai-connection-guard-v2836-ready',{regexBoundaryFixed:true,cache:'v2836',loadedScript:'app.v27-48-premium-mega-vision'}),900);
+  }catch(_){ }
+})();
+
+
+// V28.36 - Diagnosi OpenAI reale: verifica chiave server + modello + endpoint Responses.
+(function(){
+  try{
+    window.SPESA_PRONTA_VERSION='v28.36-openai-connection-guard';
+    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.36', openAiConnectionGuard:'server_key_aliases_real_healthcheck_model_fallback'});
+    function endpointV2836(path){ const base=((window.settings&&settings.apiEndpoint)||'/api').replace(/\/$/,''); return base+path; }
+    async function runOpenAiCheckV2836(){
+      const btn=document.querySelector('[data-openai-check-v2836]');
+      const old=btn?btn.textContent:'';
+      try{
+        if(btn){ btn.disabled=true; btn.textContent='Test OpenAI…'; }
+        const res=await fetch(endpointV2836('/ai/openai-check'),{method:'GET',cache:'no-store'});
+        const data=await res.json().catch(()=>({ok:false,message:'Risposta non JSON dal server'}));
+        if(typeof window.logAiDiagnosticV98==='function') window.logAiDiagnosticV98('openai-check-v2836', data);
+        const msg=data.ok
+          ? `OpenAI attivo ✅\nModello: ${data.model||data.visionModel||'Vision'}\nChiave: ${data.diagnostics?.maskedKey||'server'}`
+          : `OpenAI NON attivo ⚠️\nMotivo: ${data.message||data.status||'errore sconosciuto'}\nEnv: ${data.diagnostics?.expectedEnv||'OPENAI_API_KEY'}\nFonte trovata: ${data.diagnostics?.source||'nessuna'}`;
+        alert(msg);
+        if(typeof window.refreshPreflightV98==='function') setTimeout(()=>window.refreshPreflightV98(),400);
+      }catch(err){
+        alert('Test OpenAI fallito: server non raggiunto o endpoint mancante. '+(err?.message||err));
+      }finally{ if(btn){ btn.disabled=false; btn.textContent=old||'Test OpenAI'; } }
+    }
+    window.runOpenAiCheckV2836=runOpenAiCheckV2836;
+    function installOpenAiCheckButtonV2836(){
+      const actions=document.querySelector('#preflightPanelV98 .preflight-actions-v98');
+      if(!actions || actions.querySelector('[data-openai-check-v2836]')) return;
+      const b=document.createElement('button');
+      b.type='button';
+      b.className='preflight-mini-btn-v98 primary';
+      b.setAttribute('data-openai-check-v2836','1');
+      b.textContent='Test OpenAI';
+      b.addEventListener('click', runOpenAiCheckV2836);
+      actions.insertBefore(b, actions.firstChild);
+    }
+    document.addEventListener('DOMContentLoaded',()=>setTimeout(installOpenAiCheckButtonV2836,900));
+    setInterval(installOpenAiCheckButtonV2836,2500);
+    if(typeof window.logAiDiagnosticV98==='function') setTimeout(()=>window.logAiDiagnosticV98('openai-connection-guard-v2836-ready',{endpoint:'/api/ai/openai-check',aliases:['OPENAI_API_KEY','OPENAI_KEY','OPENAI_SECRET_KEY','OPENAI_TOKEN']}),1200);
   }catch(_){ }
 })();
