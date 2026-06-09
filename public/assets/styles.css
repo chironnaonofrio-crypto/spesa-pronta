@@ -1785,3 +1785,85 @@ body{color-scheme:light;}
 .preflight-pill-v98 [data-pf-global]{font-weight:1000;color:#0b2b55}
 .ai-diagnostics-v98{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace!important;font-size:.78rem!important;max-height:320px!important}
 @media(max-width:560px){.preflight-actions-v98{grid-template-columns:1fr 1fr!important}.preflight-actions-v98 .preflight-mini-btn-v98{min-height:48px!important}}
+
+
+/* V28.10 - UI pill cleanup: rimuove mezze sfere bianche e immagini tagliate */
+.scanner-actions-showcase .action-pill-card::before,
+.scanner-actions-showcase .action-pill-card::after,
+.scanner-secondary-actions .secondary-pill-bg::before,
+.scanner-secondary-actions .secondary-pill-bg::after{
+  content:none!important;
+  display:none!important;
+  background:none!important;
+  border:0!important;
+  box-shadow:none!important;
+}
+.scanner-actions-showcase .action-pill-card,
+.scanner-secondary-actions .secondary-pill-bg{
+  overflow:hidden!important;
+  background:#eef6ff!important;
+  border:1px solid rgba(13,110,253,.16)!important;
+  box-shadow:0 14px 30px rgba(12,45,94,.07)!important;
+}
+.scanner-actions-showcase .action-pill-card .action-pill-visual,
+.scanner-secondary-actions .secondary-pill-visual{
+  position:absolute!important;
+  inset:0!important;
+  width:100%!important;
+  height:100%!important;
+  border-radius:inherit!important;
+  overflow:hidden!important;
+  background:#eef6ff!important;
+  opacity:.58!important;
+}
+.scanner-actions-showcase .action-pill-card .action-pill-visual img,
+.scanner-secondary-actions .secondary-pill-visual img{
+  width:100%!important;
+  height:100%!important;
+  display:block!important;
+  object-fit:cover!important;
+  object-position:center!important;
+  transform:none!important;
+  filter:saturate(1.04) contrast(1.02)!important;
+}
+.scanner-actions-showcase .action-pill-card .action-pill-title,
+.scanner-secondary-actions .secondary-pill-title{
+  position:relative!important;
+  z-index:3!important;
+  width:100%!important;
+  max-width:100%!important;
+  display:flex!important;
+  justify-content:center!important;
+  align-items:center!important;
+  text-align:center!important;
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+  padding:0!important;
+  color:#123a73!important;
+  text-shadow:0 2px 9px rgba(255,255,255,.98),0 0 2px rgba(255,255,255,.98)!important;
+}
+.scanner-secondary-actions .secondary-pill-verify .secondary-pill-title{
+  color:#8a5d00!important;
+  text-shadow:0 2px 9px rgba(255,248,226,.98),0 0 2px rgba(255,255,255,.98)!important;
+}
+.scanner-title-block > #scannerSeedBrainProof .seed-proof-visual-wrap,
+.scanner-card-premium .scanner-seed-proof .seed-proof-visual-wrap{
+  overflow:hidden!important;
+  background:#06142d!important;
+  border:1px solid rgba(13,110,253,.16)!important;
+}
+.scanner-title-block > #scannerSeedBrainProof .seed-proof-visual,
+.scanner-card-premium .scanner-seed-proof .seed-proof-visual{
+  width:100%!important;
+  height:100%!important;
+  object-fit:cover!important;
+  object-position:center!important;
+  background:#06142d!important;
+  transform:none!important;
+}
+@media(max-width:640px){
+  .scanner-actions-showcase .action-pill-card{min-height:96px!important;}
+  .scanner-secondary-actions .secondary-pill-bg{min-height:70px!important;}
+  .scanner-title-block > #scannerSeedBrainProof .seed-proof-visual-wrap{height:82px!important;}
+}
