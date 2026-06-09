@@ -2655,7 +2655,7 @@ async function aiAnswer(text){
   if(q.includes('dimentica tutto') || q.includes('cancella memoria')){ aiMemory=defaultAiMemory(); saveAiMemory(); return 'Ok, ho cancellato la memoria locale dell’assistente.'; }
   if(q.includes('fotografa') || q.includes('foto spesa') || q.includes('scanner') || q.includes('modalita frigo')){ openGroceryScanner(false); return 'Perfetto, ho aperto la modalità foto spesa. Fotografa un articolo alla volta: se non vedo bene ti chiedo di rifarla.'; }
   if(q.includes('cosa devo comprare') || q.includes('lista della spesa') || q.includes('che manca') || q.includes('cosa manca')) return listBuyText();
-  if(q.includes('ho fatto la spesa') || q.includes('spesa fatta')){ openGroceryScanner(true); return 'Perfetto. Prima di chiudere la spesa completa il controllo con foto: scansiona un articolo alla volta e conferma i dati prima di salvare.'; }
+  if(q.includes('ho fatto la spesa') || q.includes('spesa fatta')){ openGroceryScanner(true); return 'Perfetto. Prima di chiudere la spesa completa il controllo con foto: scatta un articolo alla volta e conferma tutto solo alla fine.'; }
   m=q.match(/siamo\s+(\d+)\s+persone|(?:metti|imposta|aggiorna).*?(\d+)\s+persone/);
   if(m){ settings.people=Number(m[1]||m[2]); saveAll(); render(); return `Ok, ho aggiornato il profilo: ${settings.people} persone in casa. Ora ricalcolo acqua, alimenti e scorte.`; }
   m=q.match(/(?:ho|abbiamo|siamo).*?(\d+)\s+(?:animali|cani|gatti)|(?:metti|imposta|aggiorna).*?(\d+)\s+(?:animali|cani|gatti)/);
