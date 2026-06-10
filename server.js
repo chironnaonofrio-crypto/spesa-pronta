@@ -675,10 +675,11 @@ function upsertGlobalProductMemory(confirmed={}){
   const tokenSource=[name,brand,size,confirmed.category,(confirmed.visibleEvidence||[]).join(' '),(confirmed.detectedText||[]).join(' '),old.ingredients.join(' ')].join(' ');
   old.evidenceTokens=[...new Set([...(old.evidenceTokens||[]), ...productCoreTokens(tokenSource)])].slice(0,60);
   try{ v2842MergeObjectFolder(old, confirmed); v2842ApplyOwnerOverrides(old); }catch(e){ updateGlobalLearningAudit({type:'object-folder-error', key:old.key||key, reason:String(e?.message||e).slice(0,180)}); }
-  const c=Number(confirmed.confidence||0);
+  const userConfirmedV2858=!!(confirmed.userConfirmed||confirmed.confirmedAt);
+  const c=Math.max(Number(confirmed.confidence||0), userConfirmedV2858 ? 0.74 : 0);
   if(c>0) old.confidence=Number((((Number(old.confidence||0)*(old.confirmations-1))+c)/old.confirmations).toFixed(3));
   const uniqueHouseholds=Object.keys(old.households||{}).length;
-  old.reliability=(old.confirmations>=6 || uniqueHouseholds>=3)?'alta':(old.confirmations>=2 || uniqueHouseholds>=2)?'media':'bassa';
+  old.reliability=(old.confirmations>=6 || uniqueHouseholds>=3)?'alta':(old.confirmations>=1 || uniqueHouseholds>=1)?'media':'bassa';
   updateFieldConfidence(old);
   try{ v2842ApplyOwnerOverrides(old); }catch(_){}
   old.learningQuality={
@@ -5761,3 +5762,81 @@ try{
   }catch(_){ }
   console.log('[Spesa Pronta] V28.57 PRO Expiry Mission Lock active');
 })();
+
+
+// =============================================================
+// V28.58 PRO Server Memory Recognition
+// Una conferma utente reale deve già diventare memoria positiva utilizzabile.
+// La memoria propone solo se ha identità concreta: barcode, nome/marca o token forti.
+// =============================================================
+try{
+  const __prevMatchGlobalProductMemoryV2858 = matchGlobalProductMemory;
+  function v2858MatchBlob(r={}){
+    const card=r.memoryCard||{};
+    const id=card.identity||{};
+    const va=card.visualAppearance||{};
+    return normalizeVisionText([
+      r.productName,r.brand,r.format,r.category,r.unit,(r.aliases||[]).join(' '),(r.brands||[]).join(' '),(r.barcodes||[]).join(' '),
+      id.productName,id.brand,id.format,(id.aliases||[]).join(' '),(id.brands||[]).join(' '),
+      r.visualSignature,va.visualSignature,r.packaging,r.packageType,r.productType,va.productType,va.packageType,
+      (r.evidenceTokens||[]).join(' '),(r.visibleEvidence||[]).join(' '),(r.detectedText||[]).join(' '),(r.colors||[]).join(' '),
+      (r.objectFolder?.visualSignatures||[]).map(x=>x.signature||x).join(' ')
+    ].filter(Boolean).join(' '));
+  }
+  function v2858ConcreteTokens(text=''){
+    const stop=new Set(['prodotto','articolo','confezione','bottiglia','flacone','barattolo','vasetto','plastica','vetro','etichetta','tappo','verde','rosso','blu','bianco','nero','giallo','chiaro','scuro','trasparente','grande','piccolo','formato','categoria','marca','campo','manuale','scadenza','ingredienti','allergeni','tracce']);
+    return [...new Set(normalizeVisionText(text).split(/\s+/).filter(t=>t.length>=3 && !stop.has(t) && !/^\d+$/.test(t)))];
+  }
+  matchGlobalProductMemory=function(query={}){
+    const base=__prevMatchGlobalProductMemoryV2858(query);
+    if(base?.product) return base;
+    ensureDbShape();
+    const barcode=bestBarcodeFromConfirmed(query)||String(query.barcode||query.ean||query.code||query.productCode||'').replace(/\D+/g,'');
+    const qText=normalizeVisionText([
+      query.productName,query.brand,query.size,query.format,query.category,query.visualSignature,
+      ...(Array.isArray(query.detectedText)?query.detectedText:[query.detectedText||'']),
+      ...(Array.isArray(query.visibleEvidence)?query.visibleEvidence:[query.visibleEvidence||'']),
+      ...(Array.isArray(query.colors)?query.colors:[])
+    ].filter(Boolean).join(' '));
+    if(!barcode && qText.length<3) return null;
+    const qName=normalizeVisionText(query.productName||'');
+    const qBrand=normalizeVisionText(query.brand||'');
+    const qTokens=v2858ConcreteTokens(qText);
+    const products=Object.values(db.assistantBrain?.globalProductMemory?.products||{});
+    let best=null;
+    for(const p of products){
+      const confirmations=Number(p.confirmations||0);
+      if(confirmations<1 && p.reliability!=='media' && p.reliability!=='alta') continue;
+      const bc=[p.barcode,(p.barcodes||[]).join(' '),p.memoryCard?.barcode,(p.memoryCard?.barcodes||[]).join(' ')].join(' ').replace(/\D+/g,' ');
+      if(barcode && bc.includes(barcode)){
+        const score=9.9+Math.min(1,confirmations/10);
+        if(!best || score>best.score) best={score, product:Object.assign(compactGlobalProductRecord(p),{matchReason:'barcode_exact_memory_v2858', matchedTokens:[barcode], strongJaccard:1, confirmations})};
+        continue;
+      }
+      const blob=v2858MatchBlob(p);
+      const pTokens=v2858ConcreteTokens(blob);
+      const overlap=qTokens.filter(t=>pTokens.includes(t));
+      const j=tokenJaccard(qTokens,pTokens);
+      const pName=normalizeVisionText(p.productName||'');
+      const pBrand=normalizeVisionText(p.brand||'');
+      const nameMatch=!!(qName && pName && (pName.includes(qName)||qName.includes(pName)));
+      const brandMatch=!!(qBrand && pBrand && (pBrand.includes(qBrand)||qBrand.includes(pBrand)));
+      if(qBrand && pBrand && brandLooksConflicting(qBrand,pBrand)) continue;
+      const concrete=barcode || nameMatch || brandMatch || overlap.length>=2 || j>=0.38;
+      if(!concrete) continue;
+      const oneConfirmationStrict = confirmations<=1 && !(nameMatch || brandMatch || overlap.length>=2 || j>=0.44);
+      if(oneConfirmationStrict) continue;
+      let score=overlap.length*1.15 + j*4 + confirmations*.35;
+      if(nameMatch) score+=4.5;
+      if(brandMatch) score+=3.5;
+      if(p.reliability==='alta') score+=1.3; else if(p.reliability==='media') score+=.9;
+      if(score<2.2) continue;
+      if(!best || score>best.score) best={score, product:Object.assign(compactGlobalProductRecord(p),{matchReason:confirmations<=1?'one_user_confirmation_memory_v2858':'server_memory_v2858', matchedTokens:overlap.slice(0,10), strongJaccard:Number(j.toFixed(3)), confirmations})};
+    }
+    if(best){
+      try{ updateGlobalLearningAudit({type:'v2858-memory-match', productName:best.product.productName, brand:best.product.brand, score:Number(best.score.toFixed(3)), reason:best.product.matchReason, confirmations:best.product.confirmations}); }catch(_){ }
+    }
+    return best;
+  };
+  try{ const prevPreflightV2858=preflightSnapshotV98; preflightSnapshotV98=function(){ const s=prevPreflightV2858.call(this); s.version='V28.58'; s.brain=Object.assign({},s.brain||{},{oneConfirmationMemory:true, barcodeStep2:true, smartSummaryHidden:true}); return s; }; }catch(_){ }
+}catch(e){ console.warn('V28.58 server memory patch failed', e && e.message); }

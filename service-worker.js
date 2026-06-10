@@ -1,4 +1,4 @@
-const CACHE_NAME='spesa-pronta-v28-57-pro-expiry-mission-lock';
+const CACHE_NAME='spesa-pronta-v28-58-pro-flow-memory-fix';
 const ASSETS=['./','./index.html','./assets/styles.css?v=2857','./assets/app.v27-48-premium-mega-vision.js?v=2857','./assets/app.js?v=2857','./assets/vision-seed-memory.json','./clear-cache.html','./debug.html','./server-brain.html?v=2857'];
 self.addEventListener('install',event=>{self.skipWaiting();event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(ASSETS)).catch(()=>{}));});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))));self.clients.claim();});

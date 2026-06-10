@@ -8459,3 +8459,276 @@ try{ if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV9
     if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('v2857-expiry-mission-lock-ready',{dotMatrix:true, noProductLoop:true, expiryCollage:true}),1700);
   }catch(_){ }
 })();
+
+
+// =============================================================
+// V28.58 PRO Flow Fix + Memory After One Confirmation
+// - Barcode davvero STEP 2 anche nella voce
+// - Controlli scadenza solo nella scheda, non nel pannello guidato
+// - Riepilogo smart nascosto perché confonde su mobile
+// - Vision locale/server può usare già la prima conferma utente come memoria positiva
+// =============================================================
+(function(){
+  const V='V28.58';
+  const $q=(s,r=document)=>r.querySelector(s);
+  const $qa=(s,r=document)=>Array.from(r.querySelectorAll(s));
+  function styleOnce(){
+    if(document.getElementById('v2858-pro-flow-style')) return;
+    const st=document.createElement('style'); st.id='v2858-pro-flow-style';
+    st.textContent=`
+      /* V28.58: il riepilogo tecnico grande resta disponibile nei dati, ma nascosto dalla UI scanner. */
+      #scannerResults [data-scan-summary]{display:none!important;}
+      /* I pulsanti scadenza nel pannello guidato confondevano: restano solo sotto il campo scadenza nella scheda. */
+      #guidedScanPanel .guided-expiry-bar-v2855,
+      #guidedScanPanel [data-guided-confirm-expiry-v2855],
+      #guidedScanPanel [data-guided-skip-expiry-v2855],
+      #guidedScanPanel [data-guided-skip-expiry]{display:none!important;}
+      #guidedScanPanel{overflow:hidden;}
+      #guidedScanPanel .guided-scan-summary{border-radius:26px;background:linear-gradient(180deg,#fff,#f8fbff);box-shadow:0 10px 28px rgba(15,32,64,.06);}
+      #guidedScanPanel[data-step="barcode"] .guided-step-badge{background:linear-gradient(135deg,#0f7cff,#00b8ff);}
+      #liveScanGuides[data-aim-stage="barcode"] .aim-box{border-radius:18px!important;}
+      #liveScanGuides[data-aim-stage="expiry"] .aim-box{border-radius:16px!important;}
+      .scan-result[data-memory-prefilled-v2858="1"]{box-shadow:0 0 0 2px rgba(29,185,84,.18),0 18px 50px rgba(19,98,67,.13)!important;}
+      .scan-result[data-memory-prefilled-v2858="1"] [data-scan-voice-note]{background:linear-gradient(180deg,#ecfff5,#ffffff)!important;border-color:#bbf3d2!important;}
+    `;
+    document.head.appendChild(st);
+  }
+  styleOnce();
+  document.addEventListener('DOMContentLoaded',styleOnce);
+  const norm=(v)=>String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+  const getActive=()=>{ try{ const a=typeof getActiveScannerResult==='function'?getActiveScannerResult():null; if(a && !a.classList.contains('confirmed') && !a.classList.contains('bad')) return a; }catch(_){ } return $q('#scannerResults .scan-result:not(.confirmed):not(.bad)'); };
+  function rOf(el){ return el?._scanResult||{}; }
+  function val(el,sel){ return String(el?.querySelector?.(sel)?.value||'').trim(); }
+  function hasBarcode(el,r=rOf(el)){ const s=[r.barcode,r.ean,r.code,r.productCode,r.productMemory?.barcode,el?.dataset?.barcodeScanDone].filter(Boolean).join(' '); return /\d{8,14}/.test(s); }
+  function hasLabel(el,r=rOf(el)){ const n=val(el,'[data-scan-name]')||r.productName||''; const b=val(el,'[data-scan-brand]')||r.brand||''; const sz=val(el,'[data-scan-size]')||r.estimatedSize||r.size||''; return !!(r.labelScanMerged || (String(n).trim().length>2 && (String(b).trim().length>1 || String(sz).trim().length>0))); }
+  function hasExpiry(el,r=rOf(el)){ return !!(val(el,'[data-scan-expiry]') || r.expiryDate || el?.dataset?.voiceExpiryDone==='1' || el?.dataset?.expirySkipped==='1'); }
+  function cleanupGuidedV2858(){
+    styleOnce();
+    $qa('#guidedScanPanel .guided-expiry-bar-v2855').forEach(n=>n.remove());
+    $qa('#guidedScanPanel [data-guided-skip-expiry], #guidedScanPanel [data-guided-confirm-expiry-v2855], #guidedScanPanel [data-guided-skip-expiry-v2855]').forEach(n=>n.remove());
+    const p=$q('#guidedScanPanel');
+    if(p){
+      const step=p.dataset.step||'';
+      const missing=p.querySelector('[data-guided-missing]');
+      if(step==='product' && missing && /scadenza/i.test(missing.textContent||'')) missing.innerHTML='<span>Manca: Prodotto</span>';
+    }
+  }
+  setInterval(cleanupGuidedV2858,900);
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(cleanupGuidedV2858,350));
+
+  // STEP reale: Prodotto -> Barcode -> Etichetta -> Scadenza -> Conferma.
+  try{
+    window.guidedStepMeta=function(step){
+      const map={
+        product:{idx:1,total:5,kicker:'STEP 1/5',title:'Inquadra prodotto',desc:'Fai vedere il prodotto intero. Subito dopo passa al barcode/EAN: riconoscimento preciso, costo OpenAI zero.'},
+        barcode:{idx:2,total:5,kicker:'STEP 2/5',title:'Barcode / EAN',desc:'Ora inquadra solo il codice a barre. Se è valido, il server cerca su Open Facts e usa la memoria già confermata.'},
+        label:{idx:3,total:5,kicker:'STEP 3/5',title:'Etichetta',desc:'Inquadra la parte frontale/ingredienti solo per completare i campi mancanti.'},
+        expiry:{idx:4,total:5,kicker:'STEP 4/5',title:'Scadenza',desc:'Scansiona la data oppure compila il campo scadenza nella scheda prodotto.'},
+        confirm:{idx:5,total:5,kicker:'STEP 5/5',title:'Conferma articolo',desc:'Controlla i dati e conferma. Dopo la conferma il server impara e riusa la memoria.'},
+        done:{idx:5,total:5,kicker:'ARTICOLO OK',title:'Articolo confermato',desc:'Memoria aggiornata. Puoi passare al prossimo prodotto.'}
+      };
+      return map[step]||map.product;
+    };
+  }catch(_){ }
+  try{
+    window.guidedCurrentStep=function(el=null,result={}){
+      el=el||getActive();
+      if(!el) return 'product';
+      if(el.classList.contains('confirmed')) return 'done';
+      result=result||rOf(el);
+      const follow=String(el.dataset.liveFollowupStep||'').toLowerCase();
+      if(['barcode','label','expiry','confirm'].includes(follow)) return follow;
+      if(!hasBarcode(el,result)) return 'barcode';
+      if(!hasLabel(el,result)) return 'label';
+      if(!hasExpiry(el,result)) return 'expiry';
+      return 'confirm';
+    };
+  }catch(_){ }
+  try{
+    if(typeof refreshGuidedScannerUx==='function' && !window.__v2858RefreshGuidedWrapped){
+      const prev=refreshGuidedScannerUx;
+      refreshGuidedScannerUx=function(reason=''){
+        const out=prev.call(this,reason);
+        try{
+          const panel=$q('#guidedScanPanel'); if(!panel) return out;
+          cleanupGuidedV2858();
+          const el=getActive(); const r=rOf(el); const step=window.guidedCurrentStep(el,r); const meta=window.guidedStepMeta(step);
+          panel.dataset.step=step;
+          panel.querySelector('[data-guided-kicker]').textContent=meta.kicker;
+          panel.querySelector('[data-guided-title]').textContent=meta.title;
+          panel.querySelector('[data-guided-desc]').textContent=meta.desc;
+          panel.querySelector('[data-guided-counter]').textContent=meta.idx+'/'+meta.total;
+          const order={product:1,barcode:2,label:3,expiry:4,confirm:5};
+          panel.querySelector('[data-guided-stepper]').innerHTML='<span data-step="product">Prodotto</span><span data-step="barcode">Barcode</span><span data-step="label">Etichetta</span><span data-step="expiry">Scadenza</span><span data-step="confirm">Conferma</span>';
+          panel.querySelectorAll('[data-step]').forEach(n=>{ const k=n.dataset.step; n.classList.toggle('active',k===step || (step==='done'&&k==='confirm')); n.classList.toggle('done',(order[k]||1)<meta.idx || step==='done'); });
+          const sum=panel.querySelector('[data-guided-summary]');
+          if(sum){
+            const main=el ? (val(el,'[data-scan-name]') || r.productName || (step==='barcode'?'Prodotto acquisito':'Prodotto in analisi')) : 'Pronto per iniziare';
+            const sub= step==='product' ? 'Scansiona il prodotto intero: poi passo al barcode.' : step==='barcode' ? 'Inquadra solo il codice a barre. Se non c’è, passa all’etichetta.' : step==='label' ? 'Completo nome, marca, formato e ingredienti.' : step==='expiry' ? 'La scadenza si conferma nella scheda prodotto.' : step==='confirm' ? 'Controlla e conferma articolo.' : 'Articolo salvato.';
+            sum.innerHTML='<strong>'+main.replace(/[&<>"]/g,'')+'</strong><span>'+sub.replace(/[&<>"]/g,'')+'</span>';
+          }
+          const miss=panel.querySelector('[data-guided-missing]');
+          if(miss){ miss.innerHTML = step==='product' ? '<span>Manca: Prodotto</span>' : step==='barcode' ? '<span>Manca: Barcode/EAN se disponibile</span>' : step==='label' ? '<span>Manca: Etichetta se vuoi ingredienti e formato</span>' : step==='expiry' ? '<span>Manca: Scadenza opzionale</span>' : ''; }
+        }catch(_){ }
+        return out;
+      };
+      window.__v2858RefreshGuidedWrapped=true;
+    }
+  }catch(_){ }
+
+  function forceBarcodeStepV2858(el){
+    if(!el || el.classList.contains('confirmed') || el.classList.contains('bad')) return false;
+    const r=rOf(el);
+    if(hasBarcode(el,r) || r.labelScanMerged || el.dataset.liveFollowupStep==='label' || el.dataset.liveFollowupStep==='expiry' || el.dataset.liveFollowupStep==='confirm') return false;
+    el.dataset.liveFollowupStep='barcode';
+    try{ if(typeof setScanVoiceHelper==='function') setScanVoiceHelper(el,'Foto prodotto acquisita. Ora mostrami il barcode/EAN: costa zero OpenAI e permette al server di riconoscere meglio il prodotto.','live'); }catch(_){ }
+    try{ if(typeof setScannerStatus==='function') setScannerStatus('Step 2: inquadra solo il barcode/EAN. Se non c’è, puoi passare all’etichetta.', liveScanSpeechEnabled?'Ora mostrami il codice a barre. Cerca le linee nere e inquadra solo quello.':'', true); }catch(_){ }
+    try{ if(typeof refreshGuidedScannerUx==='function') refreshGuidedScannerUx('force-barcode-v2858'); }catch(_){ }
+    return true;
+  }
+  try{
+    if(typeof addScannerResult==='function' && !window.__v2858AddScannerWrapped){
+      const prev=addScannerResult;
+      addScannerResult=function(result){ const el=prev.call(this,result); setTimeout(()=>forceBarcodeStepV2858(el||getActive()),140); return el; };
+      window.__v2858AddScannerWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof getNextScanMicStep==='function' && !window.__v2858MicStepWrapped){
+      const prev=getNextScanMicStep;
+      getNextScanMicStep=function(el,result={}){
+        el=el||getActive(); result=result||rOf(el);
+        if(el && !el.classList.contains('confirmed')){
+          const follow=String(el.dataset.liveFollowupStep||'').toLowerCase();
+          if(follow==='barcode') return 'barcode';
+          if(!hasBarcode(el,result) && (result.liveProductCapture || result.guidedPhotoCapture || result.requiresThreeScanFlow || el.classList.contains('scan-result'))) return 'barcode';
+        }
+        return prev.call(this,el,result);
+      };
+      window.__v2858MicStepWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof scanMicPromptForStep==='function' && !window.__v2858MicPromptWrapped){
+      const prev=scanMicPromptForStep;
+      scanMicPromptForStep=function(step,el,result={}){
+        if(step==='barcode') return 'Ora mostrami il barcode, cioè il codice a barre con le linee nere. È il controllo più preciso e non costa OpenAI.';
+        return prev.call(this,step,el,result);
+      };
+      window.__v2858MicPromptWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof promptScannerConversation==='function' && !window.__v2858PromptConversationWrapped){
+      const prev=promptScannerConversation;
+      promptScannerConversation=function(el,result={},force=false){
+        const step=(window.guidedCurrentStep?window.guidedCurrentStep(el,result):'');
+        if(step==='barcode'){
+          setActiveScannerResult?.(el);
+          scannerMicStep='barcode';
+          const prompt='Ora mostrarmi il barcode/EAN: inquadra solo il codice a barre. Se non c’è, passa all’etichetta.';
+          try{ setScanVoiceHelper?.(el,prompt,'live'); }catch(_){ }
+          try{ if(force || scannerMicLastPrompt!==prompt){ scannerMicLastPrompt=prompt; if(liveScanSpeechEnabled) speakNatural(prompt,{flush:true,rate:1.0,pitch:1.02}); } }catch(_){ }
+          return;
+        }
+        return prev.call(this,el,result,force);
+      };
+      window.__v2858PromptConversationWrapped=true;
+    }
+  }catch(_){ }
+
+  // Dopo una sola conferma utente, la Vision locale può già precompilare se la somiglianza è forte.
+  try{
+    if(typeof predictFromVisionBrain==='function' && !window.__v2858PredictWrapped){
+      const prev=predictFromVisionBrain;
+      predictFromVisionBrain=function(features){
+        const first=prev.call(this,features); if(first) return first;
+        try{
+          const b=ensureVisionBrain?.(); const samples=(b?.samples||[]).filter(s=>s?.features);
+          if(!features || !samples.length) return null;
+          const ranked=samples.map(s=>({s,dist:featureDistance(features,s.features)})).sort((a,b)=>a.dist-b.dist).slice(0,5);
+          const top=ranked[0]; if(!top) return null;
+          const nearest=1-Number(top.dist||1);
+          if(nearest<0.80) return null;
+          const s=top.s;
+          const stats=getStatsForProduct?.(s.productName,s.brand,s.variant)||{};
+          const count=Number(stats.count||0);
+          if(count<1) return null;
+          const confidence=Math.min(.92, Math.max(.72, nearest));
+          if(confidence<.82) return null;
+          return {productName:topKey?.(stats.names)||s.productName, brand:topKey?.(stats.brands)||s.brand||'', variant:s.variant||'', estimatedSize:topKey?.(stats.sizes)||s.size||'', quantity:1, unit:topKey?.(stats.units)||s.unit||'pz', category:topKey?.(stats.categories)||s.category||'food', confidence:Number(confidence.toFixed(2)), productType:s.productType||'', packageType:s.packageType||'', isLiquid:!!s.isLiquid, autonomousVision:true, localVision:true, memoryVision:true, bestMatchName:s.productName, bestMatchSource:'memoria visiva locale confermata una volta', bestMatchScore:Number((confidence*100).toFixed(1)), reason:'Memoria visiva locale: riconosciuto da foto frontale già confermata dall’utente.'};
+        }catch(_){ return null; }
+      };
+      window.__v2858PredictWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof localPredictionTrustedForPrefill==='function' && !window.__v2858TrustedWrapped){
+      const prev=localPredictionTrustedForPrefill;
+      localPredictionTrustedForPrefill=function(pred={}){
+        if(prev.call(this,pred)) return true;
+        try{
+          if(!pred || !pred.productName || isBadScanName?.(pred.productName)) return false;
+          const count=productCountForLocal?.(pred.productName,pred.brand,pred.variant)||0;
+          const conf=Number(pred.confidence||0);
+          const toks=typeof specificProductTokens==='function'?specificProductTokens([pred.productName,pred.brand,pred.variant].join(' ')):[];
+          if(count>=1 && toks.length>=1 && (pred.autonomousVision||pred.localVision||pred.memoryVision) && conf>=.82) return true;
+        }catch(_){ }
+        return false;
+      };
+      window.__v2858TrustedWrapped=true;
+    }
+  }catch(_){ }
+  setInterval(()=>{ cleanupGuidedV2858(); const el=getActive(); if(el && !hasBarcode(el,rOf(el)) && !rOf(el).labelScanMerged && !el.dataset.v2858BarcodePrompted){ el.dataset.v2858BarcodePrompted='1'; forceBarcodeStepV2858(el); } },1400);
+  try{ window.SPESA_PRONTA_VERSION='v28.58-pro-flow-memory-fix'; window.SPESA_PRONTA_BUILD=Object.assign({},window.SPESA_PRONTA_BUILD||{}, {version:'V28.58', proMode:true, barcodeVoiceStep2:true, guidedExpiryControlsOnlyInsideCard:true, smartSummaryHidden:true, oneConfirmationVisualMemory:true}); }catch(_){ }
+  try{ if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('v2858-pro-flow-memory-ready',{barcodeVoice:true,expiryControls:'card_only',smartSummaryHidden:true,oneConfirmationMemory:true}),1500); }catch(_){ }
+})();
+
+
+// V28.58b: se un prodotto non ha barcode, il titolare può passare subito all'etichetta.
+(function(){
+  const $q=(s,r=document)=>r.querySelector(s);
+  const $qa=(s,r=document)=>Array.from(r.querySelectorAll(s));
+  function getActive(){ try{ const a=typeof getActiveScannerResult==='function'?getActiveScannerResult():null; if(a&&!a.classList.contains('confirmed')&&!a.classList.contains('bad')) return a; }catch(_){ } return $q('#scannerResults .scan-result:not(.confirmed):not(.bad)'); }
+  function rOf(el){ return el?._scanResult||{}; }
+  function val(el,sel){ return String(el?.querySelector?.(sel)?.value||'').trim(); }
+  function hasBarcode(el,r=rOf(el)){ const s=[r.barcode,r.ean,r.code,r.productCode,r.productMemory?.barcode,el?.dataset?.barcodeScanDone].filter(Boolean).join(' '); return /\d{8,14}/.test(s); }
+  function hasLabel(el,r=rOf(el)){ const n=val(el,'[data-scan-name]')||r.productName||''; const b=val(el,'[data-scan-brand]')||r.brand||''; const sz=val(el,'[data-scan-size]')||r.estimatedSize||r.size||''; return !!(r.labelScanMerged || (String(n).trim().length>2 && (String(b).trim().length>1 || String(sz).trim().length>0))); }
+  function hasExpiry(el,r=rOf(el)){ return !!(val(el,'[data-scan-expiry]') || r.expiryDate || el?.dataset?.voiceExpiryDone==='1' || el?.dataset?.expirySkipped==='1'); }
+  function ensureSkipBarcode(){
+    const panel=$q('#guidedScanPanel'); const actions=panel?.querySelector?.('.guided-actions'); if(!panel||!actions) return;
+    let b=panel.querySelector('[data-guided-skip-barcode-v2858]');
+    if(!b){ b=document.createElement('button'); b.type='button'; b.className='outline-btn'; b.dataset.guidedSkipBarcodeV2858='1'; b.textContent='Salta barcode / vai a etichetta'; actions.insertBefore(b, actions.firstChild); }
+    b.hidden=panel.dataset.step!=='barcode';
+  }
+  document.addEventListener('click',e=>{
+    const b=e.target?.closest?.('[data-guided-skip-barcode-v2858]'); if(!b) return;
+    e.preventDefault();
+    const el=getActive(); if(!el) return;
+    const r=rOf(el); r.barcodeSkippedV2858=true; el._scanResult=r;
+    el.dataset.barcodeSkipped='1'; el.dataset.barcodeScanDone='1'; el.dataset.liveFollowupStep='label';
+    try{ setScanVoiceHelper?.(el,'Barcode saltato. Ora inquadra etichetta, nome, marca, formato e ingredienti.','live'); }catch(_){ }
+    try{ setScannerStatus?.('Barcode saltato. Ora passa all’etichetta.', liveScanSpeechEnabled?'Barcode saltato. Ora mostrami l etichetta.':'', true); }catch(_){ }
+    try{ refreshGuidedScannerUx?.('barcode-skipped-v2858'); }catch(_){ }
+  },true);
+  try{
+    if(typeof refreshGuidedScannerUx==='function' && !window.__v2858bSkipBarcodeRefreshWrapped){
+      const prev=refreshGuidedScannerUx;
+      refreshGuidedScannerUx=function(reason=''){ const out=prev.call(this,reason); setTimeout(ensureSkipBarcode,20); return out; };
+      window.__v2858bSkipBarcodeRefreshWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    window.guidedCurrentStep=function(el=null,result={}){
+      el=el||getActive(); if(!el) return 'product'; if(el.classList.contains('confirmed')) return 'done';
+      result=result||rOf(el); const follow=String(el.dataset.liveFollowupStep||'').toLowerCase();
+      if(['barcode','label','expiry','confirm'].includes(follow)) return follow;
+      if(!hasBarcode(el,result) && el.dataset.barcodeSkipped!=='1') return 'barcode';
+      if(!hasLabel(el,result)) return 'label';
+      if(!hasExpiry(el,result)) return 'expiry';
+      return 'confirm';
+    };
+  }catch(_){ }
+  setInterval(ensureSkipBarcode,800);
+  try{ window.SPESA_PRONTA_BUILD=Object.assign({},window.SPESA_PRONTA_BUILD||{}, {version:'V28.58', skipBarcodeToLabel:true}); }catch(_){ }
+})();
