@@ -3912,6 +3912,17 @@ const server = http.createServer(async (req,res)=>{
       return send(res,200,{ok:true,...result});
     }
 
+
+    if(req.method === 'POST' && pathName === '/api/ai/pixel-ocr-judge'){
+      const { image='', stage='auto', localGuess=null, clientPixel=null, clientOcr=null } = body || {};
+      if(!image || !String(image).startsWith('data:image/')) return send(res, 400, { ok:false, error:'image_required' });
+      const householdId=String(body.householdId||'').trim();
+      const bearer=(req.headers.authorization||'').replace(/^Bearer\s+/,'').trim();
+      const h=(householdId && db.households[householdId] && db.households[householdId].token===bearer) ? db.households[householdId] : null;
+      const result=await serverPixelOcrJudgeV2864({ image, stage, localGuess, clientPixel, clientOcr, household:h }).catch(err=>({ok:false,error:'pixel_ocr_judge_failed',reason:String(err?.message||err).slice(0,180)}));
+      return send(res, 200, Object.assign({ok:true}, result||{}));
+    }
+
     if(req.method === 'POST' && pathName === '/api/ai/vision'){
       const { image='', teacherImage='', teacherImageMeta=null, identityImageV2850='', focusInstruction='', primarySubjectMode='', localGuess=null, catalog=[], settings={}, memory={}, stage='auto' } = body;
       if(!image || !String(image).startsWith('data:image/')) return send(res, 400, { error:'image_required' });
@@ -6290,4 +6301,293 @@ try{
   }catch(_){ }
   try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2863PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this); s.version='V28.63'; s.brain=Object.assign({},s.brain||{},{version:'V28.63', trueProductVision:'active', freeBrowserOcr:'client-side optional', memoryConflictShield:'current photo/ocr family blocks wrong memory', openAiTokens:'zero for visual memory gate'}); return s; }; global.__v2863PreflightWrapped=true; } }catch(_){ }
   console.log('[Spesa Pronta] V28.63 PRO True Product Vision Server Gate active');
+})();
+
+
+// =============================================================
+// V28.64 PRO Human-Like Pixel OCR Reasoning Engine
+// Motore gratuito/server-first: pixel -> OCR -> identità -> campi.
+// OpenAI resta docente finale, NON motore principale.
+// =============================================================
+const V2864_VERSION = 'V28.64';
+let __sharpV2864Promise = null;
+function v2864EnvTrue(name){ return /^(1|true|yes|on)$/i.test(String(process.env[name]||'')); }
+function v2864Norm(v=''){
+  return String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/['’`]/g,' ').replace(/[^a-z0-9]+/g,' ').trim();
+}
+function v2864Words(v=''){ return [...new Set(v2864Norm(v).split(/\s+/).filter(x=>x.length>=2).slice(0,80))]; }
+function v2864DataUrlBuffer(dataUrl=''){
+  const m=String(dataUrl||'').match(/^data:image\/[a-z0-9.+-]+;base64,(.+)$/i);
+  if(!m) return null;
+  try{ return Buffer.from(m[1],'base64'); }catch(_){ return null; }
+}
+async function v2864Sharp(){
+  if(!__sharpV2864Promise){
+    __sharpV2864Promise = import('sharp').then(m=>m.default||m).catch(err=>null);
+  }
+  return __sharpV2864Promise;
+}
+function v2864Lum(r,g,b){ return .2126*r+.7152*g+.0722*b; }
+function v2864Sat(r,g,b){ const max=Math.max(r,g,b), min=Math.min(r,g,b); return max?((max-min)/max):0; }
+function v2864ColorName(r,g,b){
+  const max=Math.max(r,g,b), min=Math.min(r,g,b), lum=v2864Lum(r,g,b), sat=v2864Sat(r,g,b);
+  if(lum<52) return 'nero/scuro';
+  if(lum>210 && sat<.18) return 'bianco/chiaro';
+  if(sat<.16) return lum>142?'trasparente/chiaro':'grigio';
+  if(r>g*1.25 && r>b*1.18) return r>190&&g>105?'arancio/rosso':'rosso';
+  if(g>r*1.12 && g>b*.86) return 'verde';
+  if(b>r*.92 && b>g*.86) return 'blu/azzurro';
+  if(r>150&&g>130&&b<90) return 'giallo';
+  if(r>120&&b>120&&g<115) return 'viola';
+  return 'misto';
+}
+function v2864AvgRegion(data,w,h,box){
+  const x0=Math.max(0,Math.floor(box.x||0)), y0=Math.max(0,Math.floor(box.y||0));
+  const x1=Math.min(w,Math.ceil((box.x||0)+(box.w||w))), y1=Math.min(h,Math.ceil((box.y||0)+(box.h||h)));
+  const buckets={}, rgb={r:0,g:0,b:0,n:0}; let dark=0, clear=0, white=0, saturated=0, edge=0;
+  for(let y=y0;y<y1;y+=1){
+    for(let x=x0;x<x1;x+=1){
+      const i=(y*w+x)*4, r=data[i], g=data[i+1], b=data[i+2];
+      const lum=v2864Lum(r,g,b), sat=v2864Sat(r,g,b);
+      const name=v2864ColorName(r,g,b); buckets[name]=(buckets[name]||0)+1;
+      rgb.r+=r; rgb.g+=g; rgb.b+=b; rgb.n++;
+      if(lum<75) dark++; if(lum>142 && sat<.20) clear++; if(lum>195 && sat<.22) white++; if(sat>.32) saturated++;
+      if(x+1<x1){ const j=(y*w+x+1)*4; edge+=Math.abs(lum-v2864Lum(data[j],data[j+1],data[j+2])); }
+      if(y+1<y1){ const k=((y+1)*w+x)*4; edge+=Math.abs(lum-v2864Lum(data[k],data[k+1],data[k+2])); }
+    }
+  }
+  const n=Math.max(1,rgb.n), top=Object.entries(buckets).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([name,count])=>({name,ratio:Number((count/n).toFixed(3))}));
+  return {avg:{r:Math.round(rgb.r/n),g:Math.round(rgb.g/n),b:Math.round(rgb.b/n)}, topColors:top, dark:Number((dark/n).toFixed(3)), clear:Number((clear/n).toFixed(3)), white:Number((white/n).toFixed(3)), saturated:Number((saturated/n).toFixed(3)), edge:Number((edge/(n*2)).toFixed(2)), pixels:n};
+}
+function v2864ObjectBox(data,w,h){
+  const sampleBoxes=[{x:0,y:0,w:w*.12,h:h*.12},{x:w*.88,y:0,w:w*.12,h:h*.12},{x:0,y:h*.88,w:w*.12,h:h*.12},{x:w*.88,y:h*.88,w:w*.12,h:h*.12}];
+  const bg=sampleBoxes.map(b=>v2864AvgRegion(data,w,h,b).avg).reduce((a,c)=>({r:a.r+c.r,g:a.g+c.g,b:a.b+c.b}),{r:0,g:0,b:0}); bg.r/=4; bg.g/=4; bg.b/=4;
+  let minX=w,minY=h,maxX=0,maxY=0,count=0,centerCount=0;
+  for(let y=0;y<h;y+=2){ for(let x=0;x<w;x+=2){
+    const i=(y*w+x)*4, r=data[i],g=data[i+1],b=data[i+2];
+    const d=Math.abs(r-bg.r)+Math.abs(g-bg.g)+Math.abs(b-bg.b); const sat=v2864Sat(r,g,b); const lum=v2864Lum(r,g,b);
+    const central=(x>w*.18&&x<w*.82&&y>h*.05&&y<h*.95);
+    if((central && (d>42 || sat>.25 || lum<70)) || (x>w*.28&&x<w*.72&&y>h*.08&&y<h*.94&&d>28)){
+      minX=Math.min(minX,x); maxX=Math.max(maxX,x); minY=Math.min(minY,y); maxY=Math.max(maxY,y); count++; if(central) centerCount++;
+    }
+  }}
+  const coverage=count/Math.max(1,(w*h/4));
+  if(!count || coverage<.035){ return {x:Math.round(w*.18),y:Math.round(h*.08),w:Math.round(w*.64),h:Math.round(h*.84),coverage:Number(coverage.toFixed(3)),fallback:true}; }
+  const padX=w*.04, padY=h*.04;
+  minX=Math.max(0,minX-padX); minY=Math.max(0,minY-padY); maxX=Math.min(w,maxX+padX); maxY=Math.min(h,maxY+padY);
+  return {x:Math.round(minX),y:Math.round(minY),w:Math.round(Math.max(8,maxX-minX)),h:Math.round(Math.max(8,maxY-minY)),coverage:Number(coverage.toFixed(3)),fallback:false,centerCount};
+}
+async function v2864PixelProfile(dataUrl=''){
+  const sharp=await v2864Sharp(); const buf=v2864DataUrlBuffer(dataUrl);
+  if(!sharp || !buf) return {available:false, reason:!sharp?'sharp_not_available':'invalid_image'};
+  const img=sharp(buf,{failOn:'none'}).rotate();
+  const meta=await img.metadata().catch(()=>({}));
+  const maxW=320, maxH=420;
+  const raw=await img.resize({width:maxW,height:maxH,fit:'inside',withoutEnlargement:true}).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+  const d=raw.data, w=raw.info.width, h=raw.info.height;
+  const box=v2864ObjectBox(d,w,h);
+  const obj=v2864AvgRegion(d,w,h,box);
+  const label={x:box.x+box.w*.10,y:box.y+box.h*.34,w:box.w*.80,h:box.h*.28};
+  const upper={x:box.x+box.w*.15,y:box.y,w:box.w*.70,h:box.h*.26};
+  const lower={x:box.x+box.w*.15,y:box.y+box.h*.62,w:box.w*.70,h:box.h*.32};
+  const center={x:box.x+box.w*.25,y:box.y+box.h*.08,w:box.w*.50,h:box.h*.84};
+  const labelStats=v2864AvgRegion(d,w,h,label), upperStats=v2864AvgRegion(d,w,h,upper), lowerStats=v2864AvgRegion(d,w,h,lower), centerStats=v2864AvgRegion(d,w,h,center);
+  const aspect=box.h/Math.max(1,box.w);
+  const darkLiquid = aspect>1.35 && lowerStats.dark>.28 && centerStats.dark>.16;
+  const clearLiquid = aspect>1.25 && centerStats.clear>.34 && lowerStats.dark<.22 && obj.saturated<.28;
+  const coloredLabel = labelStats.saturated>.16 || labelStats.edge>15;
+  const transparentContainer = obj.clear>.20 || centerStats.clear>.25 || upperStats.clear>.25;
+  const bottleLike = aspect>1.35 && box.h>h*.45 && box.w<w*.62;
+  const rectangularPack = aspect<1.35 && box.w>w*.32 && box.h>h*.22;
+  const homeContainer = /verde|blu\/azzurro|bianco\/chiaro/.test((obj.topColors||[]).map(c=>c.name).join(' ')) && aspect>1.15 && !darkLiquid && coloredLabel;
+  const visualFamily = darkLiquid ? 'dark_liquid_bottle' : (clearLiquid ? 'clear_liquid_bottle' : (homeContainer ? 'home_container' : (rectangularPack?'pack_box':'unknown')));
+  return {available:true, engine:'sharp_pixel_profile_v2864', meta:{width:meta.width||0,height:meta.height||0,format:meta.format||''}, resized:{w,h}, objectBox:box, objectAspect:Number(aspect.toFixed(3)), object:obj, label:labelStats, upper:upperStats, lower:lowerStats, center:centerStats, anchors:{bottleLike,darkLiquid,clearLiquid,transparentContainer,coloredLabel,rectangularPack,homeContainer,longProduct:bottleLike||aspect>1.7, visibleContent:darkLiquid||clearLiquid, liquidLikely:darkLiquid||clearLiquid, solidLikely:rectangularPack&&!transparentContainer, visualFamily}, colors:[...(obj.topColors||[]).map(c=>c.name),...(labelStats.topColors||[]).map(c=>c.name)].filter((v,i,a)=>v&&a.indexOf(v)===i).slice(0,8)};
+}
+function v2864ExtractSize(text=''){
+  const raw=String(text||'');
+  let m=raw.match(/\b(\d{1,2}(?:[,.]\d{1,2})?)\s*(l|lt|litri|litro)\b/i);
+  if(m) return `${m[1].replace('.',',')} L`.replace(',0 L',' L');
+  m=raw.match(/\b(\d{2,4})\s*(ml|cl|g|gr|kg)\b/i);
+  if(m) return `${m[1]} ${m[2].toLowerCase()==='gr'?'g':m[2].toLowerCase()}`;
+  return '';
+}
+function v2864CategoryFromText(text='', pixel=null){
+  const t=v2864Norm(text);
+  const rules=[
+    ['laundry',/\b(candeggina|detersivo|ammorbidente|bucato|lavatrice|colori\s+sicuri|igienizzante\s+bucato)\b/],
+    ['cleaning',/\b(sgrassatore|detergente|pavimenti|bagno|wc|disinfettante|pulizia|multiuso|spray\s+pulitore)\b/],
+    ['dishwashing',/\b(lavastoviglie|piatti|brillantante|tabs|pastiglie\s+lavastoviglie)\b/],
+    ['personal_care',/\b(shampoo|bagnoschiuma|sapone|deodorante|crema|dentifricio|collutorio)\b/],
+    ['water',/\b(acqua|naturale|minerale|frizzante|oligominerale|sant\s*anna|santanna|san\s*benedetto|levissima|vera|lete|ferrarelle|uliveto|rocchetta)\b/],
+    ['soft_drinks',/\b(cola|coca\s*cola|coca-cola|pepsi|fanta|sprite|aranciata|gassosa|chinotto|lemon\s*taste|bibita\s+gassata)\b/],
+    ['juice',/\b(succo|nettare|spremuta|ace|bevanda\s+alla\s+frutta|t[eè]\s*freddo|the\s*freddo|ice\s*tea|estathe|th[eè])\b/],
+    ['milk_drinks',/\b(latte\s+uht|latte\s+(intero|scremato|parzialmente)|bevanda\s+vegetale|senza\s+lattosio)\b/],
+    ['yogurt',/\b(yogurt|kefir|skyr)\b/],
+    ['sauces_condiments',/\b(pesto|salsa|sugo|condimento|bbq|barbecue|ketchup|maionese|senape|passata)\b/],
+    ['pasta_rice',/\b(pasta|spaghetti|penne|fusilli|riso|farina)\b/],
+    ['pet_food',/\b(crocchette|umido\s+(cane|gatto)|mangime\s+(cane|gatto))\b/],
+    ['aquarium',/\b(acquario|mangime\s+pesci|biocondizionatore|filtro\s+acquario)\b/]
+  ];
+  for(const [cat,rx] of rules) if(rx.test(t)) return cat;
+  if(pixel?.anchors?.darkLiquid) return 'drinks';
+  if(pixel?.anchors?.clearLiquid) return 'water';
+  if(pixel?.anchors?.homeContainer) return 'house';
+  return 'food';
+}
+function v2864BrandFromText(text=''){
+  const raw=String(text||''); const t=v2864Norm(raw);
+  const brands=[
+    ["Sant'Anna",/\b(sant\s*anna|santanna)\b/],['San Benedetto',/\bsan\s*benedetto\b/],['Levissima',/\blevissima\b/],['Vera',/\bvera\b/],['Ferrarelle',/\bferrarelle\b/],['Rocchetta',/\brocchetta\b/],['Uliveto',/\buliveto\b/],['Lete',/\blete\b/],
+    ['Blues',/\bblues\b/],['Coca-Cola',/\bcoca\s*cola|coca-cola\b/],['Pepsi',/\bpepsi\b/],['Fanta',/\bfanta\b/],['Sprite',/\bsprite\b/],
+    ['Dexal',/\bdexal\b/],['Chanteclair',/\bchanteclair\b/],['Ace',/\bace\b/],['Dash',/\bdash\b/],['Finish',/\bfinish\b/],['Svelto',/\bsvelto\b/],
+    ['Selex',/\bselex\b/],['Barilla',/\bbarilla\b/],['Divella',/\bdivella\b/],['Garofalo',/\bgarofalo\b/],['Rummo',/\brummo\b/],['Saper di Sapori',/\bsaper\s+di\s+sapori\b/]
+  ];
+  for(const [name,rx] of brands) if(rx.test(t)) return name;
+  const lines=raw.split(/[\n\r|]+/).map(x=>x.trim()).filter(Boolean);
+  const good=lines.find(l=>/^[A-ZÀ-Ü][A-Za-zÀ-ÿ'’\s&.-]{2,22}$/.test(l) && !/ingredient|valori|scaden|lotto|netto|litri|naturale|minerale/i.test(l));
+  return good ? good.replace(/\s+/g,' ').slice(0,28) : '';
+}
+function v2864ProductTypeFromText(text='', cat='food', brand=''){
+  const t=v2864Norm(text);
+  if(cat==='laundry' && /candeggina/.test(t)) return /delicata/.test(t)?'candeggina delicata':'candeggina';
+  if(cat==='laundry' && /detersivo/.test(t)) return 'detersivo bucato';
+  if(cat==='cleaning') return 'prodotto pulizia';
+  if(cat==='water') return /frizzante/.test(t)?'acqua frizzante':/naturale/.test(t)?'acqua naturale':'acqua';
+  if(cat==='soft_drinks') return /cola/.test(t)?'bibita cola':'bibita gassata';
+  if(cat==='juice') return /t[eè]|the|tea|th[eè]/.test(t)?'tè freddo':'succo/bevanda frutta';
+  if(cat==='milk_drinks') return 'latte/bevanda latte';
+  if(cat==='sauces_condiments') return /pesto/.test(t)?'pesto':'salsa/condimento';
+  return '';
+}
+function v2864LikelyNameFromText(text='', cat='food', brand='', type=''){
+  const t=v2864Norm(text);
+  if(brand==="Sant'Anna" || /\bsant\s*anna|santanna\b/.test(t)) return "Acqua Sant'Anna";
+  if(brand==='Blues' && /\bcola\b/.test(t)) return 'Cola Blues';
+  if(brand==='Dexal' && /candeggina/.test(t)) return /maxi/.test(t)?'Dexal Candeggina Delicata Maxi':'Dexal Candeggina Delicata';
+  if(brand==='Coca-Cola') return 'Coca-Cola';
+  if(cat==='water') return brand ? `Acqua ${brand}` : 'Acqua in bottiglia';
+  if(cat==='soft_drinks') return brand ? `${type||'Bibita'} ${brand}`.trim() : (type||'Bibita gassata');
+  if(cat==='laundry'||cat==='cleaning'||cat==='dishwashing') return [brand,type||'Prodotto casa'].filter(Boolean).join(' ').trim();
+  const lines=String(text||'').split(/[\n\r|]+/).map(x=>x.trim()).filter(x=>x.length>=3 && x.length<=42);
+  const bad=/\b(ingredienti|valori|energia|grassi|carboidrati|zuccheri|proteine|sale|lotto|scad|exp|tmc|conservare|prodotto\s+da|distribuito|servizio|nutrizionali|barcode|ean)\b/i;
+  const size=/\b\d+[,.]?\d*\s*(ml|cl|l|lt|g|kg|%)\b/i;
+  const candidate=lines.find(l=>!bad.test(l) && !size.test(l) && /[a-zA-ZÀ-ÿ]{3}/.test(l));
+  if(candidate){
+    const clean=candidate.replace(/[^A-Za-zÀ-ÿ0-9'’&.\-\s]/g,' ').replace(/\s+/g,' ').trim();
+    if(clean && (!brand || !v2864Norm(clean).includes(v2864Norm(brand)))) return brand ? `${clean} ${brand}`.trim().slice(0,48) : clean.slice(0,48);
+    return clean.slice(0,48);
+  }
+  return [brand,type].filter(Boolean).join(' ').trim();
+}
+function v2864FieldsFromText(text='', pixel=null){
+  const brand=v2864BrandFromText(text); const cat=v2864CategoryFromText(text,pixel); const type=v2864ProductTypeFromText(text,cat,brand); const name=v2864LikelyNameFromText(text,cat,brand,type); const size=v2864ExtractSize(text);
+  const t=v2864Norm(text); const ocrStrong=!!(name && (brand || /\b(acqua|cola|candeggina|detersivo|pesto|latte|succo|the|tea|santanna|sant\s*anna)\b/.test(t)));
+  const conf=ocrStrong ? (brand?.length? .88 : .78) : (pixel?.anchors?.darkLiquid||pixel?.anchors?.clearLiquid ? .48 : .32);
+  const isLiquid=['water','soft_drinks','juice','milk_drinks','drinks'].includes(cat);
+  const unit=isLiquid?'bt':(['laundry','cleaning','dishwashing','house'].includes(cat)?'conf':'pz');
+  return {productName:name,brand,productType:type,category:cat,estimatedSize:size||'',unit,isLiquid,confidence:conf,ocrStrong};
+}
+async function v2864OcrSpace(dataUrl=''){
+  const key=String(process.env.OCR_SPACE_API_KEY||'').trim();
+  if(!key || !(v2864EnvTrue('OCR_SPACE_ENABLED')||v2864EnvTrue('OCR_EXTERNAL_ENABLED'))) return null;
+  const params=new URLSearchParams();
+  params.set('apikey', key); params.set('base64Image', String(dataUrl||'')); params.set('language', process.env.OCR_SPACE_LANGUAGE||'ita'); params.set('isOverlayRequired','true'); params.set('OCREngine', process.env.OCR_SPACE_ENGINE||'2'); params.set('scale','true'); params.set('detectOrientation','true');
+  const ctrl=new AbortController(); const timer=setTimeout(()=>ctrl.abort(), Number(process.env.OCR_SPACE_TIMEOUT_MS||6500));
+  try{
+    const r=await fetch('https://api.ocr.space/parse/image',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:params,signal:ctrl.signal});
+    const j=await r.json().catch(()=>null); if(!r.ok || !j) return {provider:'ocr_space',ok:false,error:`http_${r.status}`};
+    const txt=(j.ParsedResults||[]).map(x=>x.ParsedText||'').filter(Boolean).join('\n').trim();
+    const lines=(j.ParsedResults||[]).flatMap(p=>(p.TextOverlay?.Lines||[]).map(l=>l.LineText||'')).filter(Boolean);
+    return {provider:'ocr_space',ok:!!txt,text:txt,lines,rawExitCode:j.OCRExitCode||0,error:Array.isArray(j.ErrorMessage)?j.ErrorMessage.join('; '):(j.ErrorMessage||'')};
+  }catch(e){ return {provider:'ocr_space',ok:false,error:String(e?.message||e).slice(0,120)}; } finally{ clearTimeout(timer); }
+}
+async function v2864GoogleVisionOcr(dataUrl=''){
+  const key=String(process.env.GOOGLE_VISION_API_KEY||'').trim();
+  if(!key || !(v2864EnvTrue('GOOGLE_VISION_OCR_ENABLED')||v2864EnvTrue('VISION_PAID_APIS_ENABLED'))) return null;
+  const base64=String(dataUrl||'').replace(/^data:image\/[a-z0-9.+-]+;base64,/i,'');
+  const body={requests:[{image:{content:base64},features:[{type:'TEXT_DETECTION',maxResults:1}],imageContext:{languageHints:['it','en']}}]};
+  const ctrl=new AbortController(); const timer=setTimeout(()=>ctrl.abort(), Number(process.env.GOOGLE_VISION_TIMEOUT_MS||5500));
+  try{
+    const r=await fetch('https://vision.googleapis.com/v1/images:annotate?key='+encodeURIComponent(key),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:ctrl.signal});
+    const j=await r.json().catch(()=>null); if(!r.ok || !j) return {provider:'google_vision_ocr',ok:false,error:`http_${r.status}`};
+    const text=j.responses?.[0]?.fullTextAnnotation?.text || j.responses?.[0]?.textAnnotations?.[0]?.description || '';
+    return {provider:'google_vision_ocr',ok:!!text,text,lines:String(text||'').split(/[\n\r]+/).filter(Boolean)};
+  }catch(e){ return {provider:'google_vision_ocr',ok:false,error:String(e?.message||e).slice(0,120)}; } finally{ clearTimeout(timer); }
+}
+async function v2864ExternalOcr(dataUrl=''){
+  const providers=[]; let best='';
+  const space=await v2864OcrSpace(dataUrl).catch(e=>({provider:'ocr_space',ok:false,error:String(e?.message||e)})); if(space){ providers.push(space); if(space.ok && space.text.length>best.length) best=space.text; }
+  const google=await v2864GoogleVisionOcr(dataUrl).catch(e=>({provider:'google_vision_ocr',ok:false,error:String(e?.message||e)})); if(google){ providers.push(google); if(google.ok && google.text.length>best.length) best=google.text; }
+  return {text:best, providers:providers.map(p=>({provider:p.provider,ok:!!p.ok,chars:String(p.text||'').length,error:p.error||''}))};
+}
+function v2864ResultFromJudge(fields={}, pixel=null, ocrText='', stage='product'){
+  const detectedText=String(ocrText||'').split(/[\n\r|]+/).map(x=>x.trim()).filter(Boolean).slice(0,14);
+  const confidence=Number(fields.confidence||0);
+  const result={needsRetake:false,needsManual:confidence<.92,shouldAskConfirmation:true,productName:fields.productName||'',brand:fields.brand||'',variant:'',productType:fields.productType||'',packageType:pixel?.anchors?.bottleLike?'bottiglia':(pixel?.anchors?.homeContainer?'flacone/confezione':'confezione'),estimatedSize:fields.estimatedSize||'',quantity:1,unit:fields.unit||'pz',category:fields.category||'food',confidence,isLiquid:!!fields.isLiquid,cloudVision:false,cloudOffline:false,cloudFallback:false,autonomousVision:true,localFirst:true,teacherSkipped:true,proPixelOcrV2864:{active:true,server:true,ocrStrong:!!fields.ocrStrong,cost:'zero_openai_tokens',pixelEngine:pixel?.engine||'',policy:'pixel+OCR attuale > memoria > forma/colore'},visualFeatures:{serverPixelV2864:pixel,visualEvidenceV2864:{text:ocrText,tokens:v2864Words(ocrText).slice(0,50),category:fields.category||'',brand:fields.brand||'',productName:fields.productName||''}},detectedText,visibleEvidence:[],colors:pixel?.colors||[],reason:''};
+  if(fields.ocrStrong){ result.reason='Vision PRO V28.64: letto testo reale sull’etichetta e compilato i campi senza OpenAI.'; result.visibleEvidence.push('OCR etichetta reale'); }
+  else if(pixel?.anchors?.darkLiquid){ result.productName=result.productName||'Bevanda scura in bottiglia da identificare'; result.category=result.category==='food'?'drinks':result.category; result.reason='Vision PRO V28.64: pixel indicano bottiglia con contenuto scuro, ma senza testo certo non invento marca/nome.'; result.needsManual=true; }
+  else if(pixel?.anchors?.clearLiquid){ result.productName=result.productName||'Acqua/bevanda chiara in bottiglia da confermare'; result.category=result.category==='food'?'water':result.category; result.reason='Vision PRO V28.64: pixel indicano bottiglia chiara/liquido trasparente; serve etichetta o barcode per nome preciso.'; result.needsManual=true; }
+  else if(pixel?.anchors?.homeContainer){ result.productName=result.productName||'Prodotto casa da identificare'; result.category=result.category==='food'?'house':result.category; result.reason='Vision PRO V28.64: forma/colore indicano prodotto casa, ma serve testo etichetta per nome preciso.'; result.needsManual=true; }
+  else { result.reason='Vision PRO V28.64: analisi pixel gratuita completata, ma serve etichetta/barcode/docente per identità certa.'; result.needsManual=true; }
+  if(result.estimatedSize) result.visibleEvidence.push('Formato letto: '+result.estimatedSize);
+  if(result.brand) result.visibleEvidence.push('Marca letta: '+result.brand);
+  if(result.productType) result.visibleEvidence.push('Tipo letto: '+result.productType);
+  if(pixel?.anchors?.darkLiquid) result.visibleEvidence.push('Contenuto visibile: liquido scuro');
+  if(pixel?.anchors?.clearLiquid) result.visibleEvidence.push('Contenuto visibile: liquido chiaro/trasparente');
+  if(pixel?.anchors?.bottleLike) result.visibleEvidence.push('Forma: bottiglia/prodotto lungo');
+  if(pixel?.colors?.length) result.visibleEvidence.push('Colori pixel: '+pixel.colors.slice(0,5).join(', '));
+  return result;
+}
+async function serverPixelOcrJudgeV2864({image='',stage='auto',localGuess=null,clientPixel=null,clientOcr=null,household=null}={}){
+  const pixel=await v2864PixelProfile(image).catch(e=>({available:false,reason:String(e?.message||e).slice(0,120)}));
+  let text=''; const providers=[];
+  if(clientOcr?.text){ text=String(clientOcr.text||''); providers.push({provider:'client_ocr',ok:true,chars:text.length}); }
+  if(localGuess?.visualFeatures?.visualEvidenceV2864?.text && String(localGuess.visualFeatures.visualEvidenceV2864.text).length>text.length){ text=String(localGuess.visualFeatures.visualEvidenceV2864.text); providers.push({provider:'local_guess_visualEvidenceV2864',ok:true,chars:text.length}); }
+  if(localGuess?.visualFeatures?.visualEvidenceV2863?.text && String(localGuess.visualFeatures.visualEvidenceV2863.text).length>text.length){ text=String(localGuess.visualFeatures.visualEvidenceV2863.text); providers.push({provider:'local_guess_visualEvidenceV2863',ok:true,chars:text.length}); }
+  const ext=await v2864ExternalOcr(image).catch(()=>({text:'',providers:[]}));
+  providers.push(...(ext.providers||[])); if(ext.text && ext.text.length>text.length) text=ext.text;
+  const fields=v2864FieldsFromText(text,pixel);
+  let result=v2864ResultFromJudge(fields,pixel,text,stage);
+  const strong=!!(fields.ocrStrong && result.productName && result.brand && Number(result.confidence||0)>=.78);
+  const useful=strong || !!(fields.ocrStrong && result.productName && Number(result.confidence||0)>=.72);
+  result.proPixelOcrV2864=Object.assign({},result.proPixelOcrV2864||{},{providers,strong,useful,stage:String(stage||'auto'),externalOcrEnabled:providers.some(p=>/ocr_space|google/.test(p.provider||'')),sharpAvailable:!!pixel?.available});
+  try{ if(useful) updateGlobalLearningAudit({type:'v2864-pixel-ocr-useful',productName:result.productName,brand:result.brand,category:result.category,providers:providers.map(p=>p.provider).join(','),openai:false}); }catch(_){ }
+  return {ok:true,version:V2864_VERSION,pixel,ocr:{text,providers},fields,result,strong,useful,cost:{openai:0,ocrExternalConfigured:providers.some(p=>/ocr_space|google/.test(p.provider||''))}};
+}
+function v2864MergePixelResult(base={}, judge=null){
+  if(!judge?.result) return base||{};
+  const r=Object.assign({}, base||{}); const p=judge.result; const pc=Number(p.confidence||0), bc=Number(r.confidence||0);
+  const pStrong=!!judge.strong || (p.proPixelOcrV2864?.ocrStrong && pc>=.72);
+  if(pStrong || pc>bc+.18 || (!r.productName && p.productName)){
+    for(const k of ['productName','brand','productType','packageType','estimatedSize','unit','category','isLiquid']) if(p[k] && (!r[k] || pStrong || /^(food|drinks|house|pz|conf|bt)$/i.test(String(r[k])))) r[k]=p[k];
+    r.confidence=Math.max(bc,pc); r.needsManual=pc<.92; r.shouldAskConfirmation=true;
+    r.cloudVision=false; r.cloudOffline=false; r.cloudFallback=false; r.teacherSkipped=true; r.localFirst=true; r.autonomousVision=true;
+    r.reason=p.reason||r.reason;
+  }
+  r.detectedText=[...(Array.isArray(r.detectedText)?r.detectedText:[]),...(Array.isArray(p.detectedText)?p.detectedText:[])].filter(Boolean).slice(0,24);
+  r.visibleEvidence=[...(Array.isArray(r.visibleEvidence)?r.visibleEvidence:[]),...(Array.isArray(p.visibleEvidence)?p.visibleEvidence:[])].filter(Boolean).slice(0,24);
+  r.visualFeatures=Object.assign({},r.visualFeatures||{},p.visualFeatures||{});
+  r.proPixelOcrV2864=Object.assign({},r.proPixelOcrV2864||{},p.proPixelOcrV2864||{}, {merged:true});
+  return r;
+}
+(function(){
+  try{
+    if(typeof visionAnalyze==='function' && !global.__v2864VisionAnalyzeWrapped){
+      const prev=visionAnalyze;
+      visionAnalyze=async function(payload={}){
+        const stage=String(payload?.stage||'auto').toLowerCase();
+        const judge=await serverPixelOcrJudgeV2864({image:payload.fullImage||payload.image,stage,localGuess:payload.localGuess}).catch(()=>null);
+        if(judge?.useful && judge?.result && /^(auto|product|manual|live)?$/.test(stage||'auto')){
+          return Object.assign({},judge.result,{serverPixelOcrJudgeV2864:judge,reason:judge.result.reason||'Vision PRO V28.64: riconosciuto da pixel+OCR server, OpenAI non usato.'});
+        }
+        let out=await prev.call(this,payload);
+        out=v2864MergePixelResult(out,judge);
+        out.serverPixelOcrJudgeV2864=judge?{version:judge.version,strong:!!judge.strong,useful:!!judge.useful,ocrChars:String(judge.ocr?.text||'').length,pixel:judge.pixel?{available:!!judge.pixel.available,anchors:judge.pixel.anchors,colors:judge.pixel.colors}:null,cost:judge.cost}:null;
+        return out;
+      };
+      global.__v2864VisionAnalyzeWrapped=true;
+    }
+  }catch(e){ console.warn('[Spesa Pronta] V28.64 wrap visionAnalyze failed', e?.message||e); }
+  try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2864PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this); s.version='V28.64'; s.brain=Object.assign({},s.brain||{},{version:'V28.64',humanLikePixelOcr:'active',sharpPixelEngine:'optional dependency sharp',ocrRouter:'client OCR + OCR.space optional + Google Vision optional',openAiPolicy:'only after memory/barcode/pixel/OCR fail'}); return s; }; global.__v2864PreflightWrapped=true; } }catch(_){ }
+  console.log('[Spesa Pronta] V28.64 PRO Human-Like Pixel OCR Reasoning Engine active');
 })();
