@@ -1,4 +1,4 @@
-window.SPESA_PRONTA_VERSION='v28.48-showcase-polish';
+window.SPESA_PRONTA_VERSION='v28.50-showcase-inline-lite';
 // V27.10: stop reload loop. Clean old caches/service workers only once, without reloading the page.
 (function(){
   try{
@@ -5963,7 +5963,7 @@ try{ document.dispatchEvent(new CustomEvent('spesa-pronta:v2799-sync-ready')); }
 // avviso cache/build e report copiabile per debug rapido.
 // =============================================================
 window.SPESA_PRONTA_VERSION='v28.00-final-test-tools';
-window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.48', brain:'Ultra Error Reduction Core + Sync Hash Fix + Barcode Dedupe', finalTestTools:'v28_02'});
+window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.50', brain:'Ultra Error Reduction Core + Sync Hash Fix + Barcode Dedupe', finalTestTools:'v28_02'});
 function v2800BuildAgeWarning(){
   try{
     const key='spesaProntaLastBuildVersion';
@@ -6426,7 +6426,7 @@ try{
 (function(){
   try{
     window.SPESA_PRONTA_VERSION='v28.06-debug-console-page';
-    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.06', brain:'Ultra Error Reduction Core + Cost Guard + Debug Console Page', debugConsole:'debug.html'});
+    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.50', brain:'Ultra Error Reduction Core + Cost Guard + Debug Console Page', debugConsole:'debug.html'});
     try{ localStorage.setItem('spesa_pronta_debug_build','V28.06'); }catch(_){ }
     const isDebugPage=()=>/\/debug\.html(?:$|[?#])/.test(location.pathname+location.search);
     const removeInlineDebug=()=>{ try{ if(!isDebugPage()) document.getElementById('preflightPanelV98')?.remove(); }catch(_){ } };
@@ -6500,7 +6500,7 @@ window.SPESA_PRONTA_VERSION='v28.43-pro-cinematic-onboarding';
 // =============================================================
 (function(){
   try{
-    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.30', visionPipeline:'server_full_teacher_slim_barcode_step'});
+    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.50', visionPipeline:'server_full_teacher_slim_barcode_step'});
     if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('vision-pipeline-v2829-ready',{serverImage:'full',teacherImage:'cropped_compressed',policy:'local_memory_cache_first_openai_last'}),1200);
   }catch(_){ }
 })();
@@ -6748,7 +6748,7 @@ window.SPESA_PRONTA_VERSION='v28.43-pro-cinematic-onboarding';
   window.addEventListener('pagehide',()=>saveScanDraftNow('pagehide'));
   window.addEventListener('beforeunload',()=>saveScanDraftNow('beforeunload'));
   window.spesaProntaScanDraftV2831={save:saveScanDraftNow,load:readDraft,clear:clearDraft,show:()=>showDraftRecoveryIfNeeded(true),restore:restoreDraft};
-  try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.31', scanDraftRecovery:'autosave_resume_unconfirmed_items'}); }catch(_){ }
+  try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.50', scanDraftRecovery:'autosave_resume_unconfirmed_items'}); }catch(_){ }
 })();
 
 
@@ -6759,7 +6759,7 @@ window.SPESA_PRONTA_VERSION='v28.43-pro-cinematic-onboarding';
 // - Se server/docente non risponde, viene generata una scheda locale compilabile.
 // - Stepper corretto a 5 fasi con Barcode.
 // =============================================================
-try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.32', scanStability:'live_photo_server_first_timeout_fallback', guidedSteps:'5_with_barcode'}); }catch(_){ }
+try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.50', scanStability:'live_photo_server_first_timeout_fallback', guidedSteps:'5_with_barcode'}); }catch(_){ }
 
 
 // =============================================================
@@ -6947,7 +6947,7 @@ try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, 
 (function(){
   try{
     window.SPESA_PRONTA_VERSION='v28.43-pro-cinematic-onboarding';
-    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.47', preflightBugSweep:'regex_boundary_cache_runtime_marker'});
+    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.50', preflightBugSweep:'regex_boundary_cache_runtime_marker'});
     if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('openai-connection-guard-v2836-ready',{regexBoundaryFixed:true,cache:'v2836',loadedScript:'app.v27-48-premium-mega-vision'}),900);
   }catch(_){ }
 })();
@@ -6957,7 +6957,7 @@ try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, 
 (function(){
   try{
     window.SPESA_PRONTA_VERSION='v28.43-pro-cinematic-onboarding';
-    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.47', openAiConnectionGuard:'server_key_aliases_real_healthcheck_model_fallback'});
+    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.50', openAiConnectionGuard:'server_key_aliases_real_healthcheck_model_fallback'});
     function endpointV2836(path){ const base=((window.settings&&settings.apiEndpoint)||'/api').replace(/\/$/,''); return base+path; }
     async function runOpenAiCheckV2836(){
       const btn=document.querySelector('[data-openai-check-v2836]');
@@ -7094,7 +7094,7 @@ try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, 
   }catch(_){ }
   try{
     window.SPESA_PRONTA_VERSION='v28.43-pro-cinematic-onboarding';
-    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.47', ocrBoostPro:'highres_contrast_teacher_image_label_expiry_barcode', openaiHomePro:'premium_landing_fridge_mount'});
+    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.50', ocrBoostPro:'highres_contrast_teacher_image_label_expiry_barcode', openaiHomePro:'premium_landing_fridge_mount'});
     if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('ocr-boost-ready-v2838',{version:V, stages:['label','expiry','barcode','ingredients']}),1400);
   }catch(_){ }
 })();
