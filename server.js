@@ -766,6 +766,52 @@ function v2842SafeImageDataUrl(v='', maxChars=780000){
   if(s.length>maxChars) return '';
   return s;
 }
+function v2845SafePhotoUrl(v=''){
+  const s=String(v||'').trim();
+  if(!s) return '';
+  if(v2842IsDataImage(s)) return '';
+  if(!/^https?:\/\//i.test(s)) return '';
+  if(s.length>1200) return '';
+  if(/[<>\"']/g.test(s)) return '';
+  return s;
+}
+function v2845AttachOwnerProfilePhoto(record={}, updates={}, actor=''){
+  const folder=v2842EnsureObjectFolder(record);
+  const dataUrl=v2842SafeImageDataUrl(updates.profilePhotoDataUrl||updates.profilePhotoBase64||updates.representativePhotoDataUrl||'', 780000);
+  const externalUrl=v2845SafePhotoUrl(updates.profilePhotoUrl||updates.representativePhotoUrl||'');
+  if(!dataUrl && !externalUrl) return null;
+  const sample={
+    id:'',
+    at:v2842Now(),
+    kind:'owner_profile',
+    dataUrl,
+    thumbDataUrl:dataUrl,
+    externalUrl,
+    bytes:dataUrl?v2842ImageBytes(dataUrl):0,
+    visualSignature:v2840CleanString(updates.visualSignature||record.visualSignature||'',220),
+    colors:v2840List(updates.colors, record.colors).slice(0,18),
+    visibleEvidence:['Foto profilo scelta manualmente dal titolare server'],
+    detectedText:[],
+    source:'server_owner_profile_photo',
+    score:999
+  };
+  sample.id='owner_ph_'+hashStable([dataUrl.slice(0,900),dataUrl.slice(-900),externalUrl,record.key||record.canonicalKey||record.productName||'',Date.now()].join('|')).slice(0,18);
+  folder.photos=Array.isArray(folder.photos)?folder.photos:[];
+  folder.photos=folder.photos.filter(p=>!(p.id===sample.id || (dataUrl && p.dataUrl===dataUrl) || (externalUrl && p.externalUrl===externalUrl)));
+  folder.photos.unshift(sample);
+  folder.photos=folder.photos.slice(0,30);
+  folder.representativePhotoId=sample.id;
+  folder.representativePhoto=Object.assign({}, sample);
+  folder.profilePhotoLockedByOwner=true;
+  folder.hasRealProfilePhoto=true;
+  folder.photoCount=folder.photos.length;
+  folder.updatedAt=v2842Now();
+  record.profilePhoto=Object.assign({}, sample);
+  record.ownerProfilePhoto=Object.assign({}, sample);
+  record.sources=Object.assign({}, record.sources||{}, {ownerProfilePhoto:Number(record.sources?.ownerProfilePhoto||0)+1});
+  updateGlobalLearningAudit({type:'owner-profile-photo-updated-v2845', key:record.key||record.canonicalKey||'', productName:record.productName||'', brand:record.brand||'', actor, mode:dataUrl?'uploaded_data_url':'external_url'});
+  return sample;
+}
 function v2842PhotoId(sample={}){
   const raw=[sample.dataUrl?String(sample.dataUrl).slice(0,900)+String(sample.dataUrl).slice(-900):'', sample.externalUrl||'', sample.visualSignature||'', (sample.detectedText||[]).join(' '), (sample.visibleEvidence||[]).join(' ')].join('|');
   return 'ph_'+hashStable(raw).slice(0,18);
@@ -919,7 +965,7 @@ function v2842ApplyOwnerOverrides(record={}){
   record.categoryFamily=productCategoryFamily(record.category||'');
   record.lockedByOwner=true;
   record.reliability='alta';
-  record.learningQuality=Object.assign({}, record.learningQuality||{}, {ownerLocked:true, ownerPriority:'server_owner_override > user_confirmation > barcode > label > memory > teacher', clearableFields:true});
+  record.learningQuality=Object.assign({}, record.learningQuality||{}, {ownerLocked:true, ownerPriority:'server_owner_override > user_confirmation > barcode > label > memory > teacher', photoPriority:'owner_selected_profile_photo > server_auto_best_photo', clearableFields:true});
   record.sources=Object.assign({}, record.sources||{}, {ownerOverride:Number(record.sources?.ownerOverride||0)+1});
   return record;
 }
@@ -950,14 +996,36 @@ function v2842UpdateOwnerOverride(key='', updates={}, actor=''){
   const prev=record.ownerOverrides||{};
   const before=Object.assign({}, prev.fields||{});
   record.ownerOverrides={enabled:true, version:'V28.43_owner_locked_values', fields:Object.assign({}, prev.fields||{}, fields), lockedFields:[...new Set([...(prev.lockedFields||[]), ...Object.keys(fields)])], updatedAt:v2842Now(), updatedBy:actor||'server_owner'};
-  if(updates.representativePhotoId){ const f=v2842EnsureObjectFolder(record); if(f.photos.find(p=>p.id===updates.representativePhotoId)){ f.representativePhotoId=updates.representativePhotoId; f.representativePhoto=f.photos.find(p=>p.id===updates.representativePhotoId); record.ownerOverrides.representativePhotoId=updates.representativePhotoId; } }
+  let ownerPhotoChange=null;
+  if(updates.representativePhotoId){
+    const f=v2842EnsureObjectFolder(record);
+    const selected=f.photos.find(p=>p.id===updates.representativePhotoId);
+    if(selected){
+      f.representativePhotoId=updates.representativePhotoId;
+      f.representativePhoto=Object.assign({}, selected);
+      f.profilePhotoLockedByOwner=true;
+      f.hasRealProfilePhoto=!!(selected.dataUrl||selected.externalUrl);
+      record.profilePhoto=Object.assign({}, selected);
+      record.ownerOverrides.representativePhotoId=updates.representativePhotoId;
+      record.ownerOverrides.profilePhotoLockedByOwner=true;
+      ownerPhotoChange=selected;
+    } else {
+      return {ok:false,error:'representative_photo_not_found',message:'Foto non trovata nella cartella oggetto'};
+    }
+  }
+  if(updates.profilePhotoDataUrl || updates.profilePhotoBase64 || updates.profilePhotoUrl || updates.representativePhotoDataUrl || updates.representativePhotoUrl){
+    ownerPhotoChange=v2845AttachOwnerProfilePhoto(record, updates, actor||'server_owner');
+    if(!ownerPhotoChange) return {ok:false,error:'invalid_profile_photo',message:'Foto profilo non valida: usa JPG/PNG/WebP base64 leggero oppure URL https'};
+    record.ownerOverrides.representativePhotoId=ownerPhotoChange.id;
+    record.ownerOverrides.profilePhotoLockedByOwner=true;
+  }
   record.ownerOverrideHistory=Array.isArray(record.ownerOverrideHistory)?record.ownerOverrideHistory:[];
-  record.ownerOverrideHistory.unshift({at:v2842Now(), actor:actor||'server_owner', fields:Object.keys(fields), representativePhotoId:updates.representativePhotoId||'', before:v2840SmallObject(before,30), after:v2840SmallObject(record.ownerOverrides.fields,30)});
+  record.ownerOverrideHistory.unshift({at:v2842Now(), actor:actor||'server_owner', fields:Object.keys(fields), representativePhotoId:(ownerPhotoChange?.id||updates.representativePhotoId||''), photoChanged:!!ownerPhotoChange, before:v2840SmallObject(before,30), after:v2840SmallObject(record.ownerOverrides.fields,30)});
   record.ownerOverrideHistory=record.ownerOverrideHistory.slice(0,30);
   v2842ApplyOwnerOverrides(record);
   v2840AttachMemoryCard(record,{});
   record.updatedAt=v2842Now(); g.updatedAt=v2842Now();
-  updateGlobalLearningAudit({type:'owner-override-updated', key:record.key||key, productName:record.productName||'', brand:record.brand||'', lockedFields:record.ownerOverrides.lockedFields, actor, fieldCount:Object.keys(fields).length, photoChanged:!!updates.representativePhotoId});
+  updateGlobalLearningAudit({type:'owner-override-updated', key:record.key||key, productName:record.productName||'', brand:record.brand||'', lockedFields:record.ownerOverrides.lockedFields, actor, fieldCount:Object.keys(fields).length, photoChanged:!!ownerPhotoChange, representativePhotoId:ownerPhotoChange?.id||updates.representativePhotoId||''});
   return {ok:true, product:v2840PublicProductBrainDetail(record)};
 }
 
@@ -1083,19 +1151,93 @@ function v2840PublicProductBrainDetail(record={}){
     rawCompact:compactGlobalProductRecord(record)
   };
 }
+
+function v2844BrainCategorySearchText(category=''){
+  const c=String(category||'').trim();
+  const map={
+    milk_drinks:'latte bevande latte milk drinks latte uht latte fresco',
+    water:'acqua acqua naturale acqua minerale',
+    juice:'succhi tè the thé tea ice tea bevande non gassate',
+    soft_drinks:'bibite gassate cola coca cola pepsi fanta sprite',
+    sauces_condiments:'salse condimenti sughi ketchup maionese bbq',
+    laundry:'bucato detersivo lavatrice candeggina ammorbidente',
+    cleaning:'pulizia casa detergente disinfettante',
+    dishwashing:'piatti lavastoviglie detersivo piatti',
+    meat_deli:'salumi affettati carne gastronomia',
+    spreads:'creme spalmabili crema spalmabile',
+    yogurt:'yogurt kefir',
+    oil_vinegar:'olio aceto',
+    chocolate_sweets:'cioccolata dolci snack biscotti merendine',
+    pet_food:'animali cibo animali cane gatto crocchette',
+    aquarium:'acquario pesci tartarughe'
+  };
+  return [c,map[c]||''].join(' ');
+}
+function v2844BrainPrimarySearchBlob(record={}){
+  const card=record.memoryCard||{};
+  const id=card.identity||{};
+  const cls=card.classification||{};
+  const qty=card.quantity||{};
+  const va=card.visualAppearance||{};
+  const oo=record.ownerOverrides?.fields||{};
+  return normalizeVisionText([
+    record.productName, record.brand, record.format, record.category, record.unit, (record.barcodes||[]).join(' '),
+    card.title, id.productName, id.brand, id.format, (id.aliases||[]).join(' '), (id.brands||[]).join(' '),
+    cls.category, cls.categoryFamily, v2844BrainCategorySearchText(cls.category||record.category||''), qty.unit,
+    card.barcode, (card.barcodes||[]).join(' '),
+    oo.productName, oo.brand, oo.format, oo.category, oo.barcode,
+    va.productType, va.packageType, va.visualSignature, (va.colors||[]).join(' '), record.packaging, record.packageType, record.productType,
+    (record.labels||[]).join(' '), (card.labels||[]).join(' '), (record.evidenceTokens||[]).join(' ')
+  ].filter(Boolean).join(' '));
+}
+function v2844BrainDeepSearchBlob(record={}){
+  const card=record.memoryCard||{};
+  return normalizeVisionText([
+    v2844BrainPrimarySearchBlob(record),
+    (record.ingredients||[]).join(' '), (record.allergens||[]).join(' '), (record.possibleTraces||[]).join(' '),
+    (card.ingredients||[]).join(' '), (card.allergens||[]).join(' '), (card.possibleTraces||[]).join(' '),
+    (record.visibleEvidence||[]).join(' '), (record.detectedText||[]).join(' '),
+    (card.visibleEvidence||[]).join(' '), (card.detectedText||[]).join(' '), JSON.stringify(record.nutrition||card.nutrition||{})
+  ].filter(Boolean).join(' '));
+}
+function v2844BrainSearchScore(record={}, q='', deep=false){
+  const query=normalizeVisionText(q||'');
+  if(!query) return 1;
+  const digits=query.replace(/\D/g,'');
+  if(/^\d{6,14}$/.test(digits)){
+    const bc=[record.barcode,(record.barcodes||[]).join(' '),record.memoryCard?.barcode,(record.memoryCard?.barcodes||[]).join(' ')].join(' ');
+    return String(bc||'').includes(digits) ? 999 : 0;
+  }
+  const parts=query.split(/\s+/).filter(Boolean);
+  if(!parts.length) return 1;
+  const primary=v2844BrainPrimarySearchBlob(record);
+  const hay=deep ? v2844BrainDeepSearchBlob(record) : primary;
+  for(const t of parts){ if(!hay.includes(t)) return 0; }
+  const name=normalizeVisionText([record.productName,record.brand,record.memoryCard?.identity?.productName,record.memoryCard?.identity?.brand].filter(Boolean).join(' '));
+  let score=0;
+  for(const t of parts){
+    if(primary.split(' ').includes(t)) score+=24; else if(primary.includes(t)) score+=12; else score+=2;
+    if(name.split(' ').includes(t)) score+=38; else if(name.includes(t)) score+=20;
+  }
+  score += Number(record.confirmations||0)*0.2;
+  if(record.ownerOverrides?.enabled) score+=4;
+  return score;
+}
+
 function publicServerBrainV2840({limit=200, q='', includeRaw=false}={}){
   ensureDbShape();
   const g=db.assistantBrain.globalProductMemory||{products:{}};
   const query=normalizeText(q||'');
   let products=Object.values(g.products||{}).map(r=>{ try{ v2842EnsureObjectFolder(r); v2842ApplyOwnerOverrides(r); v2840AttachMemoryCard(r,{}); }catch(_){ if(!r.memoryCard) v2840AttachMemoryCard(r,{}); } return r; });
+  const deepSearch = !!includeRaw || String(arguments[0]?.deep||'').toLowerCase()==='true' || String(arguments[0]?.deep||'')==='1';
   if(query){
-    products=products.filter(p=>normalizeText([p.productName,p.brand,p.format,p.category,(p.barcodes||[]).join(' '),(p.evidenceTokens||[]).join(' ')].join(' ')).includes(query));
+    products=products.map(p=>Object.assign(p,{__brainSearchScoreV2844:v2844BrainSearchScore(p,q,deepSearch)})).filter(p=>Number(p.__brainSearchScoreV2844||0)>0);
   }
-  products=products.sort((a,b)=>Number(b.updatedAt||0)-Number(a.updatedAt||0)).slice(0,Math.max(1,Math.min(Number(limit)||200,1000))).map(v2840PublicProductBrainDetail);
+  products=products.sort((a,b)=> query ? (Number(b.__brainSearchScoreV2844||0)-Number(a.__brainSearchScoreV2844||0) || Number(b.updatedAt||0)-Number(a.updatedAt||0)) : (Number(b.updatedAt||0)-Number(a.updatedAt||0))).slice(0,Math.max(1,Math.min(Number(limit)||200,1000))).map(v2840PublicProductBrainDetail);
   const errors=[...(db.assistantBrain.learningAudit||[]).filter(e=>/error|failed|reject|sync/i.test(String(e.type||e.reason||''))).slice(0,120), ...((db.assistantBrain.errorLearning?.corrections||[]).slice(0,80).map(e=>Object.assign({type:'user-correction'},e)))].slice(0,180);
   return {
     ok:true,
-    version:'V28.43 Object Folder + Owner Lock Brain Pro',
+    version:'V28.45 Brain Premium Photo Owner Console',
     dbMode,
     databaseConnected:dbMode!=='file',
     generatedAt:Date.now(),
@@ -3351,7 +3493,7 @@ function preflightSnapshotV98(){
   const keyDiag=openAiKeyDiagnosticV2836();
   const teacherUsable=openAiTeacherIsUsableV2836();
   const teacherMsg=openAiTeacherMessageV2836();
-  const brain={version:'V28.39',name:'OpenAI Token Min Fix + Debug OpenAI Test',base:'Ultra Error Reduction Core V27.97 + Sync Handshake V27.99',categoryEngine:'ultra_error_reduction_core_v27_97', costGuardV2804:db.assistantBrain?.costGuardV2804||null,barcodePriority:'barcode > label > user correction > server memory > teacher',syncPolicy:'single item confirm + retry queue',testTools:'diagnostics_copy + server_sync_test + openai_live_check'};
+  const brain={version:'V28.45',name:'OpenAI Token Min Fix + Debug OpenAI Test',base:'Ultra Error Reduction Core V27.97 + Sync Handshake V27.99',categoryEngine:'ultra_error_reduction_core_v27_97', costGuardV2804:db.assistantBrain?.costGuardV2804||null,barcodePriority:'barcode > label > user correction > server memory > teacher',syncPolicy:'single item confirm + retry queue',testTools:'diagnostics_copy + server_sync_test + openai_live_check'};
   const checks=[
     {id:'openai_teacher',label:'Docente OpenAI',ok:teacherUsable,message:teacherMsg,diagnostics:keyDiag,lastRuntime:lastOpenAiRuntimeV2836},
     {id:'vision_backend',label:'Vision backend',ok:teacherUsable,message:teacherUsable?'Vision pronta dal backend':'Vision docente non disponibile: '+teacherMsg},
@@ -3445,7 +3587,7 @@ const server = http.createServer(async (req,res)=>{
       if(!h) return send(res,401,{ok:false,error:'unauthorized_household',message:'Accesso negato: serve account cloud valido per vedere il cervello server'});
       const limit=Number(url.searchParams.get('limit')||200);
       const q=String(url.searchParams.get('q')||'');
-      return send(res,200,publicServerBrainV2840({limit,q}));
+      return send(res,200,publicServerBrainV2840({limit,q,deep:url.searchParams.get('deep')||''}));
     }
 
 
@@ -3468,7 +3610,7 @@ const server = http.createServer(async (req,res)=>{
         dbMode,
         databaseConnected: dbMode !== 'file',
         memoryReady: dbMode !== 'file',
-        globalLearning: 'server_global_product_memory', globalProductMemory: publicGlobalProductMemory(10), knowledgeFeeder: db.assistantBrain.knowledgeFeeder||null, knowledgeCache:{entries:Object.keys(db.assistantBrain?.knowledgeCache?.entries||{}).length,hits:db.assistantBrain?.knowledgeCache?.hits||0,barcodeHits:db.assistantBrain?.knowledgeCache?.barcodeHits||0,updatedAt:db.assistantBrain?.knowledgeCache?.updatedAt||0}, barcodeBrain:db.assistantBrain?.barcodeBrain||null, categoryBrainV95:db.assistantBrain?.categoryBrainV95||null, monsterBrainV96:db.assistantBrain?.monsterBrainV96||null, ultraBrainV97:db.assistantBrain?.ultraBrainV97||null, errorLearning:{corrections:(db.assistantBrain?.errorLearning?.corrections||[]).length,patterns:Object.keys(db.assistantBrain?.errorLearning?.patterns||{}).length,updatedAt:db.assistantBrain?.errorLearning?.updatedAt||0}, learningQuality:{dedupe:'canonical_key_plus_barcode_conflict_guard', teacherBypass:'after_confirmations_barcode_and_field_confidence', knowledgeFeeder:'open_facts_family_with_barcode_and_cache_after_user_confirmation', storesPhotos:'lightweight_object_folder_photos_v2843_clearable_owner', storesVisualSignature:true, ownerOverridePriority:'server_owner_override_wins', categoryEngine:'ultra_error_reduction_core_v27_97', costGuardV2804:db.assistantBrain?.costGuardV2804||null, ultraErrorReduction:'active', preflightStability:'v28_04_cost_guard_pro', barcodePriority:'barcode > label > memory > teacher', fieldConfidence:'per_field_v97', visionPipelineV2829:'server_full_image_openai_slim_teacher_barcode_step_v2830'},
+        globalLearning: 'server_global_product_memory', globalProductMemory: publicGlobalProductMemory(10), knowledgeFeeder: db.assistantBrain.knowledgeFeeder||null, knowledgeCache:{entries:Object.keys(db.assistantBrain?.knowledgeCache?.entries||{}).length,hits:db.assistantBrain?.knowledgeCache?.hits||0,barcodeHits:db.assistantBrain?.knowledgeCache?.barcodeHits||0,updatedAt:db.assistantBrain?.knowledgeCache?.updatedAt||0}, barcodeBrain:db.assistantBrain?.barcodeBrain||null, categoryBrainV95:db.assistantBrain?.categoryBrainV95||null, monsterBrainV96:db.assistantBrain?.monsterBrainV96||null, ultraBrainV97:db.assistantBrain?.ultraBrainV97||null, errorLearning:{corrections:(db.assistantBrain?.errorLearning?.corrections||[]).length,patterns:Object.keys(db.assistantBrain?.errorLearning?.patterns||{}).length,updatedAt:db.assistantBrain?.errorLearning?.updatedAt||0}, learningQuality:{dedupe:'canonical_key_plus_barcode_conflict_guard', teacherBypass:'after_confirmations_barcode_and_field_confidence', knowledgeFeeder:'open_facts_family_with_barcode_and_cache_after_user_confirmation', storesPhotos:'lightweight_object_folder_photos_v2845_owner_selectable_profile_photo', storesVisualSignature:true, ownerOverridePriority:'server_owner_override_wins', categoryEngine:'ultra_error_reduction_core_v27_97', costGuardV2804:db.assistantBrain?.costGuardV2804||null, ultraErrorReduction:'active', preflightStability:'v28_04_cost_guard_pro', barcodePriority:'barcode > label > memory > teacher', fieldConfidence:'per_field_v97', visionPipelineV2829:'server_full_image_openai_slim_teacher_barcode_step_v2830'},
         smsReady: PHONE_VERIFY_READY,
         seedMemory:{version:VISION_SEED_MEMORY.version||'', products:(VISION_SEED_MEMORY.products||[]).length, totalProfiles:Number(VISION_MEGA_INDEX.totalProfiles||1000000), megaVersion:VISION_MEGA_INDEX.version||'', categories:(VISION_SEED_MEMORY.categories||[]).length, loaded:(VISION_SEED_MEMORY.products||[]).length>0},
         twilioVerifyReady: TWILIO_VERIFY_ENABLED,
