@@ -452,7 +452,7 @@ async function syncAutonomyLearningToServer(payload={}, quiet=true, fromQueue=fa
     if(!settings.apiEndpoint || !settings.householdId || !settings.token){ if(!fromQueue && payload?.confirmed) queueLearningPayload(payload,'missing_cloud_settings'); return false; }
     const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/ai/learn/autonomy`,{
       method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token||''}`},
-      body:JSON.stringify({householdId:settings.householdId, payload, clientMemorySummary:{learnedProducts:(aiMemory.learnedProducts||[]).length, deepProducts:(aiMemory.productDeepMemory||[]).length, queued:pendingLearningQueueCount(), appVersion:'v28.40-server-brain'}})
+      body:JSON.stringify({householdId:settings.householdId, payload, clientMemorySummary:{learnedProducts:(aiMemory.learnedProducts||[]).length, deepProducts:(aiMemory.productDeepMemory||[]).length, queued:pendingLearningQueueCount(), appVersion:'v28.42-object-folder-brain'}})
     });
     if(!res.ok) return false;
     const data=await res.json();
@@ -2052,9 +2052,10 @@ function scoreRealityCategoryFromText(text='', fallback='food'){
   if(!n) return {category:fallback||'food', score:0, evidence:[], physicalState:categoryPhysicalState(fallback||'food')};
   add('non_consumable',30,/\b(cane|gatto vivo|persona|viso|mano|telecomando|tv|televisore|pantaloni|maglia|scarpe|sedia|tavolo|mobile|pavimento|divano|letto|porta|computer|auricolari)\b/,'oggetto non idoneo');
   add('soft_drinks',28,/\b(blues\s*cola|cola\s*blues|coca\s*cola|coca-cola|pepsi|fanta|sprite|cola|aranciata|gassosa|chinotto|tonica|cedrata|bibita\s*gassata|bevanda\s*gassata|soft\s*drink)\b/,'bibita gassata/cola');
+  add('juice',32,/\b(t[eè]\s*freddo|the\s*freddo|th[eè]\s*freddo|ice\s*tea|ice\s*the|estath[eè]|the\s*fusion|th[eè]\s*fusion|t[eè]\s*fusion|bevanda\s+al\s+t[eè]|bevanda\s+al\s+the|the\s*(pesca|limone|rosa)|th[eè]\s*(pesca|limone|rosa)|t[eè]\s*(pesca|limone|rosa))\b/,'tè freddo/bevanda al tè');
   add('sports_energy_drinks',24,/\b(red\s*bull|monster|energy\s*drink|powerade|gatorade|integratore\s*salino|sport\s*drink|isotonica)\b/,'energy/sport drink');
   add('water',24,/\b(acqua|minerale|oligominerale|naturale|frizzante|effervescente\s*naturale|levissima|sant\s*anna|san\s*benedetto|vera|lete|ferrarelle|uliveto|rocchetta)\b/,'acqua');
-  add('juice',22,/\b(succo|nettare|spremuta|bevanda\s+alla\s+frutta|t[eè]\s*freddo|the\s*freddo|te\s*freddo|estath[eè]|estate|ice\s*tea)\b/,'succo/tè');
+  add('juice',22,/\b(succo|nettare|spremuta|bevanda\s+alla\s+frutta|t[eè]\s*freddo|the\s*freddo|th[eè]\s*freddo|te\s*freddo|estath[eè]|estate|ice\s*tea|ice\s*the|the\s*fusion|th[eè]\s*fusion|the\s*(pesca|limone|rosa)|th[eè]\s*(pesca|limone|rosa))\b/,'succo/tè');
   add('milk_drinks',21,/\b(latte\s+uht|latte\s+intero|latte\s+parzialmente\s+scremato|latte\s+scremato|bevanda\s+al\s+latte|bevanda\s+vegetale|latte\s+di\s+(soia|mandorla|avena|riso))\b/,'latte/bevanda latte');
   add('coffee_tea',20,/\b(caffe|caff[eè]|capsule\s+caffe|cialde|nescafe|orzo|camomilla|tisane|infuso|t[eè]|the|tea|filtro\s+te)\b/,'caffè/tè');
   add('yogurt',26,/\b(yogurt|yoghurt|kefir|skyr|greco|fermenti\s*lattici|ayo\s*kefir)\b/,'yogurt/kefir');
@@ -2101,6 +2102,7 @@ function scoreRealityCategoryFromText(text='', fallback='food'){
   const foodCats=['yogurt','dairy','eggs','pasta_rice','flour_baking','bakery','breakfast_cereals','breakfast_snacks','chocolate_sweets','spreads','jams_honey','sauces_condiments','oil_vinegar','spices_broths','preserves_jars','canned_fish_meat','legumes_canned','frozen','ice_cream','ready_meals','meat_deli','fish','fruit','veg','baby_food','diet_special'];
   const nonFoodCats=['pharmacy','aquarium','pet_food','pets','laundry','dishwashing','cleaning','paper_house','oral_care','hair_body','personal_care','house','non_consumable'];
   const strongFood=foodCats.some(hasStrong), strongNonFood=nonFoodCats.some(hasStrong), strongDrink=drinkCats.some(c=>c!=='drinks' && hasStrong(c));
+  if(hasStrong('juice')){ scores.soft_drinks=Math.min(scores.soft_drinks||0, 2); scores.water=0; scores.drinks=0; }
   if(hasStrong('soft_drinks')){ scores.water=0; scores.drinks=0; }
   if(hasStrong('water') && !hasStrong('soft_drinks')){ scores.soft_drinks=Math.min(scores.soft_drinks||0, 2); }
   if(strongFood || strongNonFood){ scores.drinks=0; if(!strongDrink){ ['water','soft_drinks','juice','milk_drinks','coffee_tea','sports_energy_drinks'].forEach(c=>scores[c]=0); } }
@@ -2136,14 +2138,25 @@ function applyRealityCategoryGuard(result={}, features=null){
   const oldCat=result.category||'';
   if(resolved.category) result.category=resolved.category;
   const n=normalizeLearnText(evidence);
-  const colaEvidence=/\b(blues\s*cola|cola\s*blues|coca\s*cola|coca-cola|pepsi|fanta|sprite|cola|aranciata|bibita|bevanda\s*gassata|chinotto|tonica)\b/.test(n);
+  const rawDetectedText=Array.isArray(result.detectedText) ? result.detectedText.join(' ') : '';
+  const rawVisibleEvidence=Array.isArray(result.visibleEvidence) ? result.visibleEvidence.join(' ') : '';
+  const hasRealTextEvidence=normalizeLearnText([rawDetectedText,rawVisibleEvidence,result.variant,result.productType,result.packageType].filter(Boolean).join(' ')).length>2;
+  const genericColaFallback=/\bbibita\s+tipo\s+cola\b/.test(n) && !/\b(blues\s*cola|cola\s*blues|coca\s*cola|coca-cola|pepsi|fanta|sprite|aranciata|chinotto|gassosa|cedrata|bibita\s*gassata|bevanda\s*gassata)\b/.test(n) && !hasRealTextEvidence;
+  const teaEvidence=/\b(t[eè]\s*freddo|the\s*freddo|th[eè]\s*freddo|ice\s*tea|ice\s*the|estath[eè]|the\s*fusion|th[eè]\s*fusion|t[eè]\s*fusion|bevanda\s+al\s+t[eè]|bevanda\s+al\s+the|the\s*(pesca|limone|rosa)|th[eè]\s*(pesca|limone|rosa)|t[eè]\s*(pesca|limone|rosa))\b/.test(n);
+  const colaEvidence=!genericColaFallback && /\b(blues\s*cola|cola\s*blues|coca\s*cola|coca-cola|pepsi|fanta|sprite|cola|aranciata|bibita\s*gassata|bevanda\s*gassata|chinotto|tonica|cedrata|gassosa)\b/.test(n);
   const waterEvidence=/\b(acqua|minerale|oligominerale|naturale|frizzante|levissima|sant\s*anna|san\s*benedetto|vera|lete|ferrarelle|uliveto|rocchetta)\b/.test(n);
   const foodNotDrink=/\b(pesto|salsa|bbq|barbecue|ketchup|maionese|yogurt|kefir|cioccolat|crema\s+spalmabile|condimento|sugo|pasta|riso|snack|biscott|formaggio|marmellata|confettura|olio|aceto|tonno|legumi|barattolo|vasetto)\b/.test(n);
-  if(colaEvidence){
+  if(teaEvidence && !colaEvidence){
+    result.category='juice'; result.isLiquid=true; result.physicalState='liquid_drink';
+    if(!result.unit || result.unit==='pz' || result.unit==='conf') result.unit='bt';
+    if(!result.productName || /^(bibita|bevanda|prodotto|acqua|latte)/i.test(String(result.productName||''))) result.productName='Tè freddo';
+    if(/\bblues\b/.test(n) && (!result.brand || /generico/i.test(String(result.brand)))) result.brand='Blues';
+    result.categoryGuardNote=(result.categoryGuardNote?result.categoryGuardNote+' · ':'')+'Blocco tè: esclusa cola/gassate perché il testo indica tè/thé/tea.';
+  } else if(colaEvidence){
     result.category='soft_drinks'; result.isLiquid=true; result.physicalState='liquid_drink';
     if(!result.unit || result.unit==='pz') result.unit=/\blattina\b/.test(n)?'lattina':'bt';
-    if(!result.productName || /acqua|bottiglia|prodotto da identificare/i.test(String(result.productName))) result.productName=/\bblues\b/.test(n)?'Cola Blues':'Bibita tipo cola';
-    if(/\bblues\b/.test(n) && (!result.brand || /acqua|generico/i.test(String(result.brand)))) result.brand='Blues';
+    if(!result.productName || /acqua|bottiglia|prodotto da identificare/i.test(String(result.productName))) result.productName=/\bblues\s*cola|cola\s*blues\b/.test(n)?'Cola Blues':'Bibita gassata';
+    if(/\bblues\s*cola|cola\s*blues\b/.test(n) && (!result.brand || /acqua|generico/i.test(String(result.brand)))) result.brand='Blues';
   } else if(waterEvidence && !foodNotDrink){
     result.category='water'; result.isLiquid=true; result.physicalState='liquid_drink';
     if(!result.unit || result.unit==='pz') result.unit='bt';
@@ -3159,7 +3172,9 @@ function mergeLabelVisionIntoResultCard(el,base={},extra={},dataUrl='', stepArg=
   base.colors=mergeUniqueList(base.colors||base.dominantColors||[], extra.colors||extra.dominantColors||[], 14);
   base.nutrition=Object.assign({}, base.nutrition||{}, extra.nutrition||{});
   base.ingredientsVerified=!!(base.ingredientsVerified || extra.ingredientsVerified || (extra.ingredients||[]).length);
-  base.labelDataUrl=dataUrl || base.labelDataUrl || '';
+  if(step==='expiry') base.expiryDataUrl=dataUrl || base.expiryDataUrl || '';
+  else if(step==='barcode') base.barcodeDataUrl=dataUrl || base.barcodeDataUrl || '';
+  else base.labelDataUrl=dataUrl || base.labelDataUrl || '';
   if(step==='barcode') base.barcodeScanMerged=true;
   else base.labelScanMerged=true;
   el._scanResult=base;
@@ -3910,12 +3925,32 @@ function presentVisionResults(result,dataUrl){
 
 
 
+function hasTeaLabelEvidenceV2841(text=''){
+  const n=normalizeLearnText(text||'');
+  return /\b(t[eè]\s*freddo|the\s*freddo|th[eè]\s*freddo|ice\s*tea|ice\s*the|estath[eè]|the\s*fusion|th[eè]\s*fusion|t[eè]\s*fusion|bevanda\s+al\s+t[eè]|bevanda\s+al\s+the|the\s*(pesca|limone|rosa)|th[eè]\s*(pesca|limone|rosa)|t[eè]\s*(pesca|limone|rosa))\b/.test(n);
+}
+function hasSoftDrinkEvidenceV2841(text=''){
+  const n=normalizeLearnText(text||'');
+  if(hasTeaLabelEvidenceV2841(n)) return false;
+  return /\b(blues\s*cola|cola\s*blues|coca\s*cola|coca-cola|pepsi|fanta|sprite|aranciata|chinotto|gassosa|cedrata|bibita\s*gassata|bevanda\s*gassata|cola\s*(zero|classica|original))\b/.test(n);
+}
+function isGenericVisionFallbackNameV2841(name=''){
+  const n=normalizeLearnText(name||'');
+  return !n || /\b(bibita\s+tipo\s+cola|bevanda\s+in\s+bottiglia\s+da\s+identificare|bottiglia\s+da\s+identificare|prodotto\s+da\s+identificare|nome\s+prodotto|acqua\s+in\s+bottiglia)\b/.test(n);
+}
+function hasReliableLookupEvidenceV2841(result={}){
+  const evidence=[result.brand,result.variant,result.productType,result.packageType,...(result.detectedText||[]),...(result.visibleEvidence||[])].filter(Boolean).join(' ');
+  const n=normalizeLearnText(evidence);
+  return n.length>=4 && !/^\s*$/.test(n);
+}
 function categoryLooksGenericForWeb(cat=''){
   return !cat || cat==='food' || cat==='drinks';
 }
 function shouldAskInternetForCategory(result={}){
   if(!result || result.needsRetake) return false;
   const evidence=[result.productName,result.brand,result.variant,result.productType,result.packageType,result.category,result.estimatedSize,...(result.detectedText||[]),...(result.visibleEvidence||[])].join(' ');
+  if(isGenericVisionFallbackNameV2841(result.productName||'') && !hasReliableLookupEvidenceV2841(result)) return false;
+  if(hasTeaLabelEvidenceV2841(evidence) && result.category==='soft_drinks') result.category='juice';
   const inferred=inferRealityCategoryFromText(evidence,'');
   if(inferred && inferred!==result.category && categoryLooksGenericForWeb(result.category)) return true;
   const hasName=String(result.productName||'').trim().length>=2;
@@ -3943,19 +3978,23 @@ function applyInternetCategoryToCard(el,result,data={}){
   if(el.classList.contains('confirmed') || el.dataset.userCategoryEdited==='1') return false;
   const current=el.querySelector('[data-scan-cat]')?.value || result.category || 'food';
   const evidence=[result.productName,result.brand,result.variant,result.productType,result.packageType,...(result.detectedText||[]),...(result.visibleEvidence||[])].join(' ');
+  let newCategory=data.category;
+  if(hasTeaLabelEvidenceV2841(evidence) && newCategory==='soft_drinks') newCategory='juice';
+  if(newCategory==='soft_drinks' && !hasSoftDrinkEvidenceV2841(evidence)) return false;
+  if(isGenericVisionFallbackNameV2841(result.productName||'') && !hasReliableLookupEvidenceV2841(result)) return false;
   const localCat=inferRealityCategoryFromText(evidence,'');
-  const canReplace=categoryLooksGenericForWeb(current) || current===localCat || Number(data.confidence||0)>=0.72;
+  const canReplace=categoryLooksGenericForWeb(current) || current===localCat || Number(data.confidence||0)>=0.86;
   if(!canReplace) return false;
   const sel=el.querySelector('[data-scan-cat]');
-  if(sel){ sel.value=data.category; sel.dispatchEvent(new Event('input',{bubbles:true})); }
-  result.category=data.category;
+  if(sel){ sel.value=newCategory; sel.dispatchEvent(new Event('input',{bubbles:true})); }
+  result.category=newCategory;
   result.categoryWebVerified=true;
   result.categoryLookupSource=data.source||'internet';
   result.categoryLookupReason=data.reason||'';
   if(Array.isArray(data.ingredients) && data.ingredients.length) result.ingredients=mergeUniqueList(result.ingredients||[], data.ingredients, 50);
   if(Array.isArray(data.allergens) && data.allergens.length) result.allergens=mergeUniqueList(result.allergens||[], data.allergens, 35);
   el._scanResult=result;
-  setScanVoiceHelper(el, `Categoria verificata online: ${categoryLabel(data.category)}. Ho aggiornato la scheda senza rallentare la scansione.`, 'live');
+  setScanVoiceHelper(el, `Categoria verificata online: ${categoryLabel(result.category)}. Ho aggiornato la scheda senza rallentare la scansione.`, 'live');
   refreshScanResultCard(el,result);
   return true;
 }
@@ -4142,9 +4181,10 @@ async function guessProductFromImage(dataUrl=''){
     const waterLike = bottleLikeVisual || (verticalShape && centerRatio>.34 && (centerClear>.16 || centerWhite>.10 || centerBlue>.035 || br>.055 || wr>.12 || cr>.16)) || (centerWhite>.12 && labelBlue>.016 && centerRed<.09);
     const cokeLike = !redLikelyBackground && centerRed>.11 && labelRed>.08 && (labelDark>.08 || centerDark>.12);
 
-    if(waterLike && !cokeLike) return {needsManual:true, productName:'Acqua in bottiglia', brand:'', estimatedSize:'Capienza da confermare', sizeConfidence:.35, detailQuestion:'Non leggo la capienza: dimmi 2 litri, 1,5 litri o 500 ml.', quantity:1, unit:'bt', category:'water', confidence:.66, productPlaceholder:'Acqua in bottiglia', isLiquid:true, localVision:true, reason:'Riconoscimento locale prudente: prodotto centrale simile a bottiglia d’acqua. Conferma marca e capienza.'};
-    if(cokeLike) return {needsManual:true, productName:'Bibita tipo cola', brand:'', quantity:1, unit:'bt', category:'soft_drinks', confidence:.52, productPlaceholder:'Bibita tipo cola', isLiquid:true, localVision:true, reason:'Riconoscimento locale prudente: potrebbe essere una bibita tipo cola, ma conferma nome e marca.'};
-    if(centerWhite>.32 && centerRed<.04 && centerDark<.38) return {needsManual:true, productName:'Latte', brand:'', quantity:1, unit:'pz', category:'drinks', confidence:.46, productPlaceholder:'Latte', isLiquid:true, localVision:true, reason:'Riconoscimento locale prudente: sembra latte. Controlla quantità e conferma.'};
+    const safeWaterLike = waterLike && !cokeLike && centerRed<.055 && labelRed<.05 && (centerBlue>.028 || centerWhite>.18 || centerClear>.22);
+    if(safeWaterLike) return {needsManual:true, productName:'Acqua in bottiglia', brand:'', estimatedSize:'Capienza da confermare', sizeConfidence:.35, detailQuestion:'Non leggo la capienza: dimmi 2 litri, 1,5 litri o 500 ml.', quantity:1, unit:'bt', category:'water', confidence:.62, productPlaceholder:'Acqua in bottiglia', isLiquid:true, localVision:true, reason:'Riconoscimento locale prudente: prodotto centrale simile a bottiglia d’acqua. Conferma marca e capienza.'};
+    if(cokeLike || waterLike || bottleLikeVisual) return {needsManual:true, productName:'Bevanda in bottiglia da identificare', brand:'', estimatedSize:'Capienza da confermare', sizeConfidence:.25, detailQuestion:'Non leggo bene l’etichetta: fai una foto più vicina del fronte o completa nome e marca.', quantity:1, unit:'bt', category:'drinks', confidence:.34, productPlaceholder:'Nome bevanda', isLiquid:true, localVision:true, categoryWebNeeded:false, reason:'Riconoscimento locale prudente: vedo una bottiglia, ma non uso colore/forma per inventare cola, acqua o marca. Serve etichetta leggibile o docente server.'};
+    if(centerWhite>.32 && centerRed<.04 && centerDark<.38) return {needsManual:true, productName:'Bevanda da identificare', brand:'', quantity:1, unit:'pz', category:'drinks', confidence:.36, productPlaceholder:'Nome bevanda', isLiquid:true, localVision:true, categoryWebNeeded:false, reason:'Riconoscimento locale prudente: sembra una bevanda chiara, ma serve conferma etichetta.'};
     if(ratio(center,'green')>.16 && centerRed<.05) return {needsManual:true, productName:'Verdura', quantity:1, unit:'pz', category:'veg', confidence:.38, productPlaceholder:'Nome prodotto', localVision:true, reason:'Riconoscimento locale incerto: sembra verdura. Controlla nome e quantità.'};
   }catch(_){ }
   return null;
@@ -5269,6 +5309,11 @@ function v2840SmallObjFromScan(obj={}){
   });
   return out;
 }
+function safeMemoryDataUrlV2843(v='', maxChars=780000){
+  const s=String(v||'');
+  if(!/^data:image\/(png|jpe?g|webp);base64,/i.test(s)) return '';
+  return s.length<=maxChars ? s : '';
+}
 function buildServerProductMemoryV2840(result={}, current={}){
   const pm=result.productMemory||{};
   const barcode=current.barcode || extractBarcodeFromScanResult(result,null) || '';
@@ -5312,7 +5357,18 @@ function buildServerProductMemoryV2840(result={}, current={}){
     source:{cloudVision:!!result.cloudVision,autonomousVision:!!result.autonomousVision,memoryVision:!!result.memoryVision,localFirst:!!result.localFirst,seedVision:!!result.seedVision},
     externalKnowledge:v2840SmallObjFromScan(pm.externalKnowledge||{}),
     imageUrl:String(pm.imageUrl||pm.externalKnowledge?.imageUrl||result.imageUrl||'').slice(0,600),
-    profilePhoto:{type:'server_generated_default', note:'Il server genera la foto profilo tecnica se non arriva una immagine esterna leggera.'},
+    dataUrl:safeMemoryDataUrlV2843(result.dataUrl||pm.dataUrl||''),
+    labelDataUrl:safeMemoryDataUrlV2843(result.labelDataUrl||pm.labelDataUrl||''),
+    expiryDataUrl:safeMemoryDataUrlV2843(result.expiryDataUrl||pm.expiryDataUrl||''),
+    barcodeDataUrl:safeMemoryDataUrlV2843(result.barcodeDataUrl||pm.barcodeDataUrl||''),
+    photoSamples:[
+      safeMemoryDataUrlV2843(result.dataUrl)?{kind:'product_front',dataUrl:safeMemoryDataUrlV2843(result.dataUrl),visualSignature:String(result.visualSignature||'').slice(0,220),colors,visibleEvidence,detectedText,source:'scan_product_front'}:null,
+      safeMemoryDataUrlV2843(result.labelDataUrl)?{kind:'label',dataUrl:safeMemoryDataUrlV2843(result.labelDataUrl),colors,visibleEvidence,detectedText,source:'scan_label'}:null,
+      safeMemoryDataUrlV2843(result.expiryDataUrl)?{kind:'expiry',dataUrl:safeMemoryDataUrlV2843(result.expiryDataUrl),colors,visibleEvidence,detectedText,source:'scan_expiry'}:null,
+      safeMemoryDataUrlV2843(result.barcodeDataUrl)?{kind:'barcode',dataUrl:safeMemoryDataUrlV2843(result.barcodeDataUrl),colors,visibleEvidence,detectedText,source:'scan_barcode'}:null
+    ].filter(Boolean),
+    objectFolder:{clientCreatedAt:Date.now(), photoPolicy:'best_profile_plus_all_light_samples', visualSignature:String(result.visualSignature||pm.visualSignature||'').slice(0,220)},
+    profilePhoto:{type:'server_selects_best_real_photo', note:'Il server sceglie la foto migliore tra prodotto, etichetta, scadenza e barcode.'},
     needsWebVerification: ingredients.length===0 || allergens.length===0,
     confirmedByUser:true,
     confirmedAt:Date.now()
@@ -5366,7 +5422,13 @@ function confirmScanResult(el,result,silent=false){
     colors:serverProductMemory.visualAppearance?.colors||internalProductMemory.visualAppearance?.colors||result.colors||[],
     nutrition:serverProductMemory.nutrition||internalProductMemory.nutrition||result.nutrition||{},
     labels:serverProductMemory.labels||result.labels||[],
-    confirmedAt:Date.now(),visualFeatures:result.visualFeatures||null,visualSignature:result.visualSignature||'',visibleEvidence:result.visibleEvidence||[],detectedText:result.detectedText||[],confidence:result.confidence||null,fieldConfidence:result.fieldConfidence||null,cloudVision:!!result.cloudVision,autonomousVision:!!result.autonomousVision,memoryVision:!!result.memoryVision,localFirst:!!result.localFirst,learningAudit:{teacherUsed:!!result.cloudVision,recognizedByLocalOrServer:!!(result.localFirst||result.autonomousVision||result.memoryVision),memoryUpdated:true,barcode:!!barcode,userCorrections:Object.keys(userCorrections||{}).filter(k=>userCorrections[k]?.edited),serverMemoryCard:'V28.40'}
+    dataUrl:safeMemoryDataUrlV2843(result.dataUrl||''),
+    labelDataUrl:safeMemoryDataUrlV2843(result.labelDataUrl||''),
+    expiryDataUrl:safeMemoryDataUrlV2843(result.expiryDataUrl||''),
+    barcodeDataUrl:safeMemoryDataUrlV2843(result.barcodeDataUrl||''),
+    photoSamples:serverProductMemory.photoSamples||[],
+    objectFolder:{clientIntent:'server_object_folder', saveAllProvidedPhotos:true, chooseBestRepresentative:true},
+    confirmedAt:Date.now(),visualFeatures:result.visualFeatures||null,visualSignature:result.visualSignature||'',visibleEvidence:result.visibleEvidence||[],detectedText:result.detectedText||[],confidence:result.confidence||null,fieldConfidence:result.fieldConfidence||null,cloudVision:!!result.cloudVision,autonomousVision:!!result.autonomousVision,memoryVision:!!result.memoryVision,localFirst:!!result.localFirst,learningAudit:{teacherUsed:!!result.cloudVision,recognizedByLocalOrServer:!!(result.localFirst||result.autonomousVision||result.memoryVision),memoryUpdated:true,barcode:!!barcode,userCorrections:Object.keys(userCorrections||{}).filter(k=>userCorrections[k]?.edited),objectFolder:'V28.43',serverMemoryCard:'V28.43'}
   });
   updateLearningAuditBox(el,result,true);
   pushLearningAudit({type:'product-confirmed', productName, brand, size, barcode, userCorrections:Object.keys(userCorrections||{}).filter(k=>userCorrections[k]?.edited), teacherUsed:!!result.cloudVision, recognizedByLocalOrServer:!!(result.localFirst||result.autonomousVision||result.memoryVision), memoryUpdated:true});
@@ -5467,7 +5529,7 @@ try{
   compactLearningPayloadProduct=function(confirmed){
     const c=applyUltraClientGuardV97(Object.assign({},confirmed||{}));
     const out=__compactLearningV96(c);
-    out.ultraLearningV97={categoryBrain:c.categoryBrainV97||null, fieldConfidence:c.fieldConfidence||{}, quality:c.ultraQualityV97||null, correctionWeight:c.userCorrections?5:1, storesPhotos:false, sourcePriority:'barcode_label_user_memory_teacher'};
+    out.ultraLearningV97={categoryBrain:c.categoryBrainV97||null, fieldConfidence:c.fieldConfidence||{}, quality:c.ultraQualityV97||null, correctionWeight:c.userCorrections?5:1, storesPhotos:'object_folder_light_photos', sourcePriority:'server_owner_override_user_barcode_label_memory_teacher'};
     return out;
   };
 }catch(_){ }
@@ -5969,7 +6031,7 @@ function v2799BuildLearningBody(payload={}){
       learnedProducts:(aiMemory.learnedProducts||[]).length,
       deepProducts:(aiMemory.productDeepMemory||[]).length,
       queued:pendingLearningQueueCount?.()||0,
-      appVersion:'v28.40-server-brain',
+      appVersion:'v28.42-object-folder-brain',
       brain:window.SPESA_PRONTA_BUILD?.brain||'Ultra Error Reduction Core',
       syncHandshake:'v27_99'
     }
