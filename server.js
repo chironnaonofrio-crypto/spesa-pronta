@@ -6145,3 +6145,149 @@ try{
   try{ const prev=preflightSnapshotV98; if(typeof prev==='function' && !global.__v2861PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this); s.version='V28.61'; s.brain=Object.assign({},s.brain||{},{version:'V28.61', deepVisualMemory:'active', visualEngine:'ROI + label hash + histogram + silhouette', openAiTokens:'zero for memory match'}); return s; }; global.__v2861PreflightWrapped=true; } }catch(_){ }
   console.log('[Spesa Pronta] V28.61 PRO Deep Visual Memory Match active');
 })();
+// =============================================================
+// V28.62 PRO Visual Truth Memory server patch
+// Match gratuito più permissivo ma controllato, con ancore visive: liquido scuro/label forte.
+// =============================================================
+(function(){
+  function n(v,d=0){ v=Number(v); return Number.isFinite(v)?v:d; }
+  function clean(v,m=180){ return String(v==null?'':v).replace(/[\u0000-\u001f\u007f]+/g,' ').replace(/\s+/g,' ').trim().slice(0,m); }
+  function arrNums(a){ return Array.isArray(a)?a.map(Number).filter(Number.isFinite):[]; }
+  function bitCount4(x){ x&=15; return [0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4][x]||0; }
+  function hammingHex(a='',b=''){ a=String(a||''); b=String(b||''); if(!a||!b||a.length!==b.length) return null; let diff=0,total=a.length*4; for(let i=0;i<a.length;i++){ const x=parseInt(a[i],16), y=parseInt(b[i],16); if(!Number.isFinite(x)||!Number.isFinite(y)) return null; diff+=bitCount4(x^y); } return diff/Math.max(1,total); }
+  function sigArr(s=''){ return String(s||'').split('-').map(Number).filter(Number.isFinite); }
+  function sigDistance(a='',b=''){ const aa=sigArr(a),bb=sigArr(b); if(!aa.length||aa.length!==bb.length) return null; let s=0; for(let i=0;i<aa.length;i++) s+=Math.abs(aa[i]-bb[i]); return Math.min(1,(s/aa.length)/16); }
+  function gridDistance(a='',b=''){ const aa=String(a||'').split('-').map(Number).filter(Number.isFinite), bb=String(b||'').split('-').map(Number).filter(Number.isFinite); if(!aa.length||aa.length!==bb.length) return null; let s=0; for(let i=0;i<aa.length;i++) s+=Math.abs(aa[i]-bb[i]); return Math.min(1,(s/aa.length)/16); }
+  function histDist(a=[],b=[]){ a=arrNums(a); b=arrNums(b); if(!a.length||!b.length||a.length!==b.length) return null; let s=0; for(let i=0;i<a.length;i++) s+=Math.abs(a[i]-b[i]); return Math.min(1,s/2000); }
+  function bboxDist(a={},b={}){ const keys=['w','h','aspect','area']; let s=0,c=0; for(const k of keys){ if(Number.isFinite(Number(a?.[k]))&&Number.isFinite(Number(b?.[k]))){ s+=Math.min(1,Math.abs(Number(a[k])-Number(b[k]))/(k==='aspect'?4:1)); c++; } } return c?s/c:null; }
+  function stripeDist(a='',b=''){ const aa=String(a||'').split('|').filter(Boolean), bb=String(b||'').split('|').filter(Boolean); if(!aa.length||aa.length!==bb.length) return null; let s=0,c=0; for(let i=0;i<aa.length;i++){ const x=aa[i].split('.').map(Number), y=bb[i].split('.').map(Number); if(x.length!==y.length) continue; for(let j=0;j<x.length;j++){ if(Number.isFinite(x[j])&&Number.isFinite(y[j])){ s+=Math.abs(x[j]-y[j]); c++; } } } return c?Math.min(1,(s/c)/10):null; }
+  function deepOf(f={}){ return f?.visualDeepV2861||f?.deepVisualV2861||f?.features?.visualDeepV2861||null; }
+  function compactAnchors(a={}){ if(!a||typeof a!=='object') return null; return {version:'V28.62',bottleLikely:!!a.bottleLikely,darkBeverageLike:!!a.darkBeverageLike,colaLike:!!a.colaLike,waterImpossible:!!a.waterImpossible,waterLike:!!a.waterLike,darkLiquidScore:n(a.darkLiquidScore),labelBandScore:n(a.labelBandScore),strongLabelColor:n(a.strongLabelColor),clearWaterScore:n(a.clearWaterScore)}; }
+  function compact(f={}){ if(!f||typeof f!=='object') return null; const d=deepOf(f)||{}, bbox=f.objectBBoxV2861||d.bbox||{}; const out={signature:clean(f.signature||d.oldSignature||'',160),centerSignature:clean(f.centerSignature||d.centerSignature||'',160),labelSignature:clean(f.labelSignature||d.labelSignature||'',160),colorKey:clean(f.colorKey||d.colorKey||'',90),objectWidth:n(f.objectWidth),objectHeight:n(f.objectHeight),objectCoverage:n(f.objectCoverage),edge:n(f.edge),verticality:n(f.verticality,1),bottleLike:!!f.bottleLike,largeBottleLike:!!f.largeBottleLike,visualAnchorsV2862:compactAnchors(f.visualAnchorsV2862||f.anchorsV2862||f.features?.visualAnchorsV2862),visualDeepV2861:{objectHashH:clean(d.objectHashH||'',32),objectHashV:clean(d.objectHashV||'',32),centerHashH:clean(d.centerHashH||'',32),centerHashV:clean(d.centerHashV||'',32),labelHashH:clean(d.labelHashH||'',32),labelHashV:clean(d.labelHashV||'',32),upperHashH:clean(d.upperHashH||'',32),lowerHashH:clean(d.lowerHashH||'',32),objectGrid:clean(d.objectGrid||'',260),centerGrid:clean(d.centerGrid||'',260),labelGrid:clean(d.labelGrid||'',220),objectHist:arrNums(d.objectHist||[]).slice(0,27),labelHist:arrNums(d.labelHist||[]).slice(0,27),stripeSignature:clean(d.stripeSignature||'',140),labelStripeSignature:clean(d.labelStripeSignature||'',100),bbox:{w:n(bbox.w),h:n(bbox.h),aspect:n(bbox.aspect),area:n(bbox.area)}}}; const has=out.signature||out.centerSignature||out.labelSignature||out.colorKey||out.visualAnchorsV2862||Object.values(out.visualDeepV2861).some(v=>Array.isArray(v)?v.length:!!v); return has?out:null; }
+  function inferAnchors(f={}){ const c=compact(f); if(!c) return null; if(c.visualAnchorsV2862) return c.visualAnchorsV2862; const darkish=String(c.colorKey||'').split('-').some(x=>Number(x)<=3); const bbox=c.visualDeepV2861?.bbox||{}; const bottle=!!(c.bottleLike||c.largeBottleLike||bbox.aspect>1.35); return {version:'V28.62_inferred',bottleLikely:bottle,darkBeverageLike:!!(darkish&&bottle),colaLike:false,waterImpossible:!!darkish,waterLike:false,darkLiquidScore:darkish ? .3 : 0,labelBandScore:.25,clearWaterScore:0}; }
+  function distance(a={},b={}){ a=compact(a)||{}; b=compact(b)||{}; const da=a.visualDeepV2861||{}, db=b.visualDeepV2861||{}; let total=0,w=0; const add=(d,wt)=>{ if(d!==null&&d!==undefined&&Number.isFinite(Number(d))){ total+=Math.min(1,Math.max(0,Number(d)))*wt; w+=wt; } }; add(hammingHex(da.labelHashH,db.labelHashH),.20); add(hammingHex(da.labelHashV,db.labelHashV),.13); add(hammingHex(da.objectHashH,db.objectHashH),.11); add(hammingHex(da.objectHashV,db.objectHashV),.09); add(gridDistance(da.labelGrid,db.labelGrid),.14); add(gridDistance(da.objectGrid,db.objectGrid),.08); add(histDist(da.labelHist,db.labelHist),.09); add(histDist(da.objectHist,db.objectHist),.05); add(stripeDist(da.stripeSignature,db.stripeSignature),.045); add(stripeDist(da.labelStripeSignature,db.labelStripeSignature),.055); add(bboxDist(da.bbox,db.bbox),.08); add(sigDistance(a.labelSignature,b.labelSignature),.12); add(sigDistance(a.centerSignature,b.centerSignature),.10); add(sigDistance(a.signature,b.signature),.05); if(a.colorKey&&b.colorKey) add(a.colorKey===b.colorKey?0:.18,.035); if(!!a.bottleLike!==!!b.bottleLike) add(.28,.025); const aa=a.visualAnchorsV2862, ab=b.visualAnchorsV2862; if(aa&&ab){ add((!!aa.darkBeverageLike===!!ab.darkBeverageLike)?0:.22,.05); add((!!aa.colaLike===!!ab.colaLike)?0:.18,.04); add(Math.abs(n(aa.darkLiquidScore)-n(ab.darkLiquidScore)),.045); add(Math.abs(n(aa.labelBandScore)-n(ab.labelBandScore)),.04); } return w?Math.min(1,total/w):1; }
+  function samples(record={}){ const out=[]; const push=(f,source='')=>{ const c=compact(f); if(c) out.push({features:c,source}); }; (record.objectFolder?.visualFeatureSamples||[]).forEach(s=>push(s.features||s.visualFeatures||s,s.source||'object_folder')); (record.confirmedExamples||[]).forEach(s=>push(s.visualFeatures,'confirmed_example')); push(record.visualFeatures,'record'); push(record.memoryCard?.visualFeatures,'memory_card'); return out.slice(0,80); }
+  function visualMatch(query={}){ try{ ensureDbShape(); const q=compact(query.visualFeatures||query.visualFingerprint||query.features||{}); if(!q) return null; const qA=q.visualAnchorsV2862||inferAnchors(q)||{}; const ranked=[]; for(const p of Object.values(db.assistantBrain?.globalProductMemory?.products||{})){ const confirmations=Number(p.confirmations||0); if(confirmations<1&&p.reliability!=='media'&&p.reliability!=='alta') continue; const ss=samples(p); if(!ss.length) continue; let best=null; for(const s of ss){ const dist=distance(q,s.features); const sim=1-dist; const sA=s.features.visualAnchorsV2862||inferAnchors(s.features)||{}; const anchorCompat=(qA.darkBeverageLike&&sA.darkBeverageLike)||(qA.colaLike&&sA.colaLike)||(qA.waterLike&&sA.waterLike&&!qA.waterImpossible&&!sA.waterImpossible); const score=sim+(anchorCompat?.045:0); if(!best||score>best.score) best={similarity:sim,distance:dist,source:s.source,anchorCompat,score}; } if(!best) continue; const txt=normalizeVisionText([p.productName,p.brand,p.category,(p.aliases||[]).join(' ')].join(' ')); const productLooksCola=/\b(cola|coca cola|pepsi|fanta|sprite|bibita|soft drink)\b/.test(txt)||/soft_drinks|drinks/.test(String(p.category||'')); let threshold=confirmations<=1?.68:.62; if(best.anchorCompat) threshold-=.05; if(qA.darkBeverageLike&&productLooksCola) threshold-=.04; if(qA.waterLike&&/\bacqua\b|water/.test(txt)) threshold-=.035; threshold=Math.max(.56,threshold); if(best.similarity<threshold) continue; let score=best.similarity*10+Math.min(3,confirmations*.45)+(best.anchorCompat?.85:0); if(p.reliability==='alta') score+=1.2; else if(p.reliability==='media') score+=.8; if(p.ownerOverrides?.locked) score+=.45; if(qA.darkBeverageLike&&productLooksCola) score+=.9; ranked.push({score,product:p,match:best,confirmations,sampleCount:ss.length,threshold}); }
+    ranked.sort((a,b)=>b.score-a.score); const top=ranked[0]; if(!top) return null; const second=ranked[1], margin=second?(top.match.similarity-second.match.similarity):.30; if(second&&margin<.006&&top.match.similarity<.83) return null; const c=compactGlobalProductRecord(top.product); c.visualMemoryMatchV2862={active:true,similarity:Number(top.match.similarity.toFixed(3)),distance:Number(top.match.distance.toFixed(3)),margin:Number(margin.toFixed(3)),sampleCount:top.sampleCount,source:top.match.source,threshold:Number(top.threshold.toFixed(3)),anchorCompat:!!top.match.anchorCompat,engine:'visual_truth_deep_memory_v2862',policy:'match gratuito prima di OpenAI'}; c.matchReason='deep_visual_memory_v2862'; c.teacherBypassEligible=true; c.reliability=c.reliability||'media'; try{ updateGlobalLearningAudit({type:'v2862-visual-memory-match',productName:c.productName,brand:c.brand,similarity:c.visualMemoryMatchV2862.similarity,confirmations:top.confirmations,sampleCount:top.sampleCount}); }catch(_){} return {score:top.score,product:c}; }catch(e){ try{ updateGlobalLearningAudit({type:'v2862-visual-match-error',reason:String(e?.message||e).slice(0,180)}); }catch(_){} return null; } }
+  try{ if(typeof upsertGlobalProductMemory==='function'&&!global.__v2862UpsertWrapped){ const prev=upsertGlobalProductMemory; upsertGlobalProductMemory=function(confirmed={}){ const out=prev.call(this,confirmed); try{ ensureDbShape(); const g=db.assistantBrain.globalProductMemory||{products:{}}; const key=out?.key||(confirmed.barcode?`ean:${confirmed.barcode}`:''); const rec=(key&&g.products?.[key])||Object.values(g.products||{}).find(r=>normalizeVisionText(r.productName||'')===normalizeVisionText(out?.productName||confirmed.productName||'')&&normalizeVisionText(r.brand||'')===normalizeVisionText(out?.brand||confirmed.brand||'')); const f=compact(confirmed.visualFeatures||confirmed.productMemory?.visualFeatures||{}); if(rec&&f){ rec.objectFolder=rec.objectFolder||{photos:[],visualSignatures:[],visualFeatureSamples:[]}; rec.objectFolder.visualFeatureSamples=Array.isArray(rec.objectFolder.visualFeatureSamples)?rec.objectFolder.visualFeatureSamples:[]; const dup=rec.objectFolder.visualFeatureSamples.some(s=>distance(f,s.features||s)<.022); if(!dup) rec.objectFolder.visualFeatureSamples.unshift({features:f,at:Date.now(),source:'user_confirmed_visual_truth_v2862',productName:confirmed.productName||rec.productName||'',brand:confirmed.brand||rec.brand||''}); rec.objectFolder.visualFeatureSamples=rec.objectFolder.visualFeatureSamples.slice(0,72); rec.visualFeatures=f; rec.visualTruthV2862={active:true,samples:rec.objectFolder.visualFeatureSamples.length,updatedAt:Date.now(),engine:'deep_visual_plus_anchors',cost:'zero_openai_tokens'}; rec.learningQuality=Object.assign({},rec.learningQuality||{},{visualTruthRecognition:true,visualSamples:rec.objectFolder.visualFeatureSamples.length,enoughForLocalRecognition:true}); updateGlobalLearningAudit({type:'v2862-visual-truth-fingerprint-saved',productName:rec.productName,brand:rec.brand,samples:rec.objectFolder.visualFeatureSamples.length}); } }catch(e){ try{ updateGlobalLearningAudit({type:'v2862-visual-save-error',reason:String(e?.message||e).slice(0,180)}); }catch(_){} } return out; }; global.__v2862UpsertWrapped=true; } }catch(_){ }
+  try{ if(typeof matchGlobalProductMemory==='function'&&!global.__v2862MatchWrapped){ const prev=matchGlobalProductMemory; matchGlobalProductMemory=function(query={}){ if(query?.visualOnly||/v2862|visual_truth/i.test(String(query?.matchMode||''))){ const hit=visualMatch(query||{}); if(hit) return hit; } const base=prev.call(this,query); if(base?.product) return base; return visualMatch(query||{})||null; }; global.__v2862MatchWrapped=true; } }catch(_){ }
+  try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2862PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this); s.version='V28.62'; s.brain=Object.assign({},s.brain||{},{version:'V28.62',visualTruthGuard:'active',freeVisualMemory:'adaptive',waterBlock:'dark_liquid_bottle_cannot_be_water',openAiTokens:'zero for memory match'}); return s; }; global.__v2862PreflightWrapped=true; } }catch(_){ }
+  console.log('[Spesa Pronta] V28.62 PRO Visual Truth Memory active');
+})();
+
+// =============================================================
+// V28.63 PRO True Product Vision Server Gate
+// La memoria visiva è utile solo se non contraddice la foto attuale.
+// Input nuovo: visualEvidenceV2863 / visualAnchorsV2863 / OCR gratuito client.
+// =============================================================
+(function(){
+  const V='V28.63';
+  function nrm(v=''){ try{ return typeof normalizeVisionText==='function'?normalizeVisionText(v):String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim(); }catch(_){ return String(v||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(); } }
+  function familyFromText(v=''){
+    const t=nrm(v);
+    if(!t) return '';
+    if(/\b(candeggina|detersivo|ammorbidente|sgrassatore|detergente|lavatrice|bucato|piatti|lavastoviglie|shampoo|sapone|dexal)\b/.test(t)) return 'home';
+    if(/\b(acqua|water|minerale|naturale|frizzante|oligominerale|sant\s*anna|santanna|san\s*benedetto|levissima|vera|lete|ferrarelle|uliveto|rocchetta|fonte)\b/.test(t)) return 'water';
+    if(/\b(cola|coca|coca\s*cola|pepsi|blues\s*cola|fanta|sprite|aranciata|gassata|soft\s*drink|lemon\s*taste)\b/.test(t)) return 'cola';
+    if(/\b(the|te|tea|th[eè]|ice\s*tea|fusion|estathe|pesca|limone)\b/.test(t)) return 'tea';
+    if(/\b(succo|nectar|ace|arancia|pera|mela|ananas)\b/.test(t)) return 'juice';
+    if(/\b(latte|uht|parzialmente|scremato|intero|yogurt|kefir)\b/.test(t)) return 'milk';
+    if(/\b(pesto|salsa|sugo|condimento|pistacchio|pistacchi|vasetto|barattolo)\b/.test(t)) return 'sauce';
+    if(/\b(pasta|spaghetti|penne|fusilli|riso|farina)\b/.test(t)) return 'dry_food';
+    return '';
+  }
+  function categoryFamily(cat=''){
+    const t=nrm(cat);
+    if(/water|acqua/.test(t)) return 'water';
+    if(/soft|cola|gass|drink|beverage|bibit/.test(t)) return 'cola';
+    if(/juice|succo/.test(t)) return 'juice';
+    if(/tea|the|te/.test(t)) return 'tea';
+    if(/milk|latte|dairy/.test(t)) return 'milk';
+    if(/laundry|clean|house|home|bucato|pulizia/.test(t)) return 'home';
+    if(/sauce|condiment|pesto|sugo/.test(t)) return 'sauce';
+    return '';
+  }
+  function candidateFamily(p={}){ return familyFromText([p.productName,p.brand,p.variant,p.productType,p.packageType,p.categoryFamily,(p.aliases||[]).join(' '),(p.brands||[]).join(' ')].filter(Boolean).join(' ')) || categoryFamily(p.category||''); }
+  function queryFamily(q={}){
+    const ev=q.currentVisualEvidenceV2863||q.visualEvidenceV2863||q.visualFeatures?.visualEvidenceV2863||q.productMemory?.visualEvidenceV2863||{};
+    const a=q.visualFeatures?.visualAnchorsV2863||q.visualFeatures?.visualAnchorsV2862||q.visualAnchorsV2863||q.productMemory?.visualAnchorsV2863||{};
+    const text=[ev.text,(ev.tokens||[]).join(' '),q.productName,q.brand,q.category,(Array.isArray(q.detectedText)?q.detectedText.join(' '):q.detectedText||''),(Array.isArray(q.visibleEvidence)?q.visibleEvidence.join(' '):q.visibleEvidence||'')].join(' ');
+    let fam=familyFromText(text);
+    if(!fam && (a.waterLike||a.clearWaterLike) && !(a.colaLike||a.darkBeverageLike)) fam='water';
+    if(!fam && (a.colaLike||a.darkBeverageLike) && !(a.waterLike||a.clearWaterLike)) fam='cola';
+    return fam;
+  }
+  function conflictFamilies(a='',b=''){
+    if(!a||!b||a===b) return false;
+    const drinks=['water','cola','tea','juice','milk'];
+    if(drinks.includes(a)&&drinks.includes(b)) return true;
+    if(a==='home'||b==='home') return true;
+    if((a==='sauce'&&drinks.includes(b))||(b==='sauce'&&drinks.includes(a))) return true;
+    return false;
+  }
+  function visualHardConflict(q={},p={}){
+    const qf=queryFamily(q), pf=candidateFamily(p);
+    if(conflictFamilies(qf,pf)) return {conflict:true,queryFamily:qf,candidateFamily:pf,reason:'family_conflict'};
+    const a=q.visualFeatures?.visualAnchorsV2863||q.visualFeatures?.visualAnchorsV2862||q.visualAnchorsV2863||{};
+    const candText=nrm([p.productName,p.brand,p.category,(p.aliases||[]).join(' ')].join(' '));
+    const candCola=/\b(cola|coca|pepsi|fanta|sprite|gassata|soft\s*drink|blues)\b/.test(candText)||pf==='cola';
+    const candWater=/\b(acqua|water|sant\s*anna|santanna|minerale|naturale|frizzante)\b/.test(candText)||pf==='water';
+    if((a.waterLike||a.clearWaterLike) && candCola && !(a.colaLike||a.darkBeverageLike)) return {conflict:true,queryFamily:qf||'water_visual',candidateFamily:pf||'cola',reason:'water_anchors_vs_cola_candidate'};
+    if((a.colaLike||a.darkBeverageLike) && candWater && !(a.waterLike||a.clearWaterLike)) return {conflict:true,queryFamily:qf||'cola_visual',candidateFamily:pf||'water',reason:'cola_anchors_vs_water_candidate'};
+    return {conflict:false,queryFamily:qf,candidateFamily:pf,reason:''};
+  }
+  function hitSimilarity(product={}){ const vm=product.visualMemoryMatchV2863||product.visualMemoryMatchV2862||product.visualMemoryMatchV2861||product.visualMemoryMatchV2860||{}; return Number(vm.similarity||0); }
+  try{
+    if(typeof matchGlobalProductMemory==='function' && !global.__v2863MatchWrapped){
+      const prev=matchGlobalProductMemory;
+      matchGlobalProductMemory=function(query={}){
+        const hit=prev.call(this,query||{});
+        if(!hit?.product) return hit;
+        try{
+          const gate=visualHardConflict(query||{},hit.product||{});
+          if(gate.conflict){
+            try{ updateGlobalLearningAudit({type:'v2863-memory-blocked-current-photo-conflict', candidate:hit.product.productName||'', brand:hit.product.brand||'', queryFamily:gate.queryFamily, candidateFamily:gate.candidateFamily, reason:gate.reason, similarity:hitSimilarity(hit.product)}); }catch(_){ }
+            return null;
+          }
+          // Se la richiesta è visualOnly e non esiste nessuna prova testuale/famiglia attuale,
+          // un match basso non deve precompilare un prodotto diverso solo perché la bottiglia è simile.
+          const visualOnly=!!query.visualOnly || /visual/i.test(String(query.matchMode||''));
+          const qf=gate.queryFamily, pf=gate.candidateFamily, sim=hitSimilarity(hit.product);
+          if(visualOnly && sim && sim<.86 && (!qf || !pf || qf!==pf)){
+            try{ updateGlobalLearningAudit({type:'v2863-memory-blocked-low-visual-no-current-agreement', candidate:hit.product.productName||'', brand:hit.product.brand||'', queryFamily:qf, candidateFamily:pf, similarity:sim}); }catch(_){ }
+            return null;
+          }
+          if(hit.product){ hit.product.visualMemoryMatchV2863=Object.assign({}, hit.product.visualMemoryMatchV2863||hit.product.visualMemoryMatchV2862||{}, {currentPhotoGate:'passed', queryFamily:qf||'', candidateFamily:pf||'', engine:'true_product_visual_ocr_v2863', policy:'foto attuale/OCR gratuito battono memoria in conflitto'}); hit.product.matchReason=hit.product.matchReason||'true_product_visual_ocr_v2863'; }
+        }catch(_){ }
+        return hit;
+      };
+      global.__v2863MatchWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof upsertGlobalProductMemory==='function' && !global.__v2863UpsertWrapped){
+      const prev=upsertGlobalProductMemory;
+      upsertGlobalProductMemory=function(confirmed={}){
+        const out=prev.call(this,confirmed);
+        try{
+          ensureDbShape();
+          const g=db.assistantBrain.globalProductMemory||{products:{}};
+          const key=out?.key||(confirmed.barcode?`ean:${confirmed.barcode}`:'');
+          const rec=(key&&g.products?.[key])||Object.values(g.products||{}).find(r=>nrm(r.productName||'')===nrm(out?.productName||confirmed.productName||'')&&nrm(r.brand||'')===nrm(out?.brand||confirmed.brand||''));
+          if(rec){
+            const ev=confirmed.visualFeatures?.visualEvidenceV2863||confirmed.productMemory?.visualEvidenceV2863||null;
+            const an=confirmed.visualFeatures?.visualAnchorsV2863||confirmed.productMemory?.visualAnchorsV2863||null;
+            rec.trueProductVisionV2863={active:true, currentPhotoAuthority:true, freeOcrEvidence:!!ev?.text, family:ev?.family||candidateFamily(rec)||'', updatedAt:Date.now(), policy:'owner/user-confirmed identity + current-photo visual evidence'};
+            if(ev){ rec.objectFolder=rec.objectFolder||{}; rec.objectFolder.visualEvidenceSamplesV2863=Array.isArray(rec.objectFolder.visualEvidenceSamplesV2863)?rec.objectFolder.visualEvidenceSamplesV2863:[]; rec.objectFolder.visualEvidenceSamplesV2863.unshift({text:String(ev.text||'').slice(0,300),family:ev.family||'',tokens:(ev.tokens||[]).slice(0,25),at:Date.now(),source:'user_confirmed_free_ocr_v2863'}); rec.objectFolder.visualEvidenceSamplesV2863=rec.objectFolder.visualEvidenceSamplesV2863.slice(0,24); }
+            if(an){ rec.objectFolder=rec.objectFolder||{}; rec.objectFolder.visualAnchorSamplesV2863=Array.isArray(rec.objectFolder.visualAnchorSamplesV2863)?rec.objectFolder.visualAnchorSamplesV2863:[]; rec.objectFolder.visualAnchorSamplesV2863.unshift({anchors:an,at:Date.now(),source:'user_confirmed_anchors_v2863'}); rec.objectFolder.visualAnchorSamplesV2863=rec.objectFolder.visualAnchorSamplesV2863.slice(0,32); }
+            try{ updateGlobalLearningAudit({type:'v2863-true-product-evidence-saved', productName:rec.productName, brand:rec.brand, family:rec.trueProductVisionV2863.family, freeOcr:!!ev?.text}); }catch(_){ }
+          }
+        }catch(e){ try{ updateGlobalLearningAudit({type:'v2863-save-evidence-error', reason:String(e?.message||e).slice(0,180)}); }catch(_){} }
+        return out;
+      };
+      global.__v2863UpsertWrapped=true;
+    }
+  }catch(_){ }
+  try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2863PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this); s.version='V28.63'; s.brain=Object.assign({},s.brain||{},{version:'V28.63', trueProductVision:'active', freeBrowserOcr:'client-side optional', memoryConflictShield:'current photo/ocr family blocks wrong memory', openAiTokens:'zero for visual memory gate'}); return s; }; global.__v2863PreflightWrapped=true; } }catch(_){ }
+  console.log('[Spesa Pronta] V28.63 PRO True Product Vision Server Gate active');
+})();
