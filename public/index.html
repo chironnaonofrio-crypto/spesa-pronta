@@ -369,6 +369,37 @@
   margin-top:14px!important;
 }
 </style>
+<style id="v28-54-showcase-top-breathing">
+/* V28.54 - Fix slide tagliata sopra: aggiunge respiro alla foto senza toccare menu/barra */
+.showcase-slide{
+  background:#fff!important;
+  padding:10px 10px 0!important;
+  overflow:hidden!important;
+}
+.showcase-slide-visual{
+  margin:0!important;
+  border-radius:24px!important;
+  overflow:hidden!important;
+  background:#f7fbff!important;
+  transform:none!important;
+}
+.showcase-slide-visual img{
+  border-radius:0!important;
+  object-fit:cover!important;
+  object-position:center center!important;
+  display:block!important;
+}
+.showcase-slide-copy{
+  margin:0 -10px!important;
+  padding-top:18px!important;
+  background:#fff!important;
+}
+@media(max-width:560px){
+  .showcase-slide{padding:9px 9px 0!important;}
+  .showcase-slide-visual{border-radius:22px!important;}
+  .showcase-slide-copy{margin:0 -9px!important;}
+}
+</style>
 </head>
 <body>
   <!-- SPESA_PRONTA_DEPLOY_VERSION: V27.54-ULTRA-LUXURY-MOBILE -->
