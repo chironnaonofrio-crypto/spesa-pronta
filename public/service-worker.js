@@ -1,4 +1,4 @@
-const CACHE_NAME='spesa-pronta-v28-48-showcase-polish';
+const CACHE_NAME='spesa-pronta-v28-49-showcase-dots-imagefix';
 const ASSETS=['./','./index.html','./assets/styles.css?v=2848','./assets/app.v27-48-premium-mega-vision.js?v=2843','./assets/vision-seed-memory.json','./assets/vision-seed-memory.js?v=2843','./assets/vision-mega-index.js?v=2843','./assets/vision-mega-index.json','./assets/vision-neural-grocery.svg','./assets/illustrations/vision-ready-inline-v2820.png','./clear-cache.html','./debug.html','./FIX_V28_31_SCAN_DRAFT_RECOVERY_PRO.md','./FIX_V28_32_LIVE_PHOTO_STABILITY_FIX.md','./FIX_V28_33_FINAL_STABILITY_GUARD.md','./FIX_V28_34_PREFLIGHT_BUG_SWEEP.md','./FIX_V28_35_MIC_OFF_LOCAL_VISION_GUARD.md','./FIX_V28_36_OPENAI_CONNECTION_GUARD.md','./FIX_V28_37_DEBUG_OPENAI_TEST_VERSION.md','./FIX_V28_38_OCR_BOOST_PRO.md'];
 self.addEventListener('install',event=>{self.skipWaiting();event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(ASSETS)).catch(()=>{}));});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))));self.clients.claim();});
