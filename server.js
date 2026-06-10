@@ -6588,6 +6588,192 @@ function v2864MergePixelResult(base={}, judge=null){
       global.__v2864VisionAnalyzeWrapped=true;
     }
   }catch(e){ console.warn('[Spesa Pronta] V28.64 wrap visionAnalyze failed', e?.message||e); }
-  try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2864PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this); s.version='V28.64'; s.brain=Object.assign({},s.brain||{},{version:'V28.64',humanLikePixelOcr:'active',sharpPixelEngine:'optional dependency sharp',ocrRouter:'client OCR + OCR.space optional + Google Vision optional',openAiPolicy:'only after memory/barcode/pixel/OCR fail'}); return s; }; global.__v2864PreflightWrapped=true; } }catch(_){ }
+  try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2864PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this); s.version='V28.64'; s.brain=Object.assign({},s.brain||{},{version:'V28.65',humanLikePixelOcr:'active',sharpPixelEngine:'optional dependency sharp',ocrRouter:'client OCR + OCR.space optional + Google Vision optional',openAiPolicy:'only after memory/barcode/pixel/OCR fail'}); return s; }; global.__v2864PreflightWrapped=true; } }catch(_){ }
   console.log('[Spesa Pronta] V28.64 PRO Human-Like Pixel OCR Reasoning Engine active');
 })();
+
+
+// =============================================================
+// V28.65 PRO OCR Quality Gate + ROI Crop Visual Judge
+// - OCR.space non riceve più la foto intera come prima scelta: usa crop etichetta/oggetto.
+// - Non vince più il testo OCR spazzatura più lungo: vince il testo più affidabile.
+// - Non compila mai nome/marca/scadenza da garbage OCR o "famiglia visiva".
+// =============================================================
+const V2865_VERSION = 'V28.65';
+function v2865OcrQuality(text=''){
+  const s=String(text||''); const compact=s.replace(/\s+/g,''); const chars=compact.length||1;
+  const norm=v2864Norm(s); const tokens=norm.split(/\s+/).filter(Boolean);
+  const symbolCount=(compact.match(/[<>=_~{}[\]\\|^€$§]/g)||[]).length;
+  const digits=(compact.match(/\d/g)||[]).length;
+  const letters=(compact.match(/[A-Za-zÀ-ÿ]/g)||[]).length;
+  const good=tokens.filter(t=>t.length>=3 && /[a-z]/.test(t));
+  const singles=tokens.filter(t=>t.length===1).length;
+  const knownMatches=(norm.match(/\b(blues|cola|coca|pepsi|fanta|sprite|sant\s*anna|santanna|acqua|naturale|minerale|dexal|candeggina|delicata|maxi|detersivo|lavatrice|bucato|pesto|salsa|selex|barilla|latte|yogurt|the|tea|succo)\b/g)||[]).length;
+  const hasSize=/\b\d{1,2}(?:[,.]\d{1,2})?\s*(l|lt|ml|cl|g|kg)\b/i.test(s);
+  const looksDate=/\b\d{1,2}\s*[\/\-.]\s*\d{1,2}\s*[\/\-.]\s*\d{2,4}\b/.test(s);
+  let score=0;
+  score += Math.min(35, good.length*5);
+  score += Math.min(50, knownMatches*18);
+  if(hasSize) score += 10;
+  if(looksDate) score += 6;
+  if(letters/chars < .42 && !knownMatches) score -= 28;
+  if(symbolCount/chars > .12) score -= 40;
+  if(singles > Math.max(3, tokens.length*.42) && !knownMatches) score -= 25;
+  if(/(?:=\s*){2,}|(?:_\s*){2,}|[<>]{2,}|\b[bcdfghjklmnpqrstvwxyz]\s+[bcdfghjklmnpqrstvwxyz]\s+[bcdfghjklmnpqrstvwxyz]\b/i.test(s) && !knownMatches) score -= 35;
+  if(digits > letters*1.8 && !looksDate && !hasSize && !knownMatches) score -= 22;
+  return {score, chars, letters, symbolRatio:Number((symbolCount/chars).toFixed(3)), tokens:tokens.length, goodWords:good.length, knownHits:knownMatches, hasSize, looksDate, low:score<18};
+}
+function v2865HasIdentityText(text=''){
+  return /\b(blues|cola|coca|pepsi|fanta|sprite|sant\s*anna|santanna|dexal|candeggina|delicata|maxi|acqua|naturale|minerale|pesto|selex|barilla)\b/i.test(String(text||''));
+}
+function v2865BadName(v=''){
+  const n=v2864Norm(v);
+  return !!n && /famiglia\s+visiva|visual\s+family|attuale\s+cola|manual\s+live|server\s+local|fallback\s+locale|autonomia\s+locale|conoscenza\s+generale\s+vision|liquido\s+bevanda/.test(n);
+}
+function v2865BadBrand(v=''){
+  const s=String(v||'').trim(); if(!s) return false;
+  const n=v2864Norm(s); if(v2865HasIdentityText(n)) return false;
+  const toks=n.split(/\s+/).filter(Boolean);
+  if(/[<>=_~{}[\]\\|]/.test(s)) return true;
+  if(toks.length>=3 && toks.filter(t=>t.length<=2).length>=Math.ceil(toks.length*.6)) return true;
+  if(/^[A-Z]\s+[A-Z]{1,3}\s+[A-Z]\s+[A-Z]$/i.test(s)) return true;
+  if(/\b(sas|nall|oy|br|ea|uh)\b/i.test(s) && toks.length<=5) return true;
+  return false;
+}
+function v2865ValidExpiry(text='', source=''){
+  const s=String(text||'').trim(); if(!s) return true;
+  if(/^0?1[\/\-.]0?1[\/\-.]20?00$/.test(s)) return false;
+  const now=new Date().getFullYear();
+  const m=s.match(/(?:^|\b)(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})(?:\b|$)/);
+  if(m){ const d=Number(m[1]), mo=Number(m[2]), y=Number(m[3]); if(!(d>=1&&d<=31&&mo>=1&&mo<=12)) return false; if(y<now-3 || y>now+15) return false; }
+  const m2=s.match(/(?:^|\b)(\d{1,2})[\/\-.](\d{4})(?:\b|$)/);
+  if(m2){ const mo=Number(m2[1]), y=Number(m2[2]); if(!(mo>=1&&mo<=12) || y<now-3 || y>now+15) return false; }
+  const q=v2865OcrQuality(source||s); if(q.low && !/scad|exp|tmc|entro|best|preferibil/i.test(source||'')) return false;
+  return true;
+}
+try{
+  const __ultraNormalizeExpiryServerV97=ultraNormalizeExpiryServerV97;
+  ultraNormalizeExpiryServerV97=function(raw=''){
+    const e=__ultraNormalizeExpiryServerV97(raw);
+    return (e && v2865ValidExpiry(e.text, raw)) ? e : null;
+  };
+}catch(_){ }
+const __v2864BrandFromTextV2865 = v2864BrandFromText;
+v2864BrandFromText=function(text=''){
+  const q=v2865OcrQuality(text);
+  if(q.low && !v2865HasIdentityText(text)) return '';
+  const b=__v2864BrandFromTextV2865(text);
+  return v2865BadBrand(b) ? '' : b;
+};
+const __v2864LikelyNameFromTextV2865 = v2864LikelyNameFromText;
+v2864LikelyNameFromText=function(text='',cat='food',brand='',type=''){
+  const q=v2865OcrQuality(text);
+  if(q.low && !v2865HasIdentityText(text)) return '';
+  const name=__v2864LikelyNameFromTextV2865(text,cat,brand,type);
+  return v2865BadName(name) ? '' : name;
+};
+const __v2864FieldsFromTextV2865 = v2864FieldsFromText;
+v2864FieldsFromText=function(text='',pixel=null){
+  const q=v2865OcrQuality(text);
+  const trusted=(!q.low || v2865HasIdentityText(text));
+  let f=__v2864FieldsFromTextV2865(trusted ? text : '', pixel) || {};
+  if(!trusted){
+    const a=pixel?.anchors||{};
+    f.productName=''; f.brand=''; f.productType=''; f.estimatedSize=''; f.ocrStrong=false; f.confidence=(a.darkLiquid||a.clearLiquid)?.43:.24;
+    if(a.darkLiquid){ f.category='drinks'; f.isLiquid=true; f.unit='bt'; }
+    else if(a.clearLiquid){ f.category='water'; f.isLiquid=true; f.unit='bt'; }
+    else if(a.homeContainer){ f.category='house'; f.isLiquid=false; f.unit='conf'; }
+  }
+  if(v2865BadName(f.productName)) f.productName='';
+  if(v2865BadBrand(f.brand)) f.brand='';
+  if(f.expiryDate && !v2865ValidExpiry(f.expiryDate,text)) f.expiryDate='';
+  f.ocrQualityV2865=q; f.ocrTrustedV2865=trusted;
+  return f;
+};
+async function v2865BuildOcrVariants(dataUrl='', pixel=null){
+  const sharp=await v2864Sharp(); const buf=v2864DataUrlBuffer(dataUrl);
+  if(!sharp || !buf) return [{name:'full_original',dataUrl}];
+  const base=await sharp(buf,{failOn:'none'}).rotate().resize({width:1100,height:1100,fit:'inside',withoutEnlargement:true}).jpeg({quality:78,mozjpeg:true}).toBuffer({resolveWithObject:true});
+  const w=base.info.width, h=base.info.height;
+  const baseBuf=base.data;
+  const pr=pixel?.objectBox && pixel?.resized ? {x:pixel.objectBox.x/Math.max(1,pixel.resized.w), y:pixel.objectBox.y/Math.max(1,pixel.resized.h), w:pixel.objectBox.w/Math.max(1,pixel.resized.w), h:pixel.objectBox.h/Math.max(1,pixel.resized.h)} : {x:.16,y:.05,w:.68,h:.90};
+  function clampBox(b){
+    const left=Math.max(0,Math.min(w-2,Math.round(b.x*w))), top=Math.max(0,Math.min(h-2,Math.round(b.y*h)));
+    const right=Math.max(left+2,Math.min(w,Math.round((b.x+b.w)*w))), bottom=Math.max(top+2,Math.min(h,Math.round((b.y+b.h)*h)));
+    return {left,top,width:right-left,height:bottom-top};
+  }
+  async function mk(name,b,enhance=true){
+    const ex=clampBox(b); let pipe=sharp(baseBuf,{failOn:'none'}).extract(ex).resize({width:900,height:520,fit:'inside',withoutEnlargement:false});
+    if(enhance) pipe=pipe.grayscale().normalize().sharpen({sigma:.9}).linear(1.18,-8);
+    const out=await pipe.jpeg({quality:74,mozjpeg:true}).toBuffer();
+    return {name,dataUrl:'data:image/jpeg;base64,'+out.toString('base64'),bytes:out.length};
+  }
+  const label={x:pr.x+pr.w*.06,y:pr.y+pr.h*.30,w:pr.w*.88,h:pr.h*.38};
+  const labelWide={x:Math.max(0,pr.x-pr.w*.05),y:pr.y+pr.h*.24,w:Math.min(1,pr.w*1.10),h:pr.h*.48};
+  const objectCenter={x:pr.x+pr.w*.02,y:pr.y+pr.h*.05,w:pr.w*.96,h:pr.h*.88};
+  const genericLabel={x:.08,y:.24,w:.84,h:.50};
+  const list=[];
+  for(const spec of [['label_enhanced',label,true],['label_wide',labelWide,true],['object_center',objectCenter,false],['generic_label',genericLabel,true]]){
+    try{ const v=await mk(spec[0],spec[1],spec[2]); if(v.bytes<950000) list.push(v); }catch(_){ }
+  }
+  if(!list.length) list.push({name:'full_resized',dataUrl:'data:image/jpeg;base64,'+baseBuf.toString('base64'),bytes:baseBuf.length});
+  return list;
+}
+const __v2864OcrSpaceV2865=v2864OcrSpace;
+v2864ExternalOcr=async function(dataUrl='', pixel=null){
+  const providers=[]; const candidates=[];
+  const variants=await v2865BuildOcrVariants(dataUrl,pixel).catch(()=>[{name:'full_original',dataUrl}]);
+  const max=Math.max(1,Math.min(4,Number(process.env.OCR_SPACE_MAX_CROPS||2)||2));
+  for(const v of variants.slice(0,max)){
+    const r=await __v2864OcrSpaceV2865(v.dataUrl).catch(e=>({provider:'ocr_space',ok:false,error:String(e?.message||e).slice(0,120)}));
+    if(r){ const q=v2865OcrQuality(r.text||''); providers.push({provider:'ocr_space',variant:v.name,ok:!!r.ok,chars:String(r.text||'').length,score:q.score,error:r.error||'',bytes:v.bytes||0}); if(r.ok && String(r.text||'').trim()) candidates.push({text:r.text,provider:'ocr_space',variant:v.name,score:q.score,quality:q}); }
+    if(candidates.some(c=>c.score>=54 && v2865HasIdentityText(c.text))) break;
+  }
+  const google=await v2864GoogleVisionOcr(dataUrl).catch(e=>({provider:'google_vision_ocr',ok:false,error:String(e?.message||e).slice(0,120)}));
+  if(google){ const q=v2865OcrQuality(google.text||''); providers.push({provider:'google_vision_ocr',ok:!!google.ok,chars:String(google.text||'').length,score:q.score,error:google.error||''}); if(google.ok && String(google.text||'').trim()) candidates.push({text:google.text,provider:'google_vision_ocr',variant:'full',score:q.score,quality:q}); }
+  const best=candidates.sort((a,b)=>b.score-a.score || String(b.text).length-String(a.text).length)[0];
+  return {text:(best && (best.score>=18 || v2865HasIdentityText(best.text))) ? best.text : '', providers, best:best?{provider:best.provider,variant:best.variant,score:best.score,quality:best.quality}:null, rejected:candidates.filter(c=>c!==best).slice(0,4).map(c=>({provider:c.provider,variant:c.variant,score:c.score,chars:String(c.text||'').length}))};
+};
+const __serverPixelOcrJudgeV2864_V2865=serverPixelOcrJudgeV2864;
+serverPixelOcrJudgeV2864=async function({image='',stage='auto',localGuess=null,clientPixel=null,clientOcr=null,household=null}={}){
+  const pixel=await v2864PixelProfile(image).catch(e=>({available:false,reason:String(e?.message||e).slice(0,120)}));
+  const candidates=[]; const providers=[];
+  function addCandidate(text,provider,extra={}){ if(!text) return; const q=v2865OcrQuality(text); providers.push({provider,ok:true,chars:String(text||'').length,score:q.score,...extra}); candidates.push({text:String(text||''),provider,score:q.score,quality:q,...extra}); }
+  if(clientOcr?.text) addCandidate(clientOcr.text,'client_ocr');
+  if(localGuess?.visualFeatures?.visualEvidenceV2864?.text) addCandidate(localGuess.visualFeatures.visualEvidenceV2864.text,'local_guess_visualEvidenceV2864');
+  if(localGuess?.visualFeatures?.visualEvidenceV2863?.text) addCandidate(localGuess.visualFeatures.visualEvidenceV2863.text,'local_guess_visualEvidenceV2863');
+  const ext=await v2864ExternalOcr(image,pixel).catch(()=>({text:'',providers:[]}));
+  providers.push(...(ext.providers||[]));
+  if(ext.text) addCandidate(ext.text, ext.best?.provider||'external_ocr_best', {variant:ext.best?.variant||'', external:true});
+  const best=candidates.sort((a,b)=>b.score-a.score || String(b.text).length-String(a.text).length)[0];
+  const bestTrusted=!!(best && (best.score>=18 || v2865HasIdentityText(best.text)));
+  const text=bestTrusted ? best.text : '';
+  const fields=v2864FieldsFromText(text,pixel);
+  let result=v2864ResultFromJudge(fields,pixel,text,stage);
+  if(!bestTrusted){
+    result.detectedText=[];
+    result.visibleEvidence=(result.visibleEvidence||[]).filter(x=>!/OCR etichetta reale/i.test(x));
+    result.visibleEvidence.unshift('OCR scartato: testo non affidabile');
+    result.reason='Vision PRO V28.65: OCR non affidabile, non compilo nome/marca da rumore. Uso solo pixel e chiedo etichetta/barcode.';
+    if(pixel?.anchors?.darkLiquid){ result.productName='Bevanda scura in bottiglia da identificare'; result.category='drinks'; result.isLiquid=true; result.unit='bt'; result.confidence=Math.min(Number(result.confidence||0),.48); }
+    else if(pixel?.anchors?.clearLiquid){ result.productName='Acqua/bevanda chiara in bottiglia da confermare'; result.category='water'; result.isLiquid=true; result.unit='bt'; result.confidence=Math.min(Number(result.confidence||0),.48); }
+    else if(pixel?.anchors?.homeContainer){ result.productName='Prodotto casa da identificare'; result.category='house'; result.unit='conf'; result.confidence=Math.min(Number(result.confidence||0),.42); }
+    result.needsManual=true; result.shouldAskConfirmation=true;
+  }
+  if(v2865BadName(result.productName)) result.productName='Prodotto da identificare';
+  if(v2865BadBrand(result.brand)) result.brand='';
+  const strong=!!(fields.ocrStrong && result.productName && result.brand && Number(result.confidence||0)>=.78 && bestTrusted);
+  const useful=strong || !!(fields.ocrStrong && result.productName && Number(result.confidence||0)>=.72 && bestTrusted);
+  result.proPixelOcrV2864=Object.assign({},result.proPixelOcrV2864||{},{providers,strong,useful,stage:String(stage||'auto'),externalOcrEnabled:providers.some(p=>/ocr_space|google/.test(p.provider||'')),sharpAvailable:!!pixel?.available,qualityGateV2865:{bestTrusted,best:best?{provider:best.provider,score:best.score,chars:String(best.text||'').length,variant:best.variant||''}:null,policy:'highest_quality_ocr_not_longest_text'}});
+  result.proOcrQualityGateV2865={active:true,bestTrusted,bestQuality:best?.quality||null,rejected:!bestTrusted,cost:'zero_openai_tokens'};
+  try{ if(useful) updateGlobalLearningAudit({type:'v2865-pixel-ocr-useful',productName:result.productName,brand:result.brand,category:result.category,providers:providers.map(p=>p.provider+':' + (p.score??'')).join(','),openai:false}); }catch(_){ }
+  return {ok:true,version:V2865_VERSION,pixel,ocr:{text,providers,best:best?{provider:best.provider,score:best.score,variant:best.variant||'',trusted:bestTrusted}:null},fields,result,strong,useful,cost:{openai:0,ocrExternalConfigured:providers.some(p=>/ocr_space|google/.test(p.provider||'')),ocrCrops:providers.filter(p=>p.provider==='ocr_space').length}};
+};
+try{
+  const prev=preflightSnapshotV98;
+  if(typeof prev==='function'&&!global.__v2865PreflightWrapped){
+    preflightSnapshotV98=function(){ const s=prev.call(this); s.version='V28.65'; s.brain=Object.assign({},s.brain||{},{version:'V28.65',ocrQualityGate:'active',ocrSpaceRoiCrop:'active',badOcrRejected:'active',liveGuidance:'fixed'}); return s; };
+    global.__v2865PreflightWrapped=true;
+  }
+}catch(_){ }
+console.log('[Spesa Pronta] V28.65 PRO OCR Quality Gate + ROI Crop Visual Judge active');

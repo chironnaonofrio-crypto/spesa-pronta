@@ -3713,7 +3713,7 @@ function analyzeLiveFrameMetrics(video){
   const offsetX=(cx-48)/48, offsetY=(cy-48)/48;
   const objectCoverage=edgePixels/Math.max(1,countCenter);
   const tooSmall=objectCoverage<0.10 || edgeCenter<7.2;
-  const tooBig=objectCoverage>0.42;
+  const tooBig=objectCoverage>0.68 && edgeCenter>13;
   const centered=Math.abs(offsetX)<0.18 && Math.abs(offsetY)<0.18 && edgeCenter>7.5;
   const readable=avg>42 && avg<222 && contrast>16 && edgeCenter>6.8;
   let motion=0;
@@ -3733,9 +3733,9 @@ function updateLiveHud(metrics, ready){
   let voice='';
   let key='start';
   if(metrics.avg<=45){ hint='Serve più luce'; voice=voiceLine('dark',['C è poca luce. Spostati in una zona più luminosa oppure accendi una luce.','Ho bisogno di più luce per leggere il prodotto.']); key='dark'; }
-  else if(metrics.avg>=220){ hint='Troppa luce o riflesso'; voice=voiceLine('bright',['Vedo troppo riflesso. Inclina leggermente il prodotto o allontanalo dalla fonte di luce.','C è troppa luce sulla confezione. Prova a cambiare angolazione.']); key='bright'; }
+  else if(metrics.avg>=220){ hint='Troppa luce o riflesso'; voice=voiceLine('bright',['Vedo un riflesso. Inclina leggermente il prodotto per leggere meglio l’etichetta.','C è troppa luce sulla confezione. Prova a cambiare angolazione.']); key='bright'; }
   else if(!metrics.readable){ hint='Fammi vedere meglio il prodotto'; voice=voiceLine('unreadable',['Non lo leggo bene. Tienilo più fermo e mostra bene la confezione.','La confezione non è ancora leggibile. Girala un po verso la camera.']); key='unreadable'; }
-  else if(metrics.tooBig){ hint="Allontanalo un po'"; voice=voiceLine('too_big',['Perfetto, ma è troppo vicino. Allontana leggermente il prodotto.','Sei troppo vicino alla camera. Fai un piccolo passo indietro con il prodotto.']); key='too_big'; }
+  else if(metrics.tooBig){ hint="Allontanalo un po'"; voice=voiceLine('too_big',['Perfetto, tieni il prodotto fermo e centra bene l’etichetta.','Va bene così: centra l’etichetta e tienilo fermo un attimo.']); key='too_big'; }
   else if(metrics.tooSmall){ hint="Avvicinalo un po'"; voice=voiceLine('too_small',['Avvicina un po il prodotto, così riesco a leggere meglio.','Portalo leggermente più vicino al riquadro centrale.']); key='too_small'; }
   else if(Math.abs(metrics.offsetX)>=0.18){
     if(metrics.offsetX<0){ hint='Spostalo a destra'; voice=voiceLine('move_right',['Sposta leggermente il prodotto verso destra.','Ancora un po verso destra e ci siamo.']); key='move_right'; }
@@ -9612,4 +9612,125 @@ try{ if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV9
   try{ const st=document.createElement('style'); st.id='v2864-pixel-ocr-css'; st.textContent=`.scan-result[data-pixel-ocr-v2864="1"]{box-shadow:0 0 0 2px rgba(25,118,210,.20),0 22px 70px rgba(12,42,96,.16)!important}.scan-result .scan-mini-badges span.pixel-v2864{background:#eef7ff;color:#16457d;border-color:#c7dcff}`; document.head.appendChild(st); }catch(_){ }
   try{ if(typeof addScannerResult==='function'&&!window.__v2864AddWrapped){ const prev=addScannerResult; addScannerResult=function(result){ const el=prev.call(this,result); try{ if(el&&result?.proPixelOcrV2864){ el.dataset.pixelOcrV2864='1'; } }catch(_){} return el; }; window.__v2864AddWrapped=true; } }catch(_){ }
   try{ window.SPESA_PRONTA_VERSION='v28.64-pro-human-like-pixel-ocr-reasoning'; window.SPESA_PRONTA_BUILD=Object.assign({},window.SPESA_PRONTA_BUILD||{},{version:'V28.64',proMode:true,humanLikePixelOcr:true,multiCropOcr:true,serverPixelJudge:true,openAiPolicy:'only after memory/barcode/pixel/OCR fail'}); if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('v2864-human-like-pixel-ocr-ready',{clientOcr:true,serverPixelJudge:true,openai:false}),1200); }catch(_){ }
+})();
+
+
+// =============================================================
+// V28.65 PRO OCR Quality Gate + True Visual Judge
+// - Non accetta OCR spazzatura come nome/marca/scadenza.
+// - La famiglia visiva è un indizio, non un nome prodotto.
+// - Live guidance: niente "allontanati" continuo per bottiglie lunghe.
+// =============================================================
+(function(){
+  const V='V28.65';
+  const norm=(v)=>String(v==null?'':v).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[’'`]/g,' ').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim();
+  const raw=(v)=>String(v==null?'':v).replace(/\s+/g,' ').trim();
+  const yearNow=(new Date()).getFullYear();
+  const knownRx=/\b(blues|cola|coca|pepsi|fanta|sprite|sant\s*anna|santanna|acqua|naturale|minerale|dexal|candeggina|delicata|maxi|detersivo|lavatrice|bucato|pesto|salsa|selex|barilla|latte|yogurt|the|tea|succo)\b/i;
+  const identityTokenRx=/\b(blues|cola|coca|pepsi|fanta|sprite|sant\s*anna|santanna|dexal|candeggina|delicata|maxi|acqua|naturale|minerale|pesto|selex|barilla)\b/i;
+  function ocrQuality(text=''){
+    const s=String(text||''); const clean=norm(s); const compact=s.replace(/\s+/g,'');
+    const chars=compact.length||1;
+    const symbolCount=(compact.match(/[<>=_~{}[\]\\|^€$§]/g)||[]).length;
+    const digits=(compact.match(/\d/g)||[]).length;
+    const letters=(compact.match(/[A-Za-zÀ-ÿ]/g)||[]).length;
+    const tokens=clean.split(/\s+/).filter(Boolean);
+    const good=tokens.filter(t=>t.length>=3 && /[a-z]/.test(t));
+    const singles=tokens.filter(t=>t.length===1).length;
+    const known=(clean.match(new RegExp(identityTokenRx.source,'gi'))||[]).length;
+    const hasSize=/\b\d{1,2}(?:[,.]\d{1,2})?\s*(l|lt|ml|cl|g|kg)\b/i.test(s);
+    const looksDate=/\b\d{1,2}\s*[\/\-.]\s*\d{1,2}\s*[\/\-.]\s*\d{2,4}\b/.test(s);
+    let score=0;
+    score += Math.min(35, good.length*5);
+    score += Math.min(45, known*18);
+    if(hasSize) score += 10;
+    if(looksDate) score += 6;
+    if(letters/chars < .42 && !known) score -= 28;
+    if(symbolCount/chars > .12) score -= 35;
+    if(singles > Math.max(3, tokens.length*.42) && !known) score -= 24;
+    if(/(?:=\s*){2,}|(?:_\s*){2,}|[<>]{2,}|\b[bcdfghjklmnpqrstvwxyz]\s+[bcdfghjklmnpqrstvwxyz]\s+[bcdfghjklmnpqrstvwxyz]\b/i.test(s) && !known) score -= 35;
+    if(digits > letters*1.8 && !looksDate && !hasSize && !known) score -= 20;
+    return {score, chars, letters, symbolRatio:Number((symbolCount/chars).toFixed(3)), tokens:tokens.length, goodWords:good.length, knownHits:known, hasSize, looksDate, low:score<18};
+  }
+  function badName(v=''){
+    const n=norm(v); if(!n) return false;
+    return /famiglia visiva|visual family|attuale cola|manual live|server local first|prodotto centrale|fallback locale|autonomia locale|conoscenza generale vision|liquido bevanda|categoria non sicura/.test(n);
+  }
+  function badBrand(v=''){
+    const s=raw(v); if(!s) return false;
+    const n=norm(s); const toks=n.split(/\s+/).filter(Boolean);
+    if(identityTokenRx.test(n)) return false;
+    if(/[<>=_~{}[\]\\|]/.test(s)) return true;
+    if(toks.length>=3 && toks.filter(t=>t.length<=2).length>=Math.ceil(toks.length*.6)) return true;
+    if(/^[A-Z]\s+[A-Z]{1,3}\s+[A-Z]\s+[A-Z]$/i.test(s)) return true;
+    if(/\b(sas|nall|oy|br|ea|uh)\b/i.test(s) && toks.length<=5) return true;
+    return false;
+  }
+  function hasRealIdentityText(r={}){
+    const tx=[r.productName,r.brand,r.productType,r.estimatedSize,...(Array.isArray(r.detectedText)?r.detectedText:[])].join(' ');
+    return identityTokenRx.test(tx);
+  }
+  function pixelAnchors(r={}){
+    return r?.visualFeatures?.clientPixelV2864?.anchors || r?.visualFeatures?.serverPixelV2864?.anchors || r?.visualFeatures?.visualAnchorsV2862 || r?.visualAnchorsV2862 || {};
+  }
+  function validExpiry(v='', source=''){
+    const s=String(v||'').trim(); if(!s) return true;
+    if(/^0?1[\/\-.]0?1[\/\-.]20?00$/.test(s)) return false;
+    const m=s.match(/(?:^|\b)(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})(?:\b|$)/);
+    if(m){ const y=Number(m[3]), d=Number(m[1]), mo=Number(m[2]); if(!(d>=1&&d<=31&&mo>=1&&mo<=12)) return false; if(y<yearNow-3 || y>yearNow+15) return false; }
+    const m2=s.match(/(?:^|\b)(\d{1,2})[\/\-.](\d{4})(?:\b|$)/);
+    if(m2){ const y=Number(m2[2]), mo=Number(m2[1]); if(!(mo>=1&&mo<=12) || y<yearNow-3 || y>yearNow+15) return false; }
+    const q=ocrQuality(source||s); if(q.low && !/scad|exp|tmc|entro|best|preferibil/i.test(source||'')) return false;
+    return true;
+  }
+  function stripBadEvidence(arr=[]){ return (Array.isArray(arr)?arr:[]).filter(x=>{
+    const n=norm(x); if(/famiglia visiva attuale/.test(n)) return false;
+    if(/ocr etichetta reale/.test(n) && !identityTokenRx.test(n)) return true;
+    const q=ocrQuality(x); if(q.low && /[<>=_~{}[\]\\|]/.test(String(x))) return false;
+    return true;
+  }).slice(0,24); }
+  function sanitizeScanResultV2865(r={}){
+    if(!r || typeof r!=='object') return r;
+    const out=Object.assign({},r);
+    const text=[out.productName,out.brand,...(Array.isArray(out.detectedText)?out.detectedText:[]),...(Array.isArray(out.visibleEvidence)?out.visibleEvidence:[])].join(' ');
+    const q=ocrQuality(text);
+    const anchors=pixelAnchors(out);
+    const real=hasRealIdentityText(out);
+    const productBad=badName(out.productName) || badBrand(out.brand) || (out.proPixelOcrV2864 && q.low && !real);
+    const dateSource=[out.expiryDetectedRaw,...(Array.isArray(out.detectedText)?out.detectedText:[]),...(Array.isArray(out.visibleEvidence)?out.visibleEvidence:[])].join(' ');
+    if(out.expiryDate && !validExpiry(out.expiryDate,dateSource)){
+      out.expiryDate=''; out.expiryDetectedRaw=''; out.expiryConfidence=0; out.proExpiryRejectedV2865={rejected:true,reason:'scadenza non plausibile / OCR spazzatura'};
+    }
+    if(productBad){
+      const old={productName:out.productName||'',brand:out.brand||'',category:out.category||'',confidence:out.confidence||0};
+      out.brand=''; out.variant=''; out.productType=out.productType && !badName(out.productType) ? out.productType : '';
+      if(anchors.darkLiquid){ out.productName='Bevanda scura in bottiglia da identificare'; out.category='drinks'; out.isLiquid=true; out.unit='bt'; }
+      else if(anchors.clearLiquid){ out.productName='Acqua/bevanda chiara in bottiglia da confermare'; out.category='water'; out.isLiquid=true; out.unit='bt'; }
+      else if(anchors.homeContainer){ out.productName='Prodotto casa da identificare'; out.category='house'; out.unit=out.unit||'conf'; }
+      else { out.productName='Prodotto da identificare'; out.category=out.category&&out.category!=='soft_drinks'?out.category:'food'; }
+      out.confidence=Math.min(Number(out.confidence||0), .49);
+      out.needsManual=true; out.shouldAskConfirmation=true; out.cloudVision=false; out.teacherSkipped=!!out.teacherSkipped;
+      out.detectedText=stripBadEvidence(out.detectedText||[]);
+      out.visibleEvidence=stripBadEvidence(out.visibleEvidence||[]);
+      out.visibleEvidence.unshift('OCR scartato: testo non affidabile');
+      out.reason='Vision PRO V28.65: ho scartato OCR/lettura non affidabile. Uso solo prove pixel sicure e chiedo etichetta/barcode senza inventare nome o marca.';
+      out.proOcrQualityGateV2865={rejected:true,old,quality:q,realIdentityText:false,cost:'zero_openai_tokens'};
+    } else {
+      out.detectedText=stripBadEvidence(out.detectedText||[]);
+      out.visibleEvidence=stripBadEvidence(out.visibleEvidence||[]);
+      out.proOcrQualityGateV2865=Object.assign({},out.proOcrQualityGateV2865||{},{checked:true,quality:q,realIdentityText:real});
+    }
+    if(/^(famiglia visiva attuale|visual family)/i.test(String(out.productName||''))) out.productName='Prodotto da identificare';
+    if(badBrand(out.brand)) out.brand='';
+    return out;
+  }
+  try{ if(typeof parseExpiryLoose==='function'&&!window.__v2865ParseExpiryWrapped){ const prev=parseExpiryLoose; parseExpiryLoose=function(rawText=''){ const out=prev.call(this,rawText); return validExpiry(out, rawText) ? out : ''; }; window.__v2865ParseExpiryWrapped=true; } }catch(_){ }
+  try{ if(typeof ultraExpiryV97==='function'&&!window.__v2865UltraExpiryWrapped){ const prev=ultraExpiryV97; ultraExpiryV97=function(rawText=''){ const e=prev.call(this,rawText); return (e&&validExpiry(e.text, rawText)) ? e : null; }; window.__v2865UltraExpiryWrapped=true; } }catch(_){ }
+  try{ if(typeof analyzeLiveFrameMetrics==='function'&&!window.__v2865LiveMetricsWrapped){ const prev=analyzeLiveFrameMetrics; analyzeLiveFrameMetrics=function(video){ const m=prev.call(this,video); if(m){ if(Number(m.objectCoverage||0)<0.68) m.tooBig=false; if(m.tooBig && Number(m.edgeCenter||0)<13) m.tooBig=false; } return m; }; window.__v2865LiveMetricsWrapped=true; } }catch(_){ }
+  try{ if(typeof updateLiveHud==='function'&&!window.__v2865LiveHudWrapped){ const prev=updateLiveHud; updateLiveHud=function(metrics,ready){ if(metrics && Number(metrics.objectCoverage||0)<0.68) metrics.tooBig=false; prev.call(this,metrics,ready); try{ const main=document.querySelector('#liveScanMainPill'), auto=document.querySelector('#liveScanAutoPill'); if(main && /allontan|troppa luce/i.test(main.textContent||'')){ main.textContent=/troppa luce/i.test(main.textContent||'')?'Inclina per togliere riflesso':'Centra bene l’etichetta'; } if(auto && /qualit/i.test(auto.textContent||'') && ready){ auto.textContent='Pronto: tieni fermo'; } }catch(_){} }; window.__v2865LiveHudWrapped=true; } }catch(_){ }
+  try{ if(typeof autonomousVisionGuess==='function'&&!window.__v2865AutoWrapped){ const prev=autonomousVisionGuess; autonomousVisionGuess=async function(dataUrl){ const r=await prev.call(this,dataUrl); return sanitizeScanResultV2865(r); }; window.__v2865AutoWrapped=true; } }catch(_){ }
+  try{ if(typeof askVisionAi==='function'&&!window.__v2865AskWrapped){ const prev=askVisionAi; askVisionAi=async function(dataUrl,opts={}){ const next=Object.assign({},opts); if(next.localGuess) next.localGuess=sanitizeScanResultV2865(next.localGuess); const r=await prev.call(this,dataUrl,next); return sanitizeScanResultV2865(r); }; window.__v2865AskWrapped=true; } }catch(_){ }
+  try{ if(typeof addScannerResult==='function'&&!window.__v2865AddWrapped){ const prev=addScannerResult; addScannerResult=function(result){ return prev.call(this,sanitizeScanResultV2865(result||{})); }; window.__v2865AddWrapped=true; } }catch(_){ }
+  try{ if(typeof refreshScanResultCard==='function'&&!window.__v2865RefreshWrapped){ const prev=refreshScanResultCard; refreshScanResultCard=function(el,result){ return prev.call(this,el,sanitizeScanResultV2865(result||{})); }; window.__v2865RefreshWrapped=true; } }catch(_){ }
+  try{ window.SPESA_PRONTA_VERSION='v28.65-pro-ocr-quality-visual-judge'; window.SPESA_PRONTA_BUILD=Object.assign({},window.SPESA_PRONTA_BUILD||{},{version:'V28.65',proMode:true,ocrQualityGate:true,liveGuidanceFixed:true,garbageOcrRejected:true}); if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('v2865-ocr-quality-visual-judge-ready',{garbageOcrRejected:true,liveGuidanceFixed:true,openai:false}),900); }catch(_){ }
 })();
