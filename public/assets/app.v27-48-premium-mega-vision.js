@@ -3936,11 +3936,12 @@ function hasSoftDrinkEvidenceV2841(text=''){
 }
 function isGenericVisionFallbackNameV2841(name=''){
   const n=normalizeLearnText(name||'');
-  return !n || /\b(bibita\s+tipo\s+cola|bevanda\s+in\s+bottiglia\s+da\s+identificare|bottiglia\s+da\s+identificare|prodotto\s+da\s+identificare|nome\s+prodotto|acqua\s+in\s+bottiglia)\b/.test(n);
+  return !n || /\b(bibita\s+tipo\s+cola|bevanda\s+in\s+bottiglia\s+da\s+identificare|bottiglia\s+da\s+identificare|prodotto\s+da\s+identificare|prodotto\s+in\s+confezione\s+verde\s+da\s+identificare|bevanda\s+da\s+identificare|articolo\s+da\s+identificare|nome\s+prodotto|acqua\s+in\s+bottiglia|verdura)\b/.test(n);
 }
 function hasReliableLookupEvidenceV2841(result={}){
   const evidence=[result.brand,result.variant,result.productType,result.packageType,...(result.detectedText||[]),...(result.visibleEvidence||[])].filter(Boolean).join(' ');
   const n=normalizeLearnText(evidence);
+  if(!n || /^(verde|confezione|bottiglia|flacone|prodotto|articolo|verdura|house|food|drinks)$/i.test(n)) return false;
   return n.length>=4 && !/^\s*$/.test(n);
 }
 function categoryLooksGenericForWeb(cat=''){
@@ -3950,6 +3951,7 @@ function shouldAskInternetForCategory(result={}){
   if(!result || result.needsRetake) return false;
   const evidence=[result.productName,result.brand,result.variant,result.productType,result.packageType,result.category,result.estimatedSize,...(result.detectedText||[]),...(result.visibleEvidence||[])].join(' ');
   if(isGenericVisionFallbackNameV2841(result.productName||'') && !hasReliableLookupEvidenceV2841(result)) return false;
+  if(/\bverdura\b/i.test(String(result.productName||'')) && !hasReliableLookupEvidenceV2841(result)) return false;
   if(hasTeaLabelEvidenceV2841(evidence) && result.category==='soft_drinks') result.category='juice';
   const inferred=inferRealityCategoryFromText(evidence,'');
   if(inferred && inferred!==result.category && categoryLooksGenericForWeb(result.category)) return true;
@@ -3982,6 +3984,7 @@ function applyInternetCategoryToCard(el,result,data={}){
   if(hasTeaLabelEvidenceV2841(evidence) && newCategory==='soft_drinks') newCategory='juice';
   if(newCategory==='soft_drinks' && !hasSoftDrinkEvidenceV2841(evidence)) return false;
   if(isGenericVisionFallbackNameV2841(result.productName||'') && !hasReliableLookupEvidenceV2841(result)) return false;
+  if(/\bverdura\b/i.test(String(result.productName||'')) && !hasReliableLookupEvidenceV2841(result)) return false;
   const localCat=inferRealityCategoryFromText(evidence,'');
   const canReplace=categoryLooksGenericForWeb(current) || current===localCat || Number(data.confidence||0)>=0.86;
   if(!canReplace) return false;
@@ -4080,10 +4083,22 @@ async function analyzeGroceryDataUrl(dataUrl,fileName='photo.jpg', visualSignatu
     const cloudActuallyFailed = !result || result.cloudError || result.cloudOffline;
     if(cloudActuallyFailed){
       const usableLocalPre = localPre && (!isBadScanName(localPre.productName||'') || Number(localPre.confidence||0)>=.5 || localPre.localVision || localPre.autonomousVision);
+      const teacherNeededByLocal = !!(usableLocalPre && localPre && localPre.forceTeacher);
       result=usableLocalPre ? localPre : await guessScanFallback(fileName,dataUrl,result);
+      if(teacherNeededByLocal){
+        result.productName=result.productName && !/verdura/i.test(String(result.productName)) ? result.productName : 'Prodotto da identificare';
+        result.category=(result.category==='veg')?'house':(result.category||'house');
+        result.confidence=Math.min(Number(result.confidence||0), .28);
+        result.needsManual=true;
+        result.shouldAskConfirmation=true;
+        result.detailQuestion=result.detailQuestion || 'Il riconoscimento locale non basta: rifai una foto più vicina dell’etichetta o controlla perché OpenAI non ha risposto.';
+      }
       result=markTeacherInactive(result, visionError || result || visionBackendStatus);
-      if(!result.reason || /Cloud OpenAI|Failed to fetch|cloud_|risposta non valida|Docente OpenAI/i.test(String(result.reason||''))) result.reason='Analisi server/local-first completata: controlla i dati e conferma. Il docente OpenAI resta solo diagnostico quando non è disponibile.';
-      setScannerStatus('Analisi server/local-first completata: controlla la scheda e conferma i dati.', '', true);
+      if(teacherNeededByLocal){
+        result.cloudError=String(visionError?.message||result?.cloudError||'openai_not_available').slice(0,80);
+        result.reason='Il colore/forma non basta: non classifico a caso. Serve etichetta leggibile oppure docente OpenAI attivo.';
+      }else if(!result.reason || /Cloud OpenAI|Failed to fetch|cloud_|risposta non valida|Docente OpenAI/i.test(String(result.reason||''))) result.reason='Analisi server/local-first completata: controlla i dati e conferma. Il docente OpenAI resta solo diagnostico quando non è disponibile.';
+      setScannerStatus(teacherNeededByLocal ? 'Docente OpenAI non ha completato: non classifico a caso, serve etichetta leggibile o diagnosi AI.' : 'Analisi server/local-first completata: controlla la scheda e conferma i dati.', '', true);
     } else {
       result.cloudVision=true; result.cloudOffline=false; result.cloudFallback=false; result.teacherInactive=false;
     }
@@ -4185,14 +4200,14 @@ async function guessProductFromImage(dataUrl=''){
     if(safeWaterLike) return {needsManual:true, productName:'Acqua in bottiglia', brand:'', estimatedSize:'Capienza da confermare', sizeConfidence:.35, detailQuestion:'Non leggo la capienza: dimmi 2 litri, 1,5 litri o 500 ml.', quantity:1, unit:'bt', category:'water', confidence:.62, productPlaceholder:'Acqua in bottiglia', isLiquid:true, localVision:true, reason:'Riconoscimento locale prudente: prodotto centrale simile a bottiglia d’acqua. Conferma marca e capienza.'};
     if(cokeLike || waterLike || bottleLikeVisual) return {needsManual:true, productName:'Bevanda in bottiglia da identificare', brand:'', estimatedSize:'Capienza da confermare', sizeConfidence:.25, detailQuestion:'Non leggo bene l’etichetta: fai una foto più vicina del fronte o completa nome e marca.', quantity:1, unit:'bt', category:'drinks', confidence:.34, productPlaceholder:'Nome bevanda', isLiquid:true, localVision:true, categoryWebNeeded:false, reason:'Riconoscimento locale prudente: vedo una bottiglia, ma non uso colore/forma per inventare cola, acqua o marca. Serve etichetta leggibile o docente server.'};
     if(centerWhite>.32 && centerRed<.04 && centerDark<.38) return {needsManual:true, productName:'Bevanda da identificare', brand:'', quantity:1, unit:'pz', category:'drinks', confidence:.36, productPlaceholder:'Nome bevanda', isLiquid:true, localVision:true, categoryWebNeeded:false, reason:'Riconoscimento locale prudente: sembra una bevanda chiara, ma serve conferma etichetta.'};
-    if(ratio(center,'green')>.16 && centerRed<.05) return {needsManual:true, productName:'Verdura', quantity:1, unit:'pz', category:'veg', confidence:.38, productPlaceholder:'Nome prodotto', localVision:true, reason:'Riconoscimento locale incerto: sembra verdura. Controlla nome e quantità.'};
+    if(ratio(center,'green')>.16 && centerRed<.05) return {needsManual:true, productName:'Prodotto in confezione verde da identificare', brand:'', estimatedSize:'Formato da confermare', quantity:1, unit:'pz', category:'house', confidence:.22, productPlaceholder:'Nome prodotto', localVision:true, forceTeacher:true, categoryWebNeeded:false, detailQuestion:'Non leggo l’etichetta: serve una foto più vicina del fronte o il docente OpenAI attivo. Non lo classifico come verdura solo per il colore verde.', reason:'Riconoscimento locale prudente: vedo una confezione verde, ma il colore non basta per decidere categoria o nome. Chiamo il docente OpenAI oppure richiedo conferma.'};
   }catch(_){ }
   return null;
 }
 
 function ensureVisionBrain(){
   aiMemory.visionBrain = Object.assign({version:40,coreVersion:40,samples:[],candidateSamples:[],productStats:{},productModels:{},corrections:0,totalScans:0,autonomousHits:0,localFirstDecisions:0,cloudTeacherCalls:0,autonomyLevel:0,lastTrainedAt:0}, aiMemory.visionBrain||{});
-  aiMemory.visionBrain.version=40; aiMemory.visionBrain.coreVersion=40;
+  aiMemory.visionBrain.version=48; aiMemory.visionBrain.coreVersion=48;
   aiMemory.visionBrain.samples = Array.isArray(aiMemory.visionBrain.samples) ? aiMemory.visionBrain.samples : [];
   aiMemory.visionBrain.candidateSamples = Array.isArray(aiMemory.visionBrain.candidateSamples) ? aiMemory.visionBrain.candidateSamples : [];
   aiMemory.visionBrain.productStats = aiMemory.visionBrain.productStats || {};
@@ -5495,8 +5510,9 @@ function ultraCategoryClientV97(r={}){
   if(/\b(nutella|crema spalmabile|spalmabile|crema di pistacchio|crema di nocciole)\b/.test(t)) add('spreads',96,'crema spalmabile letta','creamy_food');
   if(/\b(latte intero|latte uht|latte fresco|bevanda di soia|bevanda di avena)\b/.test(t)) add('milk_drinks',86,'latte/bevanda latte letta','liquid_drink');
   if(/\b(pasta|spaghetti|penne|fusilli|riso|cous cous|farro|orzo)\b/.test(t)) add('pasta_rice',86,'pasta/riso letto','solid_food');
-  if(/\b(detersivo|lavatrice|bucato|ammorbidente)\b/.test(t)) add('laundry',96,'bucato letto','house_chemical');
+  if(/\b(detersivo|lavatrice|bucato|ammorbidente|candeggina\s+delicata|dexal\s+candeggina)\b/.test(t)) add('laundry',112,'bucato/candeggina delicata letto','house_chemical');
   if(/\b(piatti|lavastoviglie|finish|brillantante)\b/.test(t)) add('dishwashing',94,'piatti/lavastoviglie letto','house_chemical');
+  if(/\b(candeggina|dexal|grandi\s+del\s+risparmio|pulizia|detergente|disinfettante|colori\s+sicuri)\b/.test(t)) add(/candeggina\s+delicata|colori\s+sicuri/.test(t)?'laundry':'cleaning',118,'prodotto pulizia/bucato letto','house_chemical');
   if(/\b(shampoo|balsamo|docciaschiuma|sapone|deodorante|dentifricio|collutorio)\b/.test(t)) add(/dentifricio|collutorio/.test(t)?'oral_care':'hair_body',88,'igiene persona letta','personal_care');
   if(/\b(crocchette|umido cane|umido gatto|mangime cane|mangime gatto|monge|whiskas)\b/.test(t)) add('pet_food',96,'cibo animali letto','pet_food');
   if(/\b(acquario|mangime pesci|biocondizionatore|batteri acquario|test no2|test no3)\b/.test(t)) add('aquarium',96,'acquario letto','aquarium_product');
@@ -7244,3 +7260,427 @@ try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, 
     if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('ocr-boost-ready-v2838',{version:V, stages:['label','expiry','barcode','ingredients']}),1400);
   }catch(_){ }
 })();
+
+
+// =============================================================
+// V28.47 UNIVERSAL VISION COMMON-SENSE CORE
+// Regola: il colore/la forma non decidono mai nome o categoria.
+// Nome/categoria vincono solo se c'è evidenza reale: OCR, marca, parole prodotto,
+// barcode, memoria confermata o scelta titolare. Se l'evidenza non basta, si chiama
+// il docente server/OpenAI; se non risponde, la scheda resta prudente e modificabile.
+// =============================================================
+(function(){
+  const V='28.47';
+  function norm(s){
+    try{ if(typeof normalizeLearnText==='function') return normalizeLearnText(s||''); }catch(_){ }
+    return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim();
+  }
+  function arr(v){ return Array.isArray(v)?v.filter(Boolean):[]; }
+  function evidence(r={}){
+    return norm([
+      r.productName,r.brand,r.variant,r.productType,r.packageType,r.category,r.categoryFamily,r.estimatedSize,r.sizeDetectedRaw,r.unit,
+      ...(arr(r.detectedText)),...(arr(r.visibleEvidence)),...(arr(r.ingredients)),...(arr(r.colors)),r.visualSignature,r.reason,r.detailQuestion
+    ].filter(Boolean).join(' '));
+  }
+  function genericName(name=''){
+    const n=norm(name);
+    return !n || /\b(prodotto|articolo|oggetto|confezione|bottiglia|flacone|bevanda|manual|auto|live|da identificare|nome prodotto|verdura|frutta|cibo|alimento|house|food|drinks)\b/.test(n) && !/\b(latte|pesto|salsa|candeggina|detersivo|acqua|cola|the|te|th[eè]|succo|yogurt|pasta|riso|tonno|olio|aceto|shampoo|sapone|dentifricio)\b/.test(n);
+  }
+  const RX={
+    cleaning:/\b(candeggina|bleach|detersivo|detergente|sgrassatore|disinfettante|pulizia|pavimenti|bagno|wc|superfici|bucato|lavatrice|ammorbidente|piatti|lavastoviglie|brillantante|profumo fiori di campo|colori sicuri|grandi del risparmio|ace|dexal|chanteclair|lysoform|mastro lindo)\b/,
+    laundry:/\b(candeggina delicata|bucato|lavatrice|ammorbidente|detersivo lavatrice|colori sicuri|profumo fiori di campo)\b/,
+    dish:/\b(piatti|lavastoviglie|brillantante|caps lavastoviglie|detersivo piatti|finish|pril|svelto)\b/,
+    water:/\b(acqua|minerale|oligominerale|naturale|frizzante|effervescente|levissima|sant anna|san benedetto|vera|lete|ferrarelle|uliveto|rocchetta)\b/,
+    teaJuice:/\b(succo|nettare|spremuta|bevanda alla frutta|te freddo|the freddo|the fusion|th[eè] fusion|t[eè] fusion|ice tea|estathe|estath[eè]|pesca e rosa|limone)\b/,
+    soft:/\b(coca cola|coca-cola|pepsi|fanta|sprite|cola zero|cola classica|aranciata|chinotto|gassosa|cedrata|bibita gassata|bevanda gassata)\b/,
+    milk:/\b(latte uht|latte intero|latte parzialmente scremato|latte scremato|latte senza lattosio|bevanda al latte|milk drink|latte 500 ml|latte 1 l)\b/,
+    sauce:/\b(pesto|salsa|bbq|barbecue|ketchup|maionese|senape|condimento|sugo|passata|rag[uù]|besciamella|hummus)\b/,
+    produce:/\b(insalata|lattuga|pomodoro|pomodori|zucchina|zucchine|melanzana|melanzane|carota|carote|cipolla|cipolle|patata|patate|broccoli|spinaci|finocchio|peperone|peperoni|ortaggi|verdura fresca|frutta fresca|mela|banana|arancia|limone|fragola|uva|pera|kiwi|albicocca|ciliegia|ananas|melone)\b/,
+    packageOnly:/\b(verde|rosso|blu|bianco|nero|trasparente|chiaro|scuro|bottiglia|flacone|barattolo|vasetto|lattina|confezione|plastica|etichetta|tappo|rettangolare|tondo|grande|piccolo)\b/
+  };
+  function strongCategoryFor(cat='', txt=''){
+    const t=norm(txt);
+    if(!t) return false;
+    if(cat==='laundry') return RX.laundry.test(t) || (RX.cleaning.test(t)&&/\b(bucato|lavatrice|candeggina delicata|colori sicuri)\b/.test(t));
+    if(cat==='cleaning') return RX.cleaning.test(t);
+    if(cat==='dishwashing') return RX.dish.test(t);
+    if(cat==='water') return RX.water.test(t);
+    if(cat==='juice') return RX.teaJuice.test(t);
+    if(cat==='soft_drinks') return RX.soft.test(t);
+    if(cat==='milk_drinks') return RX.milk.test(t);
+    if(cat==='sauces_condiments') return RX.sauce.test(t);
+    if(cat==='veg' || cat==='fruit') return RX.produce.test(t) && !RX.cleaning.test(t);
+    return true;
+  }
+  function inferStrongCategory(txt=''){
+    const t=norm(txt);
+    if(!t) return '';
+    if(RX.laundry.test(t)) return 'laundry';
+    if(RX.dish.test(t)) return 'dishwashing';
+    if(RX.cleaning.test(t)) return 'cleaning';
+    if(RX.soft.test(t) && !RX.teaJuice.test(t)) return 'soft_drinks';
+    if(RX.teaJuice.test(t)) return 'juice';
+    if(RX.water.test(t) && !RX.cleaning.test(t)) return 'water';
+    if(RX.milk.test(t)) return 'milk_drinks';
+    if(RX.sauce.test(t)) return 'sauces_condiments';
+    if(RX.produce.test(t) && !RX.cleaning.test(t)) return /\b(mela|banana|arancia|limone|fragola|uva|pera|kiwi|albicocca|ciliegia|ananas|melone)\b/.test(t)?'fruit':'veg';
+    return '';
+  }
+  function hasRealIdentity(r={}){
+    const txt=evidence(r);
+    const name=norm(r.productName||'');
+    if(!genericName(r.productName||'') && (norm(r.brand||'') || inferStrongCategory(txt) || /\b\d{8,14}\b/.test(txt))) return true;
+    if((arr(r.detectedText).join(' ')+arr(r.visibleEvidence).join(' ')).trim().length>=5 && inferStrongCategory(txt)) return true;
+    return false;
+  }
+  function apply(r={}){
+    if(!r || typeof r!=='object') return r;
+    const out=Object.assign({}, r);
+    const txt=evidence(out);
+    const strong=inferStrongCategory(txt);
+    out.commonSenseCoreV2847={active:true, strongCategory:strong||'', realIdentity:hasRealIdentity(out), colorIsOnlyEvidence:false};
+
+    // Se l'etichetta/testo contiene prova forte, quella vince sul colore, memoria, web e fallback locale.
+    if(strong){
+      if(out.category!==strong){ out.categoryGuardNoteV2847=`Categoria corretta da conoscenza generale: ${out.category||'vuota'} -> ${strong}`; }
+      out.category=strong;
+      if(strong==='laundry' || strong==='cleaning' || strong==='dishwashing'){
+        out.isLiquid=false;
+        out.unit=out.unit || 'pz';
+        if(genericName(out.productName||'')) out.productName='Prodotto casa da identificare';
+        out.needsManual=true;
+        out.shouldAskConfirmation=true;
+        out.confidence=Math.max(Number(out.confidence||0), .62);
+      }
+      if(strong==='juice' || strong==='soft_drinks' || strong==='water' || strong==='milk_drinks'){
+        out.isLiquid=true;
+        if(!out.unit || out.unit==='pz') out.unit='bt';
+      }
+    }
+
+    // Mai verdura/frutta da colore verde o da fallback generico.
+    if((out.category==='veg' || /\bverdura\b/.test(norm(out.productName||''))) && !RX.produce.test(txt)){
+      out.category = RX.cleaning.test(txt) ? (RX.laundry.test(txt)?'laundry':'cleaning') : (RX.teaJuice.test(txt)?'juice':(RX.water.test(txt)?'water':(RX.milk.test(txt)?'milk_drinks':'house')));
+      if(/\bverdura\b/.test(norm(out.productName||'')) || genericName(out.productName||'')) out.productName='Prodotto da identificare';
+      out.needsManual=true; out.shouldAskConfirmation=true;
+      out.confidence=Math.min(Number(out.confidence||.35), .42);
+      out.categoryWebNeeded=false;
+      out.forceTeacher=true;
+      out.commonSenseCoreV2847.colorIsOnlyEvidence=true;
+      out.reason='Conoscenza generale Vision: il colore non basta per dire verdura. Serve lettura etichetta/Docente o conferma manuale.';
+    }
+
+    // Blocca categorie bevande se l'evidenza è solo bottiglia/colore.
+    if((out.category==='juice' && !strongCategoryFor('juice',txt)) || (out.category==='soft_drinks' && !strongCategoryFor('soft_drinks',txt)) || (out.category==='water' && !strongCategoryFor('water',txt))){
+      if(!RX.teaJuice.test(txt) && !RX.soft.test(txt) && !RX.water.test(txt) && !RX.milk.test(txt)){
+        out.category = RX.cleaning.test(txt) ? (RX.laundry.test(txt)?'laundry':'cleaning') : 'drinks';
+        out.needsManual=true; out.shouldAskConfirmation=true;
+        out.confidence=Math.min(Number(out.confidence||.4), .52);
+        out.categoryWebNeeded=false;
+        out.reason='Conoscenza generale Vision: non trasformo colore/forma in categoria bevanda precisa senza testo reale.';
+      }
+    }
+
+    // Se il risultato è locale debole e senza identità, non fare finta che abbia capito.
+    if(!hasRealIdentity(out) && Number(out.confidence||0)<0.58 && !out.cloudVision && !out.memoryVision){
+      out.needsManual=true; out.shouldAskConfirmation=true; out.forceTeacher=true;
+      out.categoryWebNeeded=false;
+      if(genericName(out.productName||'')) out.productName='Prodotto da identificare';
+      out.detailQuestion=out.detailQuestion || 'Foto frontale più vicina o docente OpenAI/server necessario: il locale non deve inventare nome o categoria.';
+      out.reason=out.reason || 'Vision locale prudente: senza testo leggibile non invento.';
+    }
+
+    out.visibleEvidence=arr(out.visibleEvidence);
+    if(out.commonSenseCoreV2847.colorIsOnlyEvidence) out.visibleEvidence.push('Guardia V28.47: colore ignorato come categoria');
+    return out;
+  }
+
+  try{
+    if(typeof autonomousVisionGuess==='function' && !window.__v2847AutoVisionWrapped){
+      const prev=autonomousVisionGuess;
+      autonomousVisionGuess=async function(...args){ const r=await prev.apply(this,args); return apply(r); };
+      window.__v2847AutoVisionWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof guessScanFallback==='function' && !window.__v2847GuessFallbackWrapped){
+      const prev=guessScanFallback;
+      guessScanFallback=async function(...args){ const r=await prev.apply(this,args); return apply(r); };
+      window.__v2847GuessFallbackWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof improveVisionWithLocalLearning==='function' && !window.__v2847ImproveWrapped){
+      const prev=improveVisionWithLocalLearning;
+      improveVisionWithLocalLearning=async function(dataUrl,result){ const r=await prev.call(this,dataUrl,apply(result||{})); return apply(r); };
+      window.__v2847ImproveWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof purgeContradictoryMemoryAndFormat==='function' && !window.__v2847PurgeWrapped){
+      const prev=purgeContradictoryMemoryAndFormat;
+      purgeContradictoryMemoryAndFormat=function(result){ return apply(prev.call(this, result)); };
+      window.__v2847PurgeWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof addScannerResult==='function' && !window.__v2847AddResultWrapped){
+      const prev=addScannerResult;
+      addScannerResult=function(result){ return prev.call(this, apply(result||{})); };
+      window.__v2847AddResultWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof shouldAskInternetForCategory==='function' && !window.__v2847InternetGateWrapped){
+      const prev=shouldAskInternetForCategory;
+      shouldAskInternetForCategory=function(result){
+        const r=apply(result||{});
+        if(!hasRealIdentity(r) && !inferStrongCategory(evidence(r))) return false;
+        if(genericName(r.productName||'') && !inferStrongCategory(evidence(r))) return false;
+        return prev.call(this,r);
+      };
+      window.__v2847InternetGateWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof applyInternetCategoryToCard==='function' && !window.__v2847InternetApplyWrapped){
+      const prev=applyInternetCategoryToCard;
+      applyInternetCategoryToCard=function(el,result,data){
+        const r=apply(result||{});
+        const txt=evidence(r);
+        const newCat=data&&data.category;
+        if(newCat && !strongCategoryFor(newCat,txt) && !hasRealIdentity(r)){
+          try{ logAiDiagnosticV98?.('internet-category-blocked-v2847',{category:newCat, productName:r.productName||'', reason:'no_strong_evidence'}); }catch(_){ }
+          return false;
+        }
+        if((newCat==='veg' || newCat==='fruit') && !RX.produce.test(txt)) return false;
+        if((newCat==='juice' || newCat==='soft_drinks' || newCat==='water') && !(RX.teaJuice.test(txt)||RX.soft.test(txt)||RX.water.test(txt)||RX.milk.test(txt))) return false;
+        return prev.call(this,el,r,data);
+      };
+      window.__v2847InternetApplyWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.49 PRO', universalVisionCommonSense:'color_never_category_label_or_teacher_required'});
+    if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('universal-vision-core-ready-v2847',{version:V, rule:'colore/forma non decidono nome/categoria'}),1000);
+  }catch(_){ }
+})();
+
+
+// =============================================================
+// V28.48 PRO VISION KNOWLEDGE FUSION CLIENT GUARD
+// Stile PRO: caricamento fluido, zero categorie inventate da colore/forma,
+// ricerca categoria solo con prove concrete e dati verificabili.
+// =============================================================
+(function(){
+  const V='28.48';
+  function norm(s){ try{ return normalizeLearnText(s||''); }catch(_){ return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim(); } }
+  function arr(v){ return Array.isArray(v)?v.filter(Boolean):[]; }
+  function textOf(r={}){ return norm([r.productName,r.brand,r.variant,r.productType,r.packageType,r.category,r.estimatedSize,r.sizeDetectedRaw,r.reason,r.detailQuestion,...arr(r.detectedText),...arr(r.visibleEvidence),...arr(r.ingredients),...arr(r.allergens),...arr(r.colors),r.visualSignature].filter(Boolean).join(' ')); }
+  const RX={
+    house:/(candeggina|bleach|detersivo|detergente|sgrassatore|disinfettante|igienizzante|pulizia|pavimenti|bagno|wc|vetri|superfici|anticalcare|bucato|lavatrice|ammorbidente|lavastoviglie|brillantante|piatti|carta igienica|carta casa|scottex|rotoloni|dexal|ace|chanteclair|lysoform|mastro lindo|finish|pril|svelto)/i,
+    laundry:/(bucato|lavatrice|ammorbidente|candeggina delicata|detersivo lavatrice|colori sicuri|profumo fiori|smacchiatore)/i,
+    dish:/(piatti|lavastoviglie|brillantante|pastiglie lavastoviglie|tabs lavastoviglie|detersivo piatti|finish|pril|svelto)/i,
+    water:/(acqua|minerale|oligominerale|naturale|frizzante|effervescente|levissima|sant anna|san benedetto|vera|lete|ferrarelle|uliveto|rocchetta)/i,
+    soft:/(coca cola|coca-cola|pepsi|fanta|sprite|cola zero|cola classica|aranciata|chinotto|gassosa|cedrata|tonica|bibita gassata|bevanda gassata|soft drink|soda)/i,
+    teaJuice:/(succo|nettare|spremuta|bevanda alla frutta|t[eè] freddo|the freddo|th[eè] freddo|ice tea|ice the|estathe|estath[eè]|th[eè] fusion|the fusion|pesca e rosa|multivitaminico)/i,
+    milk:/(latte uht|latte fresco|latte intero|latte parzialmente scremato|latte scremato|senza lattosio|bevanda al latte)/i,
+    yogurt:/(yogurt|kefir|skyr|actimel|activia|muller|yomo|fage)/i,
+    sauce:/(pesto|salsa|bbq|barbecue|ketchup|maionese|senape|condimento|sugo|passata|ragu|ragù|besciamella|hummus)/i,
+    oil:/(olio|extravergine|extra vergine|evo|aceto|balsamico)/i,
+    pasta:/(pasta|spaghetti|penne|fusilli|rigatoni|orecchiette|riso|risotto|cous cous|quinoa)/i,
+    sweets:/(cioccolato|cioccolata|cacao|tavoletta|pralina|caramelle|dolci|merendina|biscotti|wafer|torrone)/i,
+    dairy:/(mozzarella|formaggio|parmigiano|grana|ricotta|philadelphia|burro|panna da cucina|mascarpone)/i,
+    produce:/(insalata|lattuga|pomodoro|pomodori|zucchina|zucchine|melanzana|melanzane|carota|carote|cipolla|cipolle|patata|patate|broccoli|spinaci|finocchio|peperone|peperoni|ortaggi|verdura fresca|mela|mele|banana|banane|arancia|arance|limone|limoni|fragola|uva|pera|kiwi|ananas|melone|frutta fresca)/i,
+    beauty:/(sapone|bagnoschiuma|docciaschiuma|deodorante|shampoo|balsamo|dentifricio|collutorio|spazzolino|crema corpo|rasoio)/i,
+    pets:/(crocchette|umido cane|umido gatto|pate cane|patè cane|pate gatto|patè gatto|monge|royal canin|purina|whiskas|friskies|cibo cane|cibo gatto)/i,
+    aquarium:/(acquario|mangime pesci|biocondizionatore|batteri acquario|fertilizzante acquario|sera|tetra|askoll)/i
+  };
+  const GENERIC=/\b(prodotto|articolo|oggetto|confezione|bottiglia|flacone|bevanda|manual|auto|live|da identificare|nome prodotto|verdura|frutta|cibo|alimento|house|food|drinks)\b/i;
+  function inferCat(t=''){
+    t=norm(t); if(!t) return '';
+    if(RX.laundry.test(t)) return 'laundry';
+    if(RX.dish.test(t)) return 'dishwashing';
+    if(RX.house.test(t)) return 'cleaning';
+    if(RX.soft.test(t) && !RX.teaJuice.test(t)) return 'soft_drinks';
+    if(RX.teaJuice.test(t)) return 'juice';
+    if(RX.water.test(t) && !RX.house.test(t)) return 'water';
+    if(RX.milk.test(t)) return 'milk_drinks';
+    if(RX.yogurt.test(t)) return 'yogurt';
+    if(RX.sauce.test(t)) return 'sauces_condiments';
+    if(RX.oil.test(t)) return 'oil_vinegar';
+    if(RX.pasta.test(t)) return 'pasta_rice';
+    if(RX.sweets.test(t)) return 'chocolate_sweets';
+    if(RX.dairy.test(t)) return 'dairy';
+    if(RX.beauty.test(t)) return 'personal_care';
+    if(RX.pets.test(t)) return 'pet_food';
+    if(RX.aquarium.test(t)) return 'aquarium';
+    if(RX.produce.test(t)) return /\b(mela|mele|banana|banane|arancia|arance|limone|limoni|fragola|uva|pera|kiwi|ananas|melone|frutta fresca)\b/i.test(t)?'fruit':'veg';
+    return '';
+  }
+  function concrete(r={}){
+    const t=textOf(r), name=norm(r.productName||''), brand=norm(r.brand||'');
+    if(/\b\d{8,14}\b/.test(t)) return true;
+    if(name && !GENERIC.test(name) && name.length>=3) return true;
+    if(brand.length>=2 && inferCat(t)) return true;
+    if((arr(r.detectedText).join(' ')+arr(r.visibleEvidence).join(' ')).trim().length>=6 && inferCat(t)) return true;
+    return false;
+  }
+  function apply(r={}){
+    if(!r || typeof r!=='object') return r;
+    const out=Object.assign({}, r); const t=textOf(out); const inf=inferCat(t);
+    out.proVisionClientV2848={active:true,inferredCategory:inf||'',concreteIdentity:concrete(out),policy:'no color/shape category; ask server/OpenAI when weak'};
+    if(inf){ out.category=inf; out.categoryRuleSource='client_common_knowledge_v2848'; out.categoryWebNeeded=false; }
+    const produceOk=RX.produce.test(t);
+    if((out.category==='veg'||out.category==='fruit'||/\bverdura\b/i.test(String(out.productName||''))) && !produceOk){
+      out.category=inf && inf!=='veg'&&inf!=='fruit'?inf:'house';
+      if(!out.productName || GENERIC.test(String(out.productName))) out.productName='Prodotto da identificare';
+      out.needsManual=true; out.shouldAskConfirmation=true; out.forceTeacher=true; out.categoryWebNeeded=false; out.confidence=Math.min(Number(out.confidence||.3),.38);
+      out.detailQuestion=out.detailQuestion||'Il colore non basta: serve etichetta/barcode o docente server.';
+      out.reason='Cervello PRO: blocco categoria falsa da colore/forma.';
+    }
+    if(['soft_drinks','juice','water','milk_drinks'].includes(out.category||'')){
+      const drinkOk=RX.soft.test(t)||RX.teaJuice.test(t)||RX.water.test(t)||RX.milk.test(t);
+      if(!drinkOk && !concrete(out)){ out.category='drinks'; out.needsManual=true; out.shouldAskConfirmation=true; out.categoryWebNeeded=false; out.confidence=Math.min(Number(out.confidence||.4),.45); }
+    }
+    if(!concrete(out) && !inf && Number(out.confidence||0)<.62){
+      if(!out.productName || GENERIC.test(String(out.productName))) out.productName='Prodotto da identificare';
+      out.needsManual=true; out.shouldAskConfirmation=true; out.forceTeacher=true; out.categoryWebNeeded=false;
+      out.detailQuestion=out.detailQuestion||'Foto frontale più vicina o barcode: non invento nome/categoria.';
+    }
+    out.visibleEvidence=Array.isArray(out.visibleEvidence)?out.visibleEvidence:[];
+    if(out.forceTeacher && !out.visibleEvidence.includes('PRO V28.48: colore/forma ignorati')) out.visibleEvidence.push('PRO V28.48: colore/forma ignorati');
+    return out;
+  }
+  try{ if(typeof autonomousVisionGuess==='function' && !window.__v2848AutoVisionWrapped){ const prev=autonomousVisionGuess; autonomousVisionGuess=async function(...args){ return apply(await prev.apply(this,args)); }; window.__v2848AutoVisionWrapped=true; } }catch(_){ }
+  try{ if(typeof guessProductFromImage==='function' && !window.__v2848GuessProductImageWrapped){ const prev=guessProductFromImage; guessProductFromImage=async function(...args){ return apply(await prev.apply(this,args)); }; window.__v2848GuessProductImageWrapped=true; } }catch(_){ }
+  try{ if(typeof guessScanFallback==='function' && !window.__v2848GuessFallbackWrapped){ const prev=guessScanFallback; guessScanFallback=async function(...args){ return apply(await prev.apply(this,args)); }; window.__v2848GuessFallbackWrapped=true; } }catch(_){ }
+  try{ if(typeof improveVisionWithLocalLearning==='function' && !window.__v2848ImproveWrapped){ const prev=improveVisionWithLocalLearning; improveVisionWithLocalLearning=async function(dataUrl,result){ return apply(await prev.call(this,dataUrl,apply(result||{}))); }; window.__v2848ImproveWrapped=true; } }catch(_){ }
+  try{ if(typeof purgeContradictoryMemoryAndFormat==='function' && !window.__v2848PurgeWrapped){ const prev=purgeContradictoryMemoryAndFormat; purgeContradictoryMemoryAndFormat=function(result){ return apply(prev.call(this,result)); }; window.__v2848PurgeWrapped=true; } }catch(_){ }
+  try{ if(typeof addScannerResult==='function' && !window.__v2848AddResultWrapped){ const prev=addScannerResult; addScannerResult=function(result){ return prev.call(this, apply(result||{})); }; window.__v2848AddResultWrapped=true; } }catch(_){ }
+  try{ if(typeof shouldAskInternetForCategory==='function' && !window.__v2848InternetGateWrapped){ const prev=shouldAskInternetForCategory; shouldAskInternetForCategory=function(result){ const r=apply(result||{}); if(!concrete(r) && !inferCat(textOf(r))) return false; if(/\bverdura\b/i.test(String(r.productName||'')) && !RX.produce.test(textOf(r))) return false; return prev.call(this,r); }; window.__v2848InternetGateWrapped=true; } }catch(_){ }
+  try{ if(typeof applyInternetCategoryToCard==='function' && !window.__v2848InternetApplyWrapped){ const prev=applyInternetCategoryToCard; applyInternetCategoryToCard=function(el,result,data){ const r=apply(result||{}); const cat=data&&data.category; const txt=textOf(r); if((cat==='veg'||cat==='fruit') && !RX.produce.test(txt)) return false; if(['soft_drinks','juice','water','milk_drinks'].includes(cat) && !(RX.soft.test(txt)||RX.teaJuice.test(txt)||RX.water.test(txt)||RX.milk.test(txt)||concrete(r))) return false; return prev.call(this,el,r,data); }; window.__v2848InternetApplyWrapped=true; } }catch(_){ }
+  try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.49 PRO', proVisionKnowledgeFusion:'multi-source guarded'}); if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('pro-vision-knowledge-fusion-ready-v2848',{version:V, rule:'nessun nome/categoria da colore o forma'}),1000); }catch(_){ }
+})();
+// =============================================================
+// V28.49 PRO CHATGPT-LEVEL VISION JUDGE - CLIENT SAFETY LAYER
+// Identita' = nome/marca/OCR/barcode/evidenze. Ingredienti, allergeni,
+// tracce, colori e forma NON possono creare nome o categoria precisa.
+// =============================================================
+(function(){
+  const V='28.49';
+  function norm(s){ try{ return normalizeLearnText(s||''); }catch(_){ return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim(); } }
+  function arr(v){ return Array.isArray(v)?v.filter(Boolean):[]; }
+  function uniq(v,limit=28){ return [...new Set((Array.isArray(v)?v:[v]).flat().map(x=>String(x||'').trim()).filter(Boolean))].slice(0,limit); }
+  function cleanVisibleEvidenceForIdentity(r={}){ return arr(r.visibleEvidence).filter(x=>!/^(PRO\s+V|Cervello PRO|server_|client_|external\/home-brain|huggingface:|google_vision:)/i.test(String(x||'').trim())); }
+  function identityText(r={}){ return norm([r.productName,r.brand,r.variant,r.productType,r.packageType,r.category,r.estimatedSize,r.sizeDetectedRaw,r.size,r.format,r.unit,r.barcode,r.ean,r.code,r.productCode,...arr(r.barcodes),...arr(r.detectedText),...cleanVisibleEvidenceForIdentity(r),...arr(r.labels),r.packaging].filter(Boolean).join(' ')); }
+  function deepText(r={}){ return norm([identityText(r),...arr(r.ingredients),r.ingredientsText,...arr(r.allergens),...arr(r.possibleTraces),...arr(r.traces),...arr(r.colors),r.visualSignature].filter(Boolean).join(' ')); }
+  const GENERIC=/\b(prodotto|articolo|oggetto|confezione|bottiglia|flacone|barattolo|vasetto|busta|scatola|pack|bevanda|cibo|alimento|verdura|frutta|manual|auto|live|da identificare|nome prodotto|unknown|generico)\b/i;
+  const COLOR_ONLY=/\b(verde|rosso|blu|azzurro|giallo|arancione|nero|bianco|viola|rosa|colore|colori|bottiglia|flacone|barattolo|vasetto|busta|scatola)\b/i;
+  const RX={
+    laundry:/(bucato|lavatrice|ammorbidente|candeggina delicata|detersivo lavatrice|colori sicuri|smacchiatore|capi colorati|profuma bucato)/i,
+    cleaning:/(candeggina|bleach|detersivo|detergente|sgrassatore|disinfettante|igienizzante|pulizia|pavimenti|bagno|wc|vetri|superfici|anticalcare|muffa|dexal|ace|chanteclair|lysoform|quasar|mastro lindo|napisan)/i,
+    dish:/(lavastoviglie|brillantante|pastiglie lavastoviglie|tabs lavastoviglie|detersivo piatti|piatti concentrato|svelto|nelsen|finish|pril|fairy)/i,
+    paper:/(carta igienica|carta casa|rotoloni|scottex|tovaglioli|fazzoletti|pellicola|alluminio|sacchi spazzatura|carta forno)/i,
+    water:/(acqua minerale|acqua naturale|acqua frizzante|oligominerale|levissima|sant.?anna|san benedetto|vera|lete|ferrarelle|uliveto|rocchetta)/i,
+    teaJuice:/(succo|nettare|spremuta|bevanda alla frutta|t[eè] freddo|the freddo|th[eè] freddo|ice tea|ice the|estath[eè]|th[eè] fusion|the fusion|pesca e rosa|multivitaminico)/i,
+    soft:/(coca.?cola|pepsi|fanta|sprite|aranciata|chinotto|gassosa|cedrata|tonica|cola zero|bibita gassata|bevanda gassata|soft drink|soda|energy drink)/i,
+    milk:/(latte uht|latte fresco|latte intero|latte scremato|latte parzialmente scremato|senza lattosio|bevanda al latte)/i,
+    coffeeTea:/(caffe|caff[eè]|capsule caffe|cialde caffe|te in filtri|t[eè] in filtri|camomilla|infuso|tisane|orzo solubile)/i,
+    yogurt:/(yogurt|kefir|skyr|actimel|activia|muller|yomo|fage|fermenti lattici)/i,
+    dairy:/(mozzarella|formaggio|parmigiano|grana|ricotta|philadelphia|burro|panna da cucina|mascarpone|provola|scamorza|emmental|pecorino)/i,
+    eggs:/(uova|uovo|albumi|tuorlo|ovoprodotto)/i,
+    pasta:/(pasta|spaghetti|penne|fusilli|rigatoni|orecchiette|riso|risotto|cous cous|quinoa|gnocchi secchi)/i,
+    flour:/(farina|semola|zucchero|lievito|fecola|amido|pangrattato|preparato per torta|vanillina|cacao amaro)/i,
+    bakery:/(pane|pan bauletto|piadina|cracker|grissini|taralli|fette biscottate|cornetto|brioche|toast)/i,
+    cereals:/(cereali|corn flakes|muesli|granola|fiocchi d avena|avena|nesquik cereal|kellogg)/i,
+    sweets:/(cioccolato|cioccolata|tavoletta|pralina|caramelle|dolci|merendina|biscotti|wafer|torrone|snack dolce)/i,
+    spreads:/(crema spalmabile|nutella|nocciolata|burro di arachidi|crema pistacchio)/i,
+    sauce:/(pesto|salsa|sugo|passata|rag[uù]|bbq|barbecue|ketchup|maionese|senape|condimento|besciamella|hummus|salsa soia)/i,
+    oil:/(olio extravergine|olio extra vergine|olio evo|olio di oliva|olio di semi|aceto|balsamico|glassa gastronomica)/i,
+    spices:/(sale|pepe|spezie|origano|rosmarino|dado|brodo|zafferano|paprika|curry|cannella)/i,
+    preserves:/(pelati|polpa di pomodoro|passata|sottoli|sottaceti|olive|capperi|mais|ceci|fagioli|lenticchie|legumi|piselli in scatola)/i,
+    canned:/(tonno|sgombro|salmone in scatola|filetti di acciughe|carne in scatola|simmenthal)/i,
+    frozen:/(surgelato|surgelati|congelato|congelati|findus|4 salti|bastoncini|spinaci surgelati|pizza surgelata|minestrone surgelato)/i,
+    meat:/(prosciutto|salame|mortadella|bresaola|wurstel|salsiccia|pollo|tacchino|hamburger|carne|speck|pancetta|affettato)/i,
+    fish:/(pesce|orata|spigola|merluzzo|gamberi|salmone fresco|tonno fresco|cozze|vongole|polpo|calamari)/i,
+    fruit:/(mela|mele|banana|banane|arancia|arance|limone|limoni|fragola|fragole|uva|pera|pere|kiwi|albicocca|ciliegia|ananas|melone|anguria|frutta fresca|clementine|mandarini)/i,
+    veg:/(insalata|lattuga|pomodoro|pomodori|zucchina|zucchine|melanzana|melanzane|carota|carote|cipolla|cipolle|patata|patate|broccoli|spinaci|finocchio|peperone|peperoni|ortaggi|verdura fresca|rucola|cetriolo|cavolfiore)/i,
+    beauty:/(sapone|bagnoschiuma|docciaschiuma|deodorante|crema corpo|shampoo|balsamo|gel capelli|rasoio|schiuma barba|assorbenti|detergente intimo)/i,
+    oral:/(dentifricio|spazzolino|collutorio|filo interdentale|oral b|mentadent|az|sensodyne|colgate|parodontax)/i,
+    pharmacy:/(tachipirina|ibuprofene|farmaco|medicinale|cerotti|garza|disinfettante cute|integratore|vitamina|termometro|spray nasale|paracetamolo)/i,
+    pet:/(crocchette|umido cane|umido gatto|pat[eè] cane|pat[eè] gatto|monge|royal canin|purina|whiskas|friskies|cibo cane|cibo gatto|snack cane|snack gatto)/i,
+    aquarium:/(acquario|pesci|mangime pesci|biocondizionatore|batteri acquario|fertilizzante acquario|sera|tetra|askoll|jbl acquario)/i
+  };
+  const SUPPORT={
+    laundry:RX.laundry, cleaning:RX.cleaning, dishwashing:RX.dish, paper_house:RX.paper, water:RX.water, juice:RX.teaJuice, soft_drinks:RX.soft, milk_drinks:RX.milk, coffee_tea:RX.coffeeTea, yogurt:RX.yogurt, dairy:RX.dairy, eggs:RX.eggs, pasta_rice:RX.pasta, flour_baking:RX.flour, bakery:RX.bakery, breakfast_cereals:RX.cereals, chocolate_sweets:RX.sweets, spreads:RX.spreads, sauces_condiments:RX.sauce, oil_vinegar:RX.oil, spices_broths:RX.spices, preserves_jars:RX.preserves, canned_fish_meat:RX.canned, frozen:RX.frozen, meat_deli:RX.meat, fish:RX.fish, fruit:RX.fruit, veg:RX.veg, personal_care:RX.beauty, oral_care:RX.oral, pharmacy:RX.pharmacy, pet_food:RX.pet, aquarium:RX.aquarium
+  };
+  const FOOD=new Set(['food','drinks','water','soft_drinks','juice','milk_drinks','coffee_tea','yogurt','dairy','eggs','pasta_rice','flour_baking','bakery','breakfast_cereals','chocolate_sweets','spreads','sauces_condiments','oil_vinegar','spices_broths','preserves_jars','canned_fish_meat','frozen','meat_deli','fish','fruit','veg']);
+  function infer(id=''){
+    id=norm(id);
+    if(RX.laundry.test(id)) return 'laundry';
+    if(RX.dish.test(id)) return 'dishwashing';
+    if(RX.cleaning.test(id)) return 'cleaning';
+    if(RX.paper.test(id)) return 'paper_house';
+    if(RX.beauty.test(id)) return 'personal_care';
+    if(RX.oral.test(id)) return 'oral_care';
+    if(RX.pharmacy.test(id)) return 'pharmacy';
+    if(RX.pet.test(id)) return 'pet_food';
+    if(RX.aquarium.test(id)) return 'aquarium';
+    if(RX.teaJuice.test(id)) return 'juice';
+    if(RX.soft.test(id) && !RX.teaJuice.test(id)) return 'soft_drinks';
+    if(RX.water.test(id)) return 'water';
+    if(RX.milk.test(id)) return 'milk_drinks';
+    if(RX.coffeeTea.test(id)) return 'coffee_tea';
+    if(RX.yogurt.test(id)) return 'yogurt';
+    if(RX.dairy.test(id)) return 'dairy';
+    if(RX.eggs.test(id)) return 'eggs';
+    if(RX.pasta.test(id)) return 'pasta_rice';
+    if(RX.flour.test(id)) return 'flour_baking';
+    if(RX.bakery.test(id)) return 'bakery';
+    if(RX.cereals.test(id)) return 'breakfast_cereals';
+    if(RX.sweets.test(id)) return 'chocolate_sweets';
+    if(RX.spreads.test(id)) return 'spreads';
+    if(RX.sauce.test(id)) return 'sauces_condiments';
+    if(RX.oil.test(id)) return 'oil_vinegar';
+    if(RX.spices.test(id)) return 'spices_broths';
+    if(RX.preserves.test(id)) return 'preserves_jars';
+    if(RX.canned.test(id)) return 'canned_fish_meat';
+    if(RX.frozen.test(id)) return 'frozen';
+    if(RX.meat.test(id)) return 'meat_deli';
+    if(RX.fish.test(id)) return 'fish';
+    if(RX.fruit.test(id)) return 'fruit';
+    if(RX.veg.test(id)) return 'veg';
+    return '';
+  }
+  function supported(cat,id){ return !!(cat && SUPPORT[cat] && SUPPORT[cat].test(id||'')); }
+  function concrete(r={}){ const id=identityText(r), name=norm(r.productName||''), brand=norm(r.brand||''); if(/\b\d{8,14}\b/.test(id)) return true; if(name && !GENERIC.test(name) && name.length>=3) return true; if(brand.length>=2 && infer(id)) return true; return ([...arr(r.detectedText),...arr(r.visibleEvidence)].join(' ').trim().length>=8 && !!infer(id)); }
+  function ingredientTrap(cat,id,deep){ if(!cat || supported(cat,id)) return false; const d=norm(deep), i=norm(id); if(['milk_drinks','dairy','yogurt'].includes(cat) && /\b(latte|lattosio|milk|siero di latte|proteine del latte|tracce di latte)\b/i.test(d) && !/(latte uht|latte fresco|yogurt|kefir|mozzarella|formaggio|burro|panna)/i.test(i)) return true; if(cat==='eggs' && /\b(uova|uovo|albumi|tracce di uova)\b/i.test(d) && !/(uova|uovo|albumi)/i.test(i)) return true; return false; }
+  function apply(r={}, source='client'){
+    if(!r || typeof r!=='object') return r;
+    const out=Object.assign({},r), id=identityText(out), deep=deepText(out), cat=infer(id), before=String(out.category||'');
+    const blocked=[];
+    if(cat){ if(before && before!==cat) blocked.push(`categoria corretta ${before} -> ${cat}`); out.category=cat; out.categoryRuleSource='client_semantic_judge_v2849'; out.categoryWebNeeded=false; out.confidence=Math.max(Number(out.confidence||0),.78); }
+    if(before && !cat && ingredientTrap(before,id,deep)){ blocked.push('traccia/ingrediente ignorato come identita'); out.category=FOOD.has(before)?'food':''; out.needsManual=true; out.shouldAskConfirmation=true; out.forceTeacher=true; out.categoryWebNeeded=false; out.confidence=Math.min(Number(out.confidence||.4),.42); }
+    if(['veg','fruit'].includes(String(out.category||'')) && !supported(out.category,id)){ blocked.push('ortofrutta senza prova reale'); out.category=cat&& !['veg','fruit'].includes(cat)?cat:'food'; out.needsManual=true; out.shouldAskConfirmation=true; out.forceTeacher=true; out.categoryWebNeeded=false; out.confidence=Math.min(Number(out.confidence||.4),.38); if(!out.productName || GENERIC.test(String(out.productName))) out.productName='Prodotto da identificare'; }
+    if(['water','juice','soft_drinks','milk_drinks'].includes(String(out.category||'')) && !supported(out.category,id)){ blocked.push('bevanda precisa senza prova etichetta'); out.category='drinks'; out.needsManual=true; out.shouldAskConfirmation=true; out.forceTeacher=true; out.categoryWebNeeded=false; out.confidence=Math.min(Number(out.confidence||.45),.45); }
+    if(!concrete(out) && (COLOR_ONLY.test(id) || Number(out.confidence||0)<.66)){
+      if(!out.productName || GENERIC.test(String(out.productName))) out.productName='Prodotto da identificare';
+      out.needsManual=true; out.shouldAskConfirmation=true; out.forceTeacher=true; out.categoryWebNeeded=false; out.detailQuestion=out.detailQuestion||'Serve etichetta, barcode o docente: non invento da colore/forma.'; out.confidence=Math.min(Number(out.confidence||.42),.48);
+    }
+    out.visibleEvidence=Array.isArray(out.visibleEvidence)?out.visibleEvidence:[];
+    for(const b of blocked){ const msg='PRO V28.49: '+b; if(!out.visibleEvidence.includes(msg)) out.visibleEvidence.push(msg); }
+    out.proVisionClientV2849={active:true,source,inferredCategory:cat||'',concreteIdentity:concrete(out),blocked,policy:'identity text only; ingredients/traces/colors are not identity'};
+    return out;
+  }
+  try{ if(typeof autonomousVisionGuess==='function' && !window.__v2849AutoVisionWrapped){ const prev=autonomousVisionGuess; autonomousVisionGuess=async function(...args){ return apply(await prev.apply(this,args),'autonomousVisionGuess'); }; window.__v2849AutoVisionWrapped=true; } }catch(_){ }
+  try{ if(typeof guessProductFromImage==='function' && !window.__v2849GuessProductImageWrapped){ const prev=guessProductFromImage; guessProductFromImage=async function(...args){ return apply(await prev.apply(this,args),'guessProductFromImage'); }; window.__v2849GuessProductImageWrapped=true; } }catch(_){ }
+  try{ if(typeof guessScanFallback==='function' && !window.__v2849GuessFallbackWrapped){ const prev=guessScanFallback; guessScanFallback=async function(...args){ return apply(await prev.apply(this,args),'guessScanFallback'); }; window.__v2849GuessFallbackWrapped=true; } }catch(_){ }
+  try{ if(typeof improveVisionWithLocalLearning==='function' && !window.__v2849ImproveWrapped){ const prev=improveVisionWithLocalLearning; improveVisionWithLocalLearning=async function(dataUrl,result){ return apply(await prev.call(this,dataUrl,apply(result||{},'improve_pre')),'improve_post'); }; window.__v2849ImproveWrapped=true; } }catch(_){ }
+  try{ if(typeof purgeContradictoryMemoryAndFormat==='function' && !window.__v2849PurgeWrapped){ const prev=purgeContradictoryMemoryAndFormat; purgeContradictoryMemoryAndFormat=function(result){ return apply(prev.call(this,result),'purge_memory'); }; window.__v2849PurgeWrapped=true; } }catch(_){ }
+  try{ if(typeof addScannerResult==='function' && !window.__v2849AddResultWrapped){ const prev=addScannerResult; addScannerResult=function(result){ return prev.call(this, apply(result||{},'addScannerResult')); }; window.__v2849AddResultWrapped=true; } }catch(_){ }
+  try{ if(typeof shouldAskInternetForCategory==='function' && !window.__v2849InternetGateWrapped){ const prev=shouldAskInternetForCategory; shouldAskInternetForCategory=function(result){ const r=apply(result||{},'internet_gate'); const id=identityText(r); if(!concrete(r) && !infer(id)) return false; if(['veg','fruit','water','juice','soft_drinks','milk_drinks'].includes(String(r.category||'')) && !supported(r.category,id)) return false; return prev.call(this,r); }; window.__v2849InternetGateWrapped=true; } }catch(_){ }
+  try{ if(typeof applyInternetCategoryToCard==='function' && !window.__v2849InternetApplyWrapped){ const prev=applyInternetCategoryToCard; applyInternetCategoryToCard=function(el,result,data){ const r=apply(result||{},'internet_apply'); const cat=data&&data.category; const id=identityText(r); if(cat && ['veg','fruit','water','juice','soft_drinks','milk_drinks'].includes(cat) && !supported(cat,id)) return false; return prev.call(this,el,r,data); }; window.__v2849InternetApplyWrapped=true; } }catch(_){ }
+  try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.49 PRO', proVisionJudge:'identity-vs-ingredients isolated'}); if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('pro-vision-judge-ready-v2849',{version:V, rule:'tracce/colori non creano identita'}),1000); }catch(_){ }
+})();
+
