@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow,noarchive,nosnippet">
+  <meta name="googlebot" content="noindex,nofollow,noarchive,nosnippet">
+  <title>Spesa Pronta · Cervello Server</title>
+  <style>
+    :root{--blue:#1266f1;--green:#18bf72;--ink:#10233f;--muted:#63758e;--line:#dbe7f5;--bg:#eef4fb;--bad:#d83b3b;--warn:#b77900;--ok:#17a05d;--dark:#061b32}
+    *{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:linear-gradient(180deg,#eef4fb,#f8fbff);color:var(--ink)}
+    .page{max-width:1220px;margin:0 auto;padding:18px 14px 42px}.top{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px}.brand{display:flex;align-items:center;gap:10px}.logo{width:46px;height:46px;border-radius:17px;background:radial-gradient(circle at 30% 25%,#fff 0 12%,transparent 13%),linear-gradient(135deg,var(--blue),var(--green));box-shadow:0 16px 32px rgba(18,102,241,.24)}
+    h1{font-size:1.62rem;line-height:1.05;margin:0}.subtitle{margin:4px 0 0;color:var(--muted);font-weight:800}.badge{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:8px 12px;background:#fff;border:1px solid var(--line);font-weight:950;color:#16427d}.badge.ok{background:#edfff6;color:#0b7e48;border-color:#baf2d5}.badge.warn{background:#fff8e7;color:#845900;border-color:#f3d89c}.badge.bad{background:#fff1f1;color:#a92020;border-color:#ffcaca}.badge.dark{background:#061b32;color:#fff;border-color:#102b4a}
+    .notice{padding:12px 14px;border-radius:20px;background:#f3f8ff;border:1px solid #d7e8ff;color:#244463;font-weight:850;margin-bottom:12px}.notice.ok{background:#edfff6;border-color:#baf2d5;color:#0b7e48}.notice.warn{background:#fff8e7;border-color:#f3d89c;color:#845900}.notice.bad{background:#fff1f1;border-color:#ffcaca;color:#a92020}
+    .grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:12px 0}.card{background:#fff;border:1px solid var(--line);border-radius:24px;padding:14px;box-shadow:0 16px 36px rgba(12,45,94,.055)}.metric b{display:block;text-transform:uppercase;letter-spacing:.06em;font-size:.76rem;color:#697b94}.metric strong{display:block;font-size:1.18rem;margin-top:7px;word-break:break-word}.metric small{display:block;margin-top:5px;color:var(--muted);font-weight:750;line-height:1.25}
+    .toolbar{display:grid;grid-template-columns:1.4fr repeat(4,auto);gap:10px;margin:14px 0 16px}.search{min-height:54px;border:1px solid var(--line);border-radius:18px;background:#fff;padding:0 14px;font-weight:850;font-size:1rem;outline:none}button,a.btn{border:0;border-radius:18px;min-height:54px;padding:12px 14px;font-weight:1000;font-size:.92rem;cursor:pointer;text-decoration:none;display:flex;align-items:center;justify-content:center;text-align:center}.primary{background:linear-gradient(135deg,#176fff,#0d57d5);color:#fff;box-shadow:0 16px 32px rgba(18,102,241,.22)}.ghost{background:#fff;border:1px solid var(--line);color:#143f76}.danger{background:#fff0f0;color:#a92020;border:1px solid #ffd0d0}.darkbtn{background:#061b32;color:#fff;border:1px solid #102b4a}
+    .layout{display:grid;grid-template-columns:1.08fr .92fr;gap:12px}.products{display:grid;gap:10px}.product{display:grid;grid-template-columns:92px 1fr;gap:12px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:24px;padding:12px;cursor:pointer;box-shadow:0 14px 30px rgba(12,45,94,.05)}.product:hover{border-color:#a9cdfb;transform:translateY(-1px)}.photo{width:92px;height:92px;border-radius:22px;background:#f3f8ff;object-fit:cover;border:1px solid #e0ecfa}.pTitle{font-weight:1000;font-size:1.02rem;margin-bottom:3px}.pMeta{color:var(--muted);font-weight:800;font-size:.88rem}.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.chip{font-size:.75rem;font-weight:950;border-radius:999px;padding:6px 8px;background:#f1f6ff;color:#17457d;border:1px solid #d8e8ff}.chip.ok{background:#edfff6;color:#0b7e48;border-color:#baf2d5}.chip.warn{background:#fff8e7;color:#845900;border-color:#f3d89c}.chip.bad{background:#fff1f1;color:#a92020;border-color:#ffcaca}
+    .detail{position:sticky;top:12px;align-self:start}.detailHead{display:grid;grid-template-columns:98px 1fr;gap:12px;align-items:center}.detail h2{margin:0;font-size:1.25rem}.section{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}.kv{display:grid;grid-template-columns:130px 1fr;gap:7px 10px;font-size:.9rem}.kv b{color:#53677f}.listLine{display:flex;gap:6px;flex-wrap:wrap}.pill{border-radius:999px;background:#f1f6ff;border:1px solid #d8e8ff;padding:5px 8px;font-size:.78rem;font-weight:850}.json{background:#061b32;color:#eaf4ff;border-radius:20px;padding:12px;white-space:pre-wrap;line-height:1.35;font-size:.78rem;overflow:auto;max-height:42vh}
+    .console{margin-top:14px}.consoleGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.panel{background:#061b32;color:#eaf4ff;border-radius:22px;padding:14px;white-space:pre-wrap;line-height:1.38;font-size:.82rem;box-shadow:0 18px 42px rgba(6,27,50,.16);overflow:auto;max-height:38vh}.empty{padding:18px;border:1px dashed #bdd2ea;border-radius:22px;background:#fff;color:#63758e;font-weight:850;text-align:center}
+    @media(max-width:900px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.toolbar{grid-template-columns:1fr 1fr}.toolbar .search{grid-column:1/-1}.layout{grid-template-columns:1fr}.detail{position:static}.consoleGrid{grid-template-columns:1fr}.top{align-items:flex-start}.page{padding:14px 10px 34px}.product{grid-template-columns:76px 1fr}.photo{width:76px;height:76px}.kv{grid-template-columns:1fr}.card{border-radius:20px}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="top">
+      <div class="brand"><div class="logo"></div><div><h1>Cervello Server</h1><p class="subtitle">Memoria prodotti completa · Spesa Pronta</p></div></div>
+      <span class="badge dark" id="buildBadge">V28.40</span>
+    </div>
+    <div class="notice warn" id="notice">Carico il cervello server… serve login cloud valido nella app.</div>
+    <div class="grid">
+      <div class="card metric"><b>Prodotti</b><strong id="mCount">—</strong><small>articoli in memoria globale</small></div>
+      <div class="card metric"><b>Conferme</b><strong id="mConfirm">—</strong><small>conferme totali utenti</small></div>
+      <div class="card metric"><b>Docente</b><strong id="mTeacher">—</strong><small>aiuti OpenAI salvati</small></div>
+      <div class="card metric"><b>Locale/server</b><strong id="mLocal">—</strong><small>riconoscimenti interni</small></div>
+      <div class="card metric"><b>Errori</b><strong id="mErrors">—</strong><small>console server + correzioni</small></div>
+    </div>
+    <div class="toolbar">
+      <input class="search" id="search" placeholder="Cerca prodotto, marca, barcode, categoria…">
+      <button class="primary" id="btnRefresh">Aggiorna</button>
+      <button class="ghost" id="btnCopy">Copia report</button>
+      <button class="danger" id="btnCopyErrors">Copia errori</button>
+      <a class="btn ghost" href="./debug.html">Diagnosi AI</a>
+    </div>
+    <div class="layout">
+      <section>
+        <div class="products" id="products"><div class="empty">Nessun prodotto caricato.</div></div>
+      </section>
+      <aside class="card detail" id="detail"><div class="empty">Seleziona un articolo per vedere tutti i campi compilati.</div></aside>
+    </div>
+    <section class="console">
+      <h2>Console errori cervello</h2>
+      <div class="consoleGrid">
+        <div><h3>Server / sync / apprendimento</h3><div class="panel" id="serverErrors">—</div></div>
+        <div><h3>Pagina / fetch / runtime</h3><div class="panel" id="clientErrors">—</div></div>
+      </div>
+    </section>
+  </main>
+<script>
+(function(){
+  const SETTINGS_KEY='spesa-pronta-final:settings:v19';
+  const clientErrors=[]; let brain=null; let selectedKey='';
+  const $=id=>document.getElementById(id);
+  function logErr(type,data){clientErrors.unshift({at:new Date().toISOString(),type,data}); clientErrors.splice(60); renderClientErrors();}
+  window.addEventListener('error',e=>logErr('window-error',{message:e.message,source:e.filename,line:e.lineno,col:e.colno}));
+  window.addEventListener('unhandledrejection',e=>logErr('promise-error',{reason:String(e.reason?.message||e.reason||'')}));
+  function safeJsonGet(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'')||fallback}catch{return fallback}}
+  function getSettings(){return Object.assign({apiEndpoint:'/api',token:'',householdId:''},safeJsonGet(SETTINGS_KEY,{}));}
+  function apiBase(){return (getSettings().apiEndpoint||'/api').replace(/\/$/,'')||'/api'}
+  function redact(txt){return String(txt||'').replace(/(Bearer\s+)[A-Za-z0-9._\-]+/gi,'$1[REDACTED]').replace(/("token"\s*:\s*")[^"]+/gi,'$1[REDACTED]').replace(/(sk-[A-Za-z0-9_\-]{12,})/g,'[OPENAI_KEY_REDACTED]').replace(/(postgres(?:ql)?:\/\/)[^\s"']+/gi,'$1[DATABASE_URL_REDACTED]').slice(0,30000)}
+  async function fetchJson(url,opt){const res=await fetch(url,Object.assign({cache:'no-store'},opt||{}));const txt=await res.text();let data=null;try{data=txt?JSON.parse(txt):null}catch{data={raw:txt}};return {ok:res.ok,status:res.status,data,txt};}
+  function esc(s){return String(s??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
+  function fmtDate(ms){return ms?new Date(ms).toLocaleString('it-IT'):'—'}
+  function arr(a,n=8){return Array.isArray(a)?a.slice(0,n):[]}
+  function profileSrc(p){return p?.imageUrl || p?.svgDataUri || ''}
+  function chipClass(v){if(String(v).includes('alta')||Number(v)>=80) return 'ok'; if(String(v).includes('media')||Number(v)>=50) return 'warn'; return 'bad'}
+  function renderMetrics(){const st=brain?.stats||{};$('mCount').textContent=st.count??'—';$('mConfirm').textContent=st.confirmations??'—';$('mTeacher').textContent=st.teacherHelp??'—';$('mLocal').textContent=st.localRecognitions??'—';$('mErrors').textContent=(brain?.errors||[]).length||0;}
+  function renderProducts(){const box=$('products');const products=brain?.products||[];if(!products.length){box.innerHTML='<div class="empty">Nessun articolo salvato nel cervello server. Conferma un prodotto dalla Vision e poi torna qui.</div>';return;}box.innerHTML=products.map(p=>{const c=p.completeness||{};const src=profileSrc(p.profilePhoto);return `<article class="product" data-key="${esc(p.key)}"><img class="photo" src="${esc(src)}" alt=""><div><div class="pTitle">${esc(p.title)}</div><div class="pMeta">${esc(p.brand||'Marca non compilata')} · ${esc(p.format||'Formato mancante')} · ${esc(p.category||'categoria mancante')}</div><div class="chips"><span class="chip ${chipClass(p.reliability)}">${esc(p.reliability)}</span><span class="chip ${chipClass(c.percent)}">${c.percent||0}% campi</span>${p.barcode?`<span class="chip ok">EAN ${esc(p.barcode)}</span>`:'<span class="chip warn">EAN mancante</span>'}<span class="chip">${p.confirmations||0} conferme</span></div></div></article>`}).join('');box.querySelectorAll('.product').forEach(el=>el.onclick=()=>{selectedKey=el.dataset.key;renderDetail();});if(!selectedKey&&products[0]){selectedKey=products[0].key;renderDetail();}}
+  function row(k,v){return `<b>${esc(k)}</b><span>${esc(v||'—')}</span>`}
+  function pills(list){const a=arr(list,16);return a.length?`<div class="listLine">${a.map(x=>`<span class="pill">${esc(x)}</span>`).join('')}</div>`:'—'}
+  function renderDetail(){const p=(brain?.products||[]).find(x=>x.key===selectedKey)||(brain?.products||[])[0];const d=$('detail');if(!p){d.innerHTML='<div class="empty">Nessun dettaglio disponibile.</div>';return;}const f=p.fields||{};const src=profileSrc(p.profilePhoto);d.innerHTML=`<div class="detailHead"><img class="photo" src="${esc(src)}" alt=""><div><h2>${esc(p.title)}</h2><p class="pMeta">${esc(p.brand||'')} · ${esc(p.category||'')}</p><div class="chips"><span class="chip ${chipClass(p.reliability)}">Affidabilità ${esc(p.reliability)}</span><span class="chip ${chipClass(p.completeness?.percent)}">Completo ${p.completeness?.percent||0}%</span></div></div></div>
+    <div class="section"><h3>Identità articolo</h3><div class="kv">${row('Nome',f.identity?.productName)}${row('Marca',f.identity?.brand)}${row('Formato',f.identity?.format)}${row('Categoria',f.classification?.category)}${row('Famiglia',f.classification?.categoryFamily)}${row('Unità',f.quantity?.unit)}${row('Barcode',f.barcode)}</div></div>
+    <div class="section"><h3>Campi compilati</h3>${pills(f.filledFields)}</div>
+    <div class="section"><h3>Campi mancanti</h3>${pills(f.missingFields)}</div>
+    <div class="section"><h3>Ingredienti</h3>${pills(f.ingredients)}</div>
+    <div class="section"><h3>Allergeni / tracce</h3>${pills([...(f.allergens||[]),...(f.possibleTraces||[])])}</div>
+    <div class="section"><h3>Aspetto / riconoscimento</h3><div class="kv">${row('Colori',arr(f.visualAppearance?.colors,8).join(', '))}${row('Confezione',f.visualAppearance?.packageType||f.packaging)}${row('Tipo',f.visualAppearance?.productType)}${row('Firma visiva',f.visualAppearance?.visualSignature)}</div></div>
+    <div class="section"><h3>Prove OCR / visive</h3>${pills([...(f.visibleEvidence||[]),...(f.detectedText||[])].slice(0,24))}</div>
+    <div class="section"><h3>JSON completo scheda</h3><div class="json">${esc(redact(JSON.stringify(f,null,2)))}</div></div>`;}
+  function renderServerErrors(){const e=brain?.errors||[];$('serverErrors').textContent=e.length?redact(JSON.stringify(e.slice(0,80),null,2)):'Nessun errore server registrato nella memoria brain.';}
+  function renderClientErrors(){ $('clientErrors').textContent=clientErrors.length?redact(JSON.stringify(clientErrors,null,2)):'Nessun errore pagina registrato.'; }
+  function render(){renderMetrics();renderProducts();renderDetail();renderServerErrors();renderClientErrors();}
+  async function load(){const s=getSettings();if(!s.householdId||!s.token){$('notice').className='notice bad';$('notice').textContent='Account cloud non trovato: apri l’app, fai login/sync e poi rientra qui.';logErr('missing-auth',{householdId:!!s.householdId,token:!!s.token});render();return;}const q=encodeURIComponent($('search').value.trim());const limit=300;const endpoints=[`${apiBase()}/ai/server-brain?householdId=${encodeURIComponent(s.householdId)}&limit=${limit}&q=${q}`,`/api/ai/server-brain?householdId=${encodeURIComponent(s.householdId)}&limit=${limit}&q=${q}`];let last=null;for(const url of endpoints){try{const r=await fetchJson(url,{headers:{Authorization:'Bearer '+s.token}});last=r;if(r.ok&&r.data?.ok){brain=r.data;$('notice').className='notice ok';$('notice').textContent=`Cervello server caricato: ${r.data.stats?.count||0} prodotti in memoria. Clicca un articolo per vedere la scheda completa.`;render();return;}logErr('server-brain-fetch-failed',{url,status:r.status,body:r.data});}catch(e){logErr('server-brain-fetch-error',{url,error:e.message||String(e)});}}$('notice').className='notice bad';$('notice').textContent='Non sono riuscito a leggere il cervello server. Controlla login, endpoint e token dalla Diagnosi AI.';brain=last?.data||null;render();}
+  async function copyText(txt,msg){try{await navigator.clipboard.writeText(redact(txt));alert(msg||'Copiato ✅')}catch{const ta=document.createElement('textarea');ta.value=redact(txt);document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();alert(msg||'Copiato ✅')}}
+  $('btnRefresh').onclick=load;$('search').addEventListener('keydown',e=>{if(e.key==='Enter') load();});$('btnCopy').onclick=()=>copyText(JSON.stringify(brain||{},null,2),'Report cervello copiato ✅');$('btnCopyErrors').onclick=()=>copyText(JSON.stringify({serverErrors:brain?.errors||[],clientErrors},null,2),'Errori copiati ✅');renderClientErrors();load();
+})();
+</script>
+</body>
+</html>

@@ -452,7 +452,7 @@ async function syncAutonomyLearningToServer(payload={}, quiet=true, fromQueue=fa
     if(!settings.apiEndpoint || !settings.householdId || !settings.token){ if(!fromQueue && payload?.confirmed) queueLearningPayload(payload,'missing_cloud_settings'); return false; }
     const res=await fetch(`${settings.apiEndpoint.replace(/\/$/,'')}/ai/learn/autonomy`,{
       method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings.token||''}`},
-      body:JSON.stringify({householdId:settings.householdId, payload, clientMemorySummary:{learnedProducts:(aiMemory.learnedProducts||[]).length, deepProducts:(aiMemory.productDeepMemory||[]).length, queued:pendingLearningQueueCount(), appVersion:'v27.97'}})
+      body:JSON.stringify({householdId:settings.householdId, payload, clientMemorySummary:{learnedProducts:(aiMemory.learnedProducts||[]).length, deepProducts:(aiMemory.productDeepMemory||[]).length, queued:pendingLearningQueueCount(), appVersion:'v28.40-server-brain'}})
     });
     if(!res.ok) return false;
     const data=await res.json();
@@ -4658,6 +4658,80 @@ function compactLearningPayloadProduct(confirmed={}){
   return clone;
 }
 
+
+// V28.40 - scheda memoria prodotto completa per il server brain.
+function v2840ListFromScan(...values){
+  const out=[];
+  const push=v=>{
+    if(v==null) return;
+    if(Array.isArray(v)) return v.forEach(push);
+    if(typeof v==='object') return;
+    String(v).split(/\n|\s*[;,]\s*/).forEach(x=>{ const c=String(x||'').trim(); if(c) out.push(c.slice(0,180)); });
+  };
+  values.forEach(push);
+  return [...new Set(out)].slice(0,90);
+}
+function v2840SmallObjFromScan(obj={}){
+  if(!obj || typeof obj!=='object' || Array.isArray(obj)) return {};
+  const out={};
+  Object.entries(obj).slice(0,80).forEach(([k,v])=>{
+    if(v==null) return;
+    if(Array.isArray(v)) out[k]=v2840ListFromScan(v).slice(0,30);
+    else if(typeof v==='object') out[k]=v2840SmallObjFromScan(v);
+    else out[k]=String(v).trim().slice(0,260);
+  });
+  return out;
+}
+function buildServerProductMemoryV2840(result={}, current={}){
+  const pm=result.productMemory||{};
+  const barcode=current.barcode || extractBarcodeFromScanResult(result,null) || '';
+  const ingredients=v2840ListFromScan(pm.ingredients,result.ingredients,result.ingredientsText);
+  const allergens=v2840ListFromScan(pm.allergens,result.allergens,result.possibleAllergens);
+  const possibleTraces=v2840ListFromScan(pm.possibleTraces,pm.traces,result.possibleTraces,result.possibleAllergens,result.traces);
+  const colors=v2840ListFromScan(pm.colors,pm.visualAppearance?.colors,result.colors,result.visualFeatures?.colors,result.visibleColors);
+  const detectedText=v2840ListFromScan(result.detectedText,pm.detectedText).slice(0,40);
+  const visibleEvidence=v2840ListFromScan(result.visibleEvidence,pm.visibleEvidence).slice(0,40);
+  const key=barcode ? `ean:${barcode}` : [current.brand,current.productName,current.size].map(x=>String(x||'').toLowerCase().trim()).filter(Boolean).join('|').slice(0,160);
+  return {
+    version:'V28.40_client_memory_payload',
+    key,
+    productName:current.productName||result.productName||pm.productName||pm.name||'',
+    brand:current.brand||result.brand||pm.brand||'',
+    format:current.size||result.estimatedSize||pm.format||'',
+    category:current.category||result.category||pm.category||'',
+    qty:current.qty||result.quantity||1,
+    unit:current.unit||result.unit||'pz',
+    expiryDate:current.expiryDate||result.expiryDate||'',
+    damageNote:current.damageNote||result.damageType||'Integro',
+    barcode,
+    barcodes:v2840ListFromScan(barcode,result.ean,result.code,result.productCode,pm.barcode,pm.externalKnowledge?.code).slice(0,10),
+    ingredients,
+    allergens,
+    possibleTraces,
+    nutrition:v2840SmallObjFromScan(pm.nutrition||result.nutrition||{}),
+    labels:v2840ListFromScan(pm.labels,result.labels),
+    visualAppearance:{
+      colors,
+      packageType:String(result.packageType||pm.packageType||'').slice(0,80),
+      productType:String(result.productType||pm.productType||'').slice(0,80),
+      physicalState:String(result.physicalState||'').slice(0,80),
+      visualSignature:String(result.visualSignature||pm.visualSignature||'').slice(0,160),
+      packageHints:v2840ListFromScan(result.packageHintsV96,pm.packageHints).slice(0,16),
+      materialHints:v2840ListFromScan(result.materialHintsV96,pm.materialHints).slice(0,16)
+    },
+    visibleEvidence,
+    detectedText,
+    fieldConfidence:v2840SmallObjFromScan(result.fieldConfidence||pm.fieldConfidence||{}),
+    source:{cloudVision:!!result.cloudVision,autonomousVision:!!result.autonomousVision,memoryVision:!!result.memoryVision,localFirst:!!result.localFirst,seedVision:!!result.seedVision},
+    externalKnowledge:v2840SmallObjFromScan(pm.externalKnowledge||{}),
+    imageUrl:String(pm.imageUrl||pm.externalKnowledge?.imageUrl||result.imageUrl||'').slice(0,600),
+    profilePhoto:{type:'server_generated_default', note:'Il server genera la foto profilo tecnica se non arriva una immagine esterna leggera.'},
+    needsWebVerification: ingredients.length===0 || allergens.length===0,
+    confirmedByUser:true,
+    confirmedAt:Date.now()
+  };
+}
+
 function confirmScanResult(el,result,silent=false){
   const productName=el.querySelector('[data-scan-name]').value.trim();
   const brand=el.querySelector('[data-scan-brand]')?.value.trim() || result.brand || '';
@@ -4692,7 +4766,19 @@ function confirmScanResult(el,result,silent=false){
   aiMemory.scanHistory.push({name:productName,brand,size,qty,unit,category,expiryDate,damageNote,at:Date.now(),confidence:result.confidence||null});
   aiMemory.scanHistory=aiMemory.scanHistory.slice(-300);
   rememberLearnedProduct({productName,brand,variant:result.variant||'',category,unit,productType:result.productType||'',packageType:result.packageType||'',estimatedSize:size,isLiquid:!!result.isLiquid,visibleEvidence:result.visibleEvidence||[],baseName:result.productName||''});
-  const confirmedLearning={productName,brand,size,qty,unit,category,expiryDate,damageNote,confirmedAt:Date.now(),visualFeatures:result.visualFeatures||null,visualSignature:result.visualSignature||'',visibleEvidence:result.visibleEvidence||[],detectedText:result.detectedText||[],confidence:result.confidence||null,cloudVision:!!result.cloudVision,autonomousVision:!!result.autonomousVision,memoryVision:!!result.memoryVision,localFirst:!!result.localFirst,learningAudit:{teacherUsed:!!result.cloudVision,recognizedByLocalOrServer:!!(result.localFirst||result.autonomousVision||result.memoryVision),memoryUpdated:true}};
+  const barcode=extractBarcodeFromScanResult(result,el)||'';
+  const userCorrections=scanUserCorrectionsForLearning(el,result,{productName,brand,size,qty,unit,category,expiryDate,damageNote});
+  const productMemory=buildServerProductMemoryV2840(result,{productName,brand,size,qty,unit,category,expiryDate,damageNote,barcode});
+  const confirmedLearning={
+    productName,brand,size,qty,unit,category,expiryDate,damageNote,barcode,userCorrections,productMemory,
+    ingredients:productMemory.ingredients||result.ingredients||[],
+    allergens:productMemory.allergens||result.allergens||[],
+    possibleTraces:productMemory.possibleTraces||result.possibleTraces||result.possibleAllergens||[],
+    colors:productMemory.visualAppearance?.colors||result.colors||[],
+    nutrition:productMemory.nutrition||result.nutrition||{},
+    labels:productMemory.labels||result.labels||[],
+    confirmedAt:Date.now(),visualFeatures:result.visualFeatures||null,visualSignature:result.visualSignature||'',visibleEvidence:result.visibleEvidence||[],detectedText:result.detectedText||[],confidence:result.confidence||null,fieldConfidence:result.fieldConfidence||null,cloudVision:!!result.cloudVision,autonomousVision:!!result.autonomousVision,memoryVision:!!result.memoryVision,localFirst:!!result.localFirst,learningAudit:{teacherUsed:!!result.cloudVision,recognizedByLocalOrServer:!!(result.localFirst||result.autonomousVision||result.memoryVision),memoryUpdated:true,serverMemoryCard:'V28.40'}
+  };
   updateLearningAuditBox(el,result,true);
   pushLearningAudit({type:'product-confirmed', productName, brand, size, barcode, userCorrections:Object.keys(userCorrections||{}).filter(k=>userCorrections[k]?.edited), teacherUsed:!!result.cloudVision, recognizedByLocalOrServer:!!(result.localFirst||result.autonomousVision||result.memoryVision), memoryUpdated:true});
   // V27.81: la memoria globale server si aggiorna articolo-per-articolo
@@ -5292,7 +5378,7 @@ function v2799BuildLearningBody(payload={}){
       learnedProducts:(aiMemory.learnedProducts||[]).length,
       deepProducts:(aiMemory.productDeepMemory||[]).length,
       queued:pendingLearningQueueCount?.()||0,
-      appVersion:'v27.99',
+      appVersion:'v28.40-server-brain',
       brain:window.SPESA_PRONTA_BUILD?.brain||'Ultra Error Reduction Core',
       syncHandshake:'v27_99'
     }

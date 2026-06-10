@@ -1,3 +1,4 @@
 User-agent: *
 Disallow: /debug.html
+Disallow: /server-brain.html
 Disallow: /api/

@@ -22,7 +22,7 @@
   <main class="page">
     <div class="top">
       <div class="brand"><div class="logo"></div><div><h1>Diagnosi AI</h1><p class="subtitle">Console debug separata · Spesa Pronta</p></div></div>
-      <span class="badge dark" id="buildBadge">V28.39</span>
+      <span class="badge dark" id="buildBadge">V28.40</span>
     </div>
 
     <div class="hero">
@@ -53,6 +53,7 @@
       <a class="btn ghost" href="./clear-cache.html">Pulisci cache</a>
       <button class="danger" id="btnClearQueue">Svuota coda locale</button>
       <button class="ghost" id="btnResetDiag">Reset eventi diagnosi</button>
+      <a class="btn darkbtn" href="./server-brain.html">Cervello server</a>
     </div>
 
     <div class="two">
@@ -74,7 +75,7 @@
   </main>
 <script>
 (function(){
-  const DEBUG_VERSION='V28.39 OpenAI Token Fix';
+  const DEBUG_VERSION='V28.40 Server Brain Console';
   const SETTINGS_KEY='spesa-pronta-final:settings:v19';
   const AI_MEMORY_KEY='spesa-pronta-final:ai-memory:v23';
   const LEARNING_QUEUE_KEY='spesa_pronta_learning_queue_v2782';
@@ -104,7 +105,7 @@
   function lastEvent(type){const ev=(getMemory().diagnosticsV98?.events||[]).slice().reverse().find(e=>!type||e.type===type);return ev||null;}
   function statusText(){const p=state.preflight||state.status||{};const q=getQueue().length;if(!p.ok && !p.teacherActive) return 'Da verificare'; if(q>0) return 'Sync in coda'; return 'Sistema pronto';}
   function readableReason(raw){const s=String(raw||'');const map={http_500_server_error:'Errore server durante salvataggio memoria',server_not_reachable:'Server non raggiunto',endpoint_not_confirmed:'Endpoint non confermato',timeout:'Timeout richiesta',network_error:'Errore rete',payload_invalid:'Payload non valido',unauthorized:'Accesso non autorizzato'};return map[s]||s||'—'}
-  function updateMetrics(){const p=state.preflight||state.status||{};const q=getQueue();const g=p.globalProductMemory||{};const runtime=state.openaiTest?.data||p.lastOpenAiRuntime||p.preflight?.lastOpenAiRuntime||{};const teacherMsg=(state.openaiTest?.data?.message)||p.teacherMessage||(p.teacherActive?'OpenAI attivo':'non attivo');$('mTeacher').textContent=teacherMsg;$('mTeacherSub').textContent=runtime?.model?('modello '+runtime.model):'OpenAI Vision';$('mDb').textContent=(p.dbMode||'—')+(p.databaseConnected?' ✅':' ⚠️');$('mQueue').textContent=String(q.length);$('mQueueSub').textContent=q.length?'Da sincronizzare':'Vuota';$('mProducts').textContent=String(g.count ?? p.globalCount ?? '—');$('mProductsSub').textContent='raw '+String(g.rawCount ?? g.count ?? p.globalCount ?? '—')+' · duplicati '+String(g.duplicatesPossible ?? 0);$('mCache').textContent=String(p.knowledgeCache?.entries ?? '—')+' / '+String(p.knowledgeCache?.hits ?? 0);$('mCacheSub').textContent='barcode hit '+String(p.knowledgeCache?.barcodeHits ?? 0);$('mBarcode').textContent='hit '+String(p.barcodeBrain?.hits ?? 0);$('mBarcodeSub').textContent='miss '+String(p.barcodeBrain?.misses ?? 0);$('mBrain').textContent=p.ultraBrainV97?.version||p.monsterBrainV96?.version||p.costGuardV2804?.version||'Ultra V97+';$('mStatus').textContent=statusText();$('mStatusSub').textContent=p.ok?'Preflight ok':'Controllare';const badge=$('buildBadge');badge.textContent='V28.39';badge.className='badge '+(q.length?'warn':'ok');$('cacheBadge').textContent='Debug V28.39 · OpenAI token fix · noindex · report sicuro';$('cacheBadge').className='badge ok';}
+  function updateMetrics(){const p=state.preflight||state.status||{};const q=getQueue();const g=p.globalProductMemory||{};const runtime=state.openaiTest?.data||p.lastOpenAiRuntime||p.preflight?.lastOpenAiRuntime||{};const teacherMsg=(state.openaiTest?.data?.message)||p.teacherMessage||(p.teacherActive?'OpenAI attivo':'non attivo');$('mTeacher').textContent=teacherMsg;$('mTeacherSub').textContent=runtime?.model?('modello '+runtime.model):'OpenAI Vision';$('mDb').textContent=(p.dbMode||'—')+(p.databaseConnected?' ✅':' ⚠️');$('mQueue').textContent=String(q.length);$('mQueueSub').textContent=q.length?'Da sincronizzare':'Vuota';$('mProducts').textContent=String(g.count ?? p.globalCount ?? '—');$('mProductsSub').textContent='raw '+String(g.rawCount ?? g.count ?? p.globalCount ?? '—')+' · duplicati '+String(g.duplicatesPossible ?? 0);$('mCache').textContent=String(p.knowledgeCache?.entries ?? '—')+' / '+String(p.knowledgeCache?.hits ?? 0);$('mCacheSub').textContent='barcode hit '+String(p.knowledgeCache?.barcodeHits ?? 0);$('mBarcode').textContent='hit '+String(p.barcodeBrain?.hits ?? 0);$('mBarcodeSub').textContent='miss '+String(p.barcodeBrain?.misses ?? 0);$('mBrain').textContent=p.ultraBrainV97?.version||p.monsterBrainV96?.version||p.costGuardV2804?.version||'Ultra V97+';$('mStatus').textContent=statusText();$('mStatusSub').textContent=p.ok?'Preflight ok':'Controllare';const badge=$('buildBadge');badge.textContent='V28.40';badge.className='badge '+(q.length?'warn':'ok');$('cacheBadge').textContent='Debug V28.40 · server brain · memoria prodotti · noindex';$('cacheBadge').className='badge ok';}
   function queueSummary(){return getQueue().map(x=>({id:x.id,reason:x.reason,tries:x.tries,product:x.payload?.confirmed?.productName,brand:x.payload?.confirmed?.brand,format:x.payload?.confirmed?.format,category:x.payload?.confirmed?.category}));}
   function shortReport(){const p=state.preflight||state.status||{};const mem=getMemory();const q=getQueue();const diag=mem.diagnosticsV98||{};const lastSync=diag.lastSync||lastEvent('sync-failed')?.data||lastEvent('sync-queued')?.data||{};const lastEndpoint=lastEvent('sync-endpoint-failed')?.data||{};return redactText([
     'SPESA PRONTA - DIAGNOSI BREVE',
