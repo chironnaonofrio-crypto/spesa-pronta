@@ -1,4 +1,4 @@
-const CACHE_NAME='spesa-pronta-v28-49-pro-vision-judge';
+const CACHE_NAME='spesa-pronta-v28-50-pro-expiry-micro-identity';
 const ASSETS=['./','./index.html','./assets/styles.css?v=2849','./assets/app.v27-48-premium-mega-vision.js?v=2849','./assets/app.js?v=2849','./assets/vision-seed-memory.json','./clear-cache.html','./debug.html','./server-brain.html?v=2849'];
 self.addEventListener('install',event=>{self.skipWaiting();event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(ASSETS)).catch(()=>{}));});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))));self.clients.claim();});

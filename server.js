@@ -3158,7 +3158,7 @@ JSON: {"productName":"","brand":"","variant":"","estimatedSize":"","sizeDetected
         primaryRaw = await visionJsonCall('Solo JSON valido. Analisi rapida prodotto.', fastProductPrompt, openAiTeacherImage, {maxTokens:520});
         detailRaw = null;
       }else if(stageName==='expiry'){
-        const expiryPrompt=`OCR mirato SOLO scadenza V28.38. Rispondi SOLO JSON valido. Cerca date vicino a: SCAD, Scadenza, EXP, TMC, Da consumarsi entro, Preferibilmente entro, Lotto/L. Accetta formati dd/mm/yyyy, dd-mm-yyyy, dd.mm.yyyy, dd/mm/yy, mm/yyyy. Se vedi più date, scegli quella più vicina a SCAD/EXP/TMC; il lotto va in detectedText ma non in expiryDate. Non riscrivere nome/marca/categoria. detectedText deve contenere tutti i frammenti leggibili. Schema: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","estimatedSize":"","expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"detectedText":[],"visibleEvidence":[],"confidence":0.1,"category":"food","reason":""}`;
+        const expiryPrompt=`OCR mirato SOLO SCADENZA V28.50 PRO. Rispondi SOLO JSON valido. Devi leggere anche date stampate a puntini/dot-matrix sul collo o tappo di bottiglie, tipo 16/08/20, 16/08/2026, 16-08-26, 16.08.26, 160826. Cerca date vicino a: SCAD, Scadenza, EXP, TMC, Da consumarsi entro, Preferibilmente entro, Lotto/L. Se ci sono due righe, la riga con formato data è expiryDate; la riga lunga numerica tipo lotto/batch va in detectedText e NON in expiryDate. Non riscrivere nome/marca/categoria durante scansione scadenza. Se leggi 16/08/20 restituisci expiryDate 16/08/2020 e expiryDetectedRaw 16/08/20. Se non sei sicuro lascia expiryDate vuota ma detectedText deve contenere TUTTI i caratteri letti. Schema: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","estimatedSize":"","expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"detectedText":[],"visibleEvidence":[],"confidence":0.1,"category":"food","reason":""}`;
         primaryRaw = await visionJsonCall('Solo JSON valido. OCR scadenza.', expiryPrompt, openAiTeacherImage, {maxTokens:340});
         detailRaw = null;
       }else if(stageName==='label'){
@@ -3892,14 +3892,14 @@ const server = http.createServer(async (req,res)=>{
     }
 
     if(req.method === 'POST' && pathName === '/api/ai/vision'){
-      const { image='', teacherImage='', teacherImageMeta=null, focusInstruction='', primarySubjectMode='', localGuess=null, catalog=[], settings={}, memory={}, stage='auto' } = body;
+      const { image='', teacherImage='', teacherImageMeta=null, identityImageV2850='', focusInstruction='', primarySubjectMode='', localGuess=null, catalog=[], settings={}, memory={}, stage='auto' } = body;
       if(!image || !String(image).startsWith('data:image/')) return send(res, 400, { error:'image_required' });
       let h=null;
       const householdId=String(body.householdId||'').trim();
       const bearer=(req.headers.authorization||'').replace(/^Bearer\s+/,'').trim();
       if(householdId && db.households[householdId] && db.households[householdId].token===bearer) h=db.households[householdId];
       const activeMemory=h ? ensureHouseholdMemory(h) : memory;
-      const result = await visionAnalyze({image:teacherImage&&String(teacherImage).startsWith('data:image/')?teacherImage:image, teacherImage, fullImage:image, teacherImageMeta, focusInstruction, primarySubjectMode, localGuess, catalog:h?(h.items||[]):catalog,settings:h?(h.settings||{}):settings,memory:activeMemory,stage});
+      const result = await visionAnalyze({image:teacherImage&&String(teacherImage).startsWith('data:image/')?teacherImage:image, teacherImage, identityImageV2850, fullImage:image, teacherImageMeta, focusInstruction, primarySubjectMode, localGuess, catalog:h?(h.items||[]):catalog,settings:h?(h.settings||{}):settings,memory:activeMemory,stage});
       result.cloudVision = !!result.cloudVision && !result.cloudError;
       result.cloudOffline = !result.cloudVision;
       result.cloudFallback = false;
@@ -4787,3 +4787,161 @@ try{
   console.log('[Spesa Pronta] V28.49 PRO ChatGPT-Level Vision Judge active');
 })();
 
+
+
+// =============================================================
+// V28.50 PRO EXPIRY + MICRO IDENTITY TEACHER
+// Correzione strutturale:
+// - OCR scadenze a puntini/dot-matrix, anche senza parole SCAD/EXP.
+// - Se il server locale non ha identità forte, usa una micro-chiamata OpenAI a basso token
+//   sulla foto compressa/leggera solo per nome, marca e categoria, poi lascia API/cache fare il resto.
+// - Mai inventare nome/categoria da colore o forma.
+// =============================================================
+(function(){
+  const V='28.50';
+  function norm2850(s){
+    try{ return normalizeVisionText(s||''); }
+    catch(_){ return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim(); }
+  }
+  function validExpiryParts2850(d,mo,y){
+    d=Number(d); mo=Number(mo); y=Number(y);
+    if(!Number.isFinite(d)||!Number.isFinite(mo)||!Number.isFinite(y)) return false;
+    if(d<1||d>31||mo<1||mo>12) return false;
+    if(y<2000||y>2055) return false;
+    return true;
+  }
+  function fmtDate2850(d,mo,y){
+    d=String(Number(d)).padStart(2,'0'); mo=String(Number(mo)).padStart(2,'0');
+    y=String(y); if(y.length===2) y=(Number(y)<70?'20':'19')+y;
+    return validExpiryParts2850(d,mo,y) ? `${d}/${mo}/${y}` : '';
+  }
+  function expiryFromText2850(input=''){
+    const raw=String(input||'');
+    if(!raw.trim()) return null;
+    const clean=raw
+      .replace(/[Oo]/g,'0')
+      .replace(/[Il|]/g,'1')
+      .replace(/[‚·•]/g,'.')
+      .replace(/[–—_]/g,'-');
+    const candidates=[];
+    const push=(rawText,d,mo,y,confidence,kind)=>{
+      const text=fmtDate2850(d,mo,y);
+      if(text) candidates.push({text, raw:String(rawText||'').trim(), confidence, kind});
+    };
+    // Date classiche: 16/08/20, 16-08-2026, 16.08.26
+    for(const m of clean.matchAll(/(^|[^0-9])([0-3]?\d)\s*[\/\.\-]\s*([01]?\d)\s*[\/\.\-]\s*(\d{2,4})(?!\d)/g)){
+      push(m[0],m[2],m[3],m[4],.96,'separated');
+    }
+    // Date con spazi: SCAD 16 08 26 oppure stampa a puntini letta come spazi.
+    for(const m of clean.matchAll(/(?:scad|scadenza|exp|tmc|entro|best\s*before|bb)?\s*\b([0-3]?\d)\s+([01]?\d)\s+(\d{2,4})\b/gi)){
+      push(m[0],m[1],m[2],m[3],/scad|exp|tmc|entro/i.test(m[0])?.92:.78,'spaced');
+    }
+    // Date compatte: 160826 / 16082026 solo in contesto scadenza o se isolata corta.
+    for(const m of clean.matchAll(/(?:scad|scadenza|exp|tmc|entro)?\s*\b(\d{6}|\d{8})\b/gi)){
+      const s=m[1];
+      if(s.length===6) push(m[0],s.slice(0,2),s.slice(2,4),s.slice(4,6),/scad|exp|tmc|entro/i.test(m[0])?.86:.68,'compact6');
+      if(s.length===8) push(m[0],s.slice(0,2),s.slice(2,4),s.slice(4,8),/scad|exp|tmc|entro/i.test(m[0])?.90:.72,'compact8');
+    }
+    if(!candidates.length) return null;
+    candidates.sort((a,b)=>Number(b.confidence||0)-Number(a.confidence||0));
+    return candidates[0];
+  }
+  function applyExpiry2850(result={}, stage='auto'){
+    const out=Object.assign({}, result||{});
+    const sources=[out.expiryDate,out.expiryDetectedRaw,out.reason,out.detailQuestion]
+      .concat(Array.isArray(out.detectedText)?out.detectedText:[])
+      .concat(Array.isArray(out.visibleEvidence)?out.visibleEvidence:[])
+      .filter(Boolean);
+    let best=null;
+    for(const s of sources){ const e=expiryFromText2850(s); if(e && (!best || e.confidence>best.confidence)) best=e; }
+    if(best && (!out.expiryDate || String(stage||'').toLowerCase()==='expiry' || best.confidence>Number(out.expiryConfidence||0))){
+      out.expiryDate=best.text;
+      out.expiryDetectedRaw=best.raw;
+      out.expiryConfidence=Math.max(Number(out.expiryConfidence||0), best.confidence);
+      out.needsRetake=false;
+      out.visibleEvidence=Array.isArray(out.visibleEvidence)?out.visibleEvidence:[];
+      out.visibleEvidence.push(`Scadenza OCR PRO letta: ${best.raw} → ${best.text}`);
+      out.proExpiryV2850={ok:true, raw:best.raw, expiryDate:best.text, confidence:best.confidence, kind:best.kind, stage:String(stage||'auto')};
+    }else{
+      out.proExpiryV2850=Object.assign({}, out.proExpiryV2850||{}, {ok:false, stage:String(stage||'auto'), policy:'se non legge data, non inventa; chiede foto più ravvicinata'});
+    }
+    return out;
+  }
+  function weakIdentity2850(r={}){
+    const name=norm2850(r.productName||'');
+    const brand=norm2850(r.brand||'');
+    const cat=norm2850(r.category||'');
+    const evidence=norm2850([r.productName,r.brand,r.variant,r.productType,r.packageType,r.reason,...(r.detectedText||[]),...(r.visibleEvidence||[])].join(' '));
+    const generic=/^(|prodotto|prodotto da identificare|articolo|alimento|bevanda|bottiglia|confezione|oggetto|manual|foto|verdura|food|drinks|house)$/i.test(name) || /da identificare|da confermare|sembra|potrebbe|incerto/.test(name+' '+evidence);
+    const noStrongText=!(/[a-z]{4,}/.test(evidence) && !/confezione|bottiglia|colore|verde|rosso|blu|chiaro|trasparente|formato|scadenza|lotto/.test(evidence.replace(/\b[a-z]{1,3}\b/g,'')));
+    return generic || Number(r.confidence||0)<.58 || (!brand && noStrongText) || ['food','drinks','house',''].includes(cat);
+  }
+  async function microIdentityTeacher2850(payload={}, current={}){
+    if(!payload || String(payload.stage||'auto').toLowerCase()==='expiry' || String(payload.stage||'auto').toLowerCase()==='barcode') return null;
+    if(!aiConnected()) return null;
+    const img = (payload.identityImageV2850 && String(payload.identityImageV2850).startsWith('data:image/'))
+      ? payload.identityImageV2850
+      : ((payload.teacherImage && String(payload.teacherImage).startsWith('data:image/')) ? payload.teacherImage : payload.image);
+    if(!img || !String(img).startsWith('data:image/')) return null;
+    const prompt=`MICRO IDENTIFICAZIONE PRODOTTO V28.50. Rispondi SOLO JSON valido. Usa pochissime parole. Obiettivo: leggere il nome/marca/categoria del prodotto centrale. Non leggere ingredienti/tracce/scadenza. Se il nome non è visibile, lascia productName vuoto. Non inventare da colore o forma. Categoria solo se supportata da etichetta/oggetto evidente. Schema: {"productName":"","brand":"","variant":"","category":"food|drinks|water|soft_drinks|juice|milk_drinks|coffee_tea|yogurt|dairy|sauces_condiments|spreads|pasta_rice|bakery|breakfast_snacks|chocolate_sweets|frozen|meat_deli|fish|fruit|veg|laundry|dishwashing|cleaning|paper_house|personal_care|oral_care|pharmacy|pet_food|pets|aquarium|house","estimatedSize":"","detectedText":[],"visibleEvidence":[],"confidence":0,"reason":""}`;
+    try{
+      const raw=await visionJsonCall('Sei un lettore etichetta ultra economico. SOLO JSON valido.', prompt, img, {maxTokens:240});
+      const r=normalizeVisionResult(raw||{});
+      const t=norm2850([r.productName,r.brand,r.category,...(r.detectedText||[]),...(r.visibleEvidence||[])].join(' '));
+      if(!t || weakIdentity2850(r)) return null;
+      r.proMicroIdentityV2850={used:true, maxTokens:240, policy:'low_token_identity_only_no_ingredients_no_expiry', source:'openai_micro_teacher'};
+      return r;
+    }catch(err){
+      return {proMicroIdentityV2850:{used:false,error:String(err?.message||err).slice(0,160)}};
+    }
+  }
+  function mergeMicroIdentity2850(base={}, micro=null){
+    if(!micro || !micro.productName && !micro.brand && !micro.category) return base;
+    const out=Object.assign({}, base||{});
+    if(micro.productName && weakIdentity2850(out)) out.productName=micro.productName;
+    if(micro.brand && (!out.brand || /generico|marca/i.test(out.brand))) out.brand=micro.brand;
+    if(micro.variant && !out.variant) out.variant=micro.variant;
+    if(micro.estimatedSize && (!out.estimatedSize || /confermare|formato/i.test(out.estimatedSize))) out.estimatedSize=micro.estimatedSize;
+    if(micro.category && (!out.category || ['food','drinks','house','veg'].includes(out.category) || weakIdentity2850(out))) out.category=micro.category;
+    out.detectedText=[...(out.detectedText||[]),...(micro.detectedText||[])].filter(Boolean).slice(0,18);
+    out.visibleEvidence=[...(out.visibleEvidence||[]),...(micro.visibleEvidence||[]), 'Identità migliorata da micro docente low-token'].filter(Boolean).slice(0,18);
+    out.confidence=Math.max(Number(out.confidence||0), Math.min(.78, Number(micro.confidence||0)+.05));
+    out.needsManual=true;
+    out.shouldAskConfirmation=true;
+    out.cloudVision=!!out.cloudVision || true;
+    out.proMicroIdentityV2850=micro.proMicroIdentityV2850 || {used:true};
+    return out;
+  }
+  try{
+    if(typeof applyOcrTextHeuristicsV2838==='function' && !global.__v2850ApplyOcrWrapped){
+      const prev=applyOcrTextHeuristicsV2838;
+      applyOcrTextHeuristicsV2838=function(result,stage){ return applyExpiry2850(prev.call(this,result,stage),stage); };
+      global.__v2850ApplyOcrWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof visionAnalyze==='function' && !global.__v2850VisionAnalyzeWrapped){
+      const prev=visionAnalyze;
+      visionAnalyze=async function(payload={}){
+        let r=await prev.call(this,payload);
+        r=applyExpiry2850(r,payload.stage||'auto');
+        if(weakIdentity2850(r)){
+          const micro=await microIdentityTeacher2850(payload,r).catch(()=>null);
+          if(micro && !micro.proMicroIdentityV2850?.error) r=mergeMicroIdentity2850(r,micro);
+          else if(micro?.proMicroIdentityV2850) r.proMicroIdentityV2850=micro.proMicroIdentityV2850;
+        }
+        r.proVisionV2850=Object.assign({}, r.proVisionV2850||{}, {expiryDotMatrix:true, microIdentityTeacher:true, lowTokenPolicy:'micro identity only when local/server identity is weak', noMoneyWaste:'one tiny identity call only if needed; paid external APIs still disabled by default'});
+        return r;
+      };
+      global.__v2850VisionAnalyzeWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof preflightSnapshotV98==='function' && !global.__v2850PreflightWrapped){
+      const prev=preflightSnapshotV98;
+      preflightSnapshotV98=function(){ const snap=prev.call(this); snap.version='V28.50'; snap.brain=Object.assign({}, snap.brain||{}, {version:'V28.50', name:'PRO Expiry + Micro Identity Teacher', expiryDotMatrix:true, microIdentityLowToken:true}); return snap; };
+      global.__v2850PreflightWrapped=true;
+    }
+  }catch(_){ }
+  console.log('[Spesa Pronta] V28.50 PRO Expiry + Micro Identity Teacher active');
+})();

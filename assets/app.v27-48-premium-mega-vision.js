@@ -5076,6 +5076,7 @@ async function askVisionAi(dataUrl, opts={}){
         image:dataUrl,
         teacherImage: opts.teacherImageV2829 || opts.teacherImage || opts.openAiImage || '',
         teacherImageMeta: opts.teacherImageMetaV2829 || opts.teacherImageMeta || null,
+          identityImageV2850: opts.identityImageV2850 || opts.microIdentityImageV2850 || '',
         focusInstruction: opts.focusInstruction || '',
         primarySubjectMode: opts.primarySubjectMode || '',
         localGuess: opts.localGuess || null,
@@ -7196,7 +7197,7 @@ try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, 
       const img=await loadImgV2838(dataUrl);
       if(!img.width || !img.height) return {dataUrl,skipped:true,reason:'bad_image'};
       let rw=.98, rh=.94;
-      if(stage==='expiry'){ rw=.98; rh=.86; }
+      if(stage==='expiry'){ rw=.99; rh=.94; } // V28.50: non tagliare date a puntini sul collo/tappo
       if(stage==='barcode'){ rw=.96; rh=.82; }
       if(img.width/img.height>1.45){ rw=stage==='barcode'?0.90:0.96; rh=0.96; }
       if(img.height/img.width>1.45){ rw=0.98; rh=stage==='expiry'?0.90:0.94; }
@@ -7204,7 +7205,7 @@ try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, 
       const sh=Math.max(1,Math.round(img.height*rh));
       const sx=Math.max(0,Math.round((img.width-sw)/2));
       const sy=Math.max(0,Math.round((img.height-sh)/2));
-      const maxSide = stage==='barcode' ? 1500 : (stage==='expiry' ? 1600 : 1700);
+      const maxSide = stage==='barcode' ? 1500 : (stage==='expiry' ? 1320 : 1700); // V28.50 expiry: meno token, più campo visibile
       const scale=Math.min(1.35, maxSide/Math.max(sw,sh));
       const w=Math.max(1,Math.round(sw*scale));
       const h=Math.max(1,Math.round(sh*scale));
@@ -7215,7 +7216,7 @@ try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, 
       ctx.drawImage(img,sx,sy,sw,sh,0,0,w,h);
       // Secondo passaggio: aumento leggibilità dei caratteri piccoli.
       enhanceOcrPixelsV2838(ctx,w,h, stage==='ingredients'?'label':stage);
-      const q = stage==='barcode' ? .90 : .88;
+      const q = stage==='barcode' ? .90 : (stage==='expiry' ? .76 : .88);
       const out=canvas.toDataURL('image/jpeg', q);
       const before=dataUrlBytesV2838(dataUrl), after=dataUrlBytesV2838(out);
       const meta={
@@ -7684,3 +7685,49 @@ try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, 
   try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.49 PRO', proVisionJudge:'identity-vs-ingredients isolated'}); if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('pro-vision-judge-ready-v2849',{version:V, rule:'tracce/colori non creano identita'}),1000); }catch(_){ }
 })();
 
+
+
+// =============================================================
+// V28.50 PRO: micro identity image + expiry OCR helper
+// Prepara una foto leggerissima per identificazione nome/marca quando il locale è debole.
+// =============================================================
+(function(){
+  const V='V28.50';
+  function loadImg2850(dataUrl){ return new Promise((res,rej)=>{ const img=new Image(); img.onload=()=>res(img); img.onerror=rej; img.src=dataUrl; }); }
+  async function microIdentityImage2850(dataUrl){
+    try{
+      if(!/^data:image\//i.test(String(dataUrl||''))) return '';
+      const img=await loadImg2850(dataUrl);
+      const max=560;
+      const scale=Math.min(1, max/Math.max(img.width,img.height));
+      const w=Math.max(1,Math.round(img.width*scale)), h=Math.max(1,Math.round(img.height*scale));
+      const canvas=document.createElement('canvas'); canvas.width=w; canvas.height=h;
+      const ctx=canvas.getContext('2d',{willReadFrequently:false});
+      try{ ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='medium'; }catch(_){ }
+      ctx.drawImage(img,0,0,w,h);
+      const out=canvas.toDataURL('image/jpeg', .52);
+      try{ logAiDiagnosticV98?.('micro-identity-image-v2850',{version:V,before:Math.round(String(dataUrl).length*.75),after:Math.round(String(out).length*.75),size:`${w}x${h}`}); }catch(_){ }
+      return out;
+    }catch(err){ try{ logAiDiagnosticV98?.('micro-identity-image-v2850-error',{message:String(err?.message||err)}); }catch(_){ } return ''; }
+  }
+  try{
+    if(typeof askVisionAi==='function' && !window.__v2850MicroIdentityWrapped){
+      const prev=askVisionAi;
+      askVisionAi=async function(dataUrl, opts={}){
+        const stage=String(opts?.stage||'auto').toLowerCase();
+        const next=Object.assign({}, opts);
+        if(!/^(expiry|barcode)$/i.test(stage) && !next.identityImageV2850){
+          const tiny=await microIdentityImage2850(dataUrl);
+          if(tiny) next.identityImageV2850=tiny;
+        }
+        return prev.call(this,dataUrl,next);
+      };
+      window.__v2850MicroIdentityWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    window.SPESA_PRONTA_VERSION='v28.50-pro-expiry-micro-identity';
+    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.50', expiryMicroIdentity:'dot_matrix_expiry_low_token_name_probe'});
+    if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('v2850-pro-ready',{expiryDotMatrix:true,microIdentity:true}),1300);
+  }catch(_){ }
+})();
