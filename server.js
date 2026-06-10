@@ -3603,6 +3603,36 @@ const server = http.createServer(async (req,res)=>{
       return send(res,200,result);
     }
 
+
+
+    if(req.method === 'POST' && (pathName === '/api/ai/server-brain/delete' || pathName === '/ai/server-brain/delete')) {
+      const householdId=String(body.householdId||url.searchParams.get('householdId')||'').trim();
+      const bearer=(req.headers.authorization||'').replace(/^Bearer\s+/,'').trim();
+      const h=(householdId && db.households[householdId] && db.households[householdId].token===bearer) ? db.households[householdId] : null;
+      if(!h) return send(res,401,{ok:false,error:'unauthorized_household',message:'Accesso negato: serve account cloud valido'});
+      const ownerToken=String(process.env.SERVER_BRAIN_OWNER_TOKEN||process.env.ADMIN_TOKEN||'').trim();
+      const providedOwnerToken=String(req.headers['x-owner-token']||body.ownerToken||url.searchParams.get('ownerToken')||'').trim();
+      if(ownerToken && providedOwnerToken!==ownerToken) return send(res,403,{ok:false,error:'owner_token_required',message:'Eliminazione bloccata: inserisci SERVER_BRAIN_OWNER_TOKEN'});
+      const key=String(body.key||'').trim();
+      const confirmText=String(body.confirmText||body.confirm||'').trim();
+      const result=v2867DeleteBrainProduct(key, {actor:ownerToken?'server_owner':hashStable(String(householdId)).slice(0,12), confirmText});
+      if(!result.ok) return send(res, result.error==='product_not_found'?404:400, result);
+      await saveDb();
+      return send(res,200,result);
+    }
+
+    if((req.method === 'GET' || req.method === 'POST') && (pathName === '/api/ai/server-brain/render' || pathName === '/ai/server-brain/render')) {
+      const householdId=String(body.householdId||url.searchParams.get('householdId')||'').trim();
+      const bearer=(req.headers.authorization||'').replace(/^Bearer\s+/,'').trim();
+      const h=(householdId && db.households[householdId] && db.households[householdId].token===bearer) ? db.households[householdId] : null;
+      if(!h) return send(res,401,{ok:false,error:'unauthorized_household',message:'Accesso negato: serve account cloud valido'});
+      const key=String(body.key||url.searchParams.get('key')||'').trim();
+      const background=String(body.background||url.searchParams.get('background')||'transparent').trim();
+      const result=v2867RenderBrainProduct(key, {background});
+      if(!result.ok) return send(res,404,result);
+      return send(res,200,result);
+    }
+
     if(req.method === 'GET' && (pathName === '/api/ai/server-brain' || pathName === '/ai/server-brain')) {
       const householdId=String(url.searchParams.get('householdId')||'').trim();
       const bearer=(req.headers.authorization||'').replace(/^Bearer\s+/,'').trim();
@@ -6777,3 +6807,516 @@ try{
   }
 }catch(_){ }
 console.log('[Spesa Pronta] V28.65 PRO OCR Quality Gate + ROI Crop Visual Judge active');
+
+
+// =============================================================
+// V28.66 PRO Single Vision Truth + Brand Shield + Brain Dedupe
+// - Una sola identità vera: foto/OCR attuale > titolare > barcode/API > memoria > docente.
+// - "Cola" non diventa mai Coca-Cola senza testo/barcode ufficiale Coca-Cola.
+// - Il Cervello Server unisce duplicati reali (stesso barcode o stessa identità forte).
+// - Le schede memoria vengono sanificate prima del match/lista.
+// =============================================================
+const V2866_VERSION = 'V28.66';
+function v2866Clean(v='', max=260){ return String(v==null?'':v).replace(/[\u0000-\u001f\u007f]+/g,' ').replace(/\s+/g,' ').trim().slice(0,max); }
+function v2866Norm(v=''){
+  try{ return String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[’'`]/g,' ').replace(/[^a-z0-9]+/g,' ').trim(); }
+  catch(_){ return String(v||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(); }
+}
+function v2866List(...vals){
+  const out=[]; const push=x=>{ if(x==null) return; if(Array.isArray(x)) return x.forEach(push); if(typeof x==='object') return; String(x).split(/\n|\s*[;,]\s*/).forEach(y=>{ const c=v2866Clean(y,180); if(c) out.push(c); }); };
+  vals.forEach(push); return [...new Set(out)].slice(0,140);
+}
+function v2866RecordEvidenceText(r={}, extra={}){
+  const card=r.memoryCard||{}; const id=card.identity||{}; const va=card.visualAppearance||{}; const oo=r.ownerOverrides?.fields||{};
+  const photos=(r.objectFolder?.photos||[]).slice(0,10).flatMap(p=>[p.visualSignature,(p.detectedText||[]).join(' '),(p.visibleEvidence||[]).join(' '),(p.colors||[]).join(' ')]);
+  return [r.productName,r.brand,r.format,r.category,r.unit,(r.aliases||[]).join(' '),(r.brands||[]).join(' '),(r.evidenceTokens||[]).join(' '),(r.visibleEvidence||[]).join(' '),(r.detectedText||[]).join(' '),id.productName,id.brand,id.format,va.productType,va.packageType,va.visualSignature,(va.colors||[]).join(' '),oo.productName,oo.brand,oo.format,oo.category,oo.barcode,photos.join(' '),extra.productName,extra.brand,extra.productType,extra.category,(extra.detectedText||[]).join(' '),(extra.visibleEvidence||[]).join(' '),extra.ocrText,extra.text].filter(Boolean).join(' ');
+}
+function v2866ProofText(r={}, extra={}){
+  const card=r.memoryCard||{}; const va=card.visualAppearance||{}; const oo=r.ownerOverrides?.fields||{};
+  const photos=(r.objectFolder?.photos||[]).slice(0,10).flatMap(p=>[(p.detectedText||[]).join(' '),(p.visibleEvidence||[]).join(' ')]);
+  return [(r.evidenceTokens||[]).join(' '),(r.visibleEvidence||[]).join(' '),(r.detectedText||[]).join(' '),va.visualSignature,oo.productName,oo.brand,oo.barcode,photos.join(' '),(extra.detectedText||[]).join(' '),(extra.visibleEvidence||[]).join(' '),extra.ocrText,extra.text,extra.barcode,extra.ean,extra.code].filter(Boolean).join(' ');
+}
+function v2866HasOfficialCocaEvidence(text=''){
+  const t=v2866Norm(text);
+  return /\bcoca\s+cola\b|\bcoca\b.*\bcola\b|\bcoke\b|\bthe\s+coca\s+cola\s+company\b/.test(t);
+}
+function v2866HasBluesEvidence(text=''){
+  const t=v2866Norm(text);
+  return /\bblues\b|\bcola\s+blues\b|\bblues\s+cola\b/.test(t);
+}
+function v2866HasColaEvidence(text=''){
+  return /\bcola\b|\blemon\s+taste\b|\bbibita\s+cola\b|\bsoft\s*drinks?\b/.test(v2866Norm(text));
+}
+function v2866GenericColaName(v=''){
+  const t=v2866Norm(v);
+  return !t || /^(bibita|bevanda)(\s+tipo)?\s+cola|^cola\s*\/|^cola$|^bibita\s+gassata|^prodotto\s+da\s+identificare/.test(t);
+}
+function v2866NormalizeFormat(v=''){
+  let s=String(v||'').toLowerCase().replace(/,/g,'.').replace(/litri|litro|lt\.?/g,'l').replace(/millilitri|millilitro/g,'ml').replace(/\s+/g,' ').trim();
+  let m=s.match(/(\d+(?:\.\d+)?)\s*(l|ml|cl|kg|g)\b/); if(!m) return v2866Norm(s).slice(0,24);
+  let n=Number(m[1]); const u=m[2]; if(!Number.isFinite(n)) return `${m[1]} ${u}`;
+  if(u==='cl') return `${Math.round(n*10)} ml`;
+  const num=(String(n).replace(/\.0$/,'')); return `${num} ${u}`;
+}
+function v2866CoreName(v=''){
+  const t=v2866Norm(v).replace(/\b(blues|coca|cola|sant|anna|dexal|tipo|bibita|bevanda|gassata|soft|drinks?|the|company|marca|formato|capienza|prodotto|identificare|da|confermare)\b/g,' ').replace(/\s+/g,' ').trim();
+  const all=v2866Norm(v);
+  if(/\bcandeggina\b/.test(all)) return ['candeggina',/delicata/.test(all)?'delicata':'',/maxi/.test(all)?'maxi':''].filter(Boolean).join(' ');
+  if(/\bcola\b/.test(all)) return ['cola',/lemon|limone/.test(all)?'lemon':''].filter(Boolean).join(' ');
+  if(/\bacqua\b|\bsant\s*anna\b|\bsantanna\b/.test(all)) return ['acqua',/sant\s*anna|santanna/.test(all)?'santanna':''].filter(Boolean).join(' ');
+  return (t.split(/\s+/).filter(x=>x.length>2).slice(0,5).join(' ') || all.split(/\s+/).slice(0,5).join(' ')).slice(0,80);
+}
+function v2866CategoryFam(cat=''){
+  try{ return productCategoryFamily(cat||''); }catch(_){ const t=v2866Norm(cat); if(/water|soft|drink|juice|milk|cola|bev/.test(t)) return 'drinks'; if(/clean|laundry|house|bucato/.test(t)) return 'house'; return t||'food'; }
+}
+function v2866SanitizeIdentityObject(obj={}, extra={}){
+  if(!obj || typeof obj!=='object') return obj;
+  const evidence=v2866RecordEvidenceText(obj, extra);
+  const n=v2866Norm(evidence);
+  const proof=v2866ProofText(obj, extra);
+  const officialCoca=v2866HasOfficialCocaEvidence(proof) || (!!obj.ownerOverrides?.enabled && /^coca[\s-]*cola$/i.test(String(obj.ownerOverrides?.fields?.brand||obj.ownerOverrides?.fields?.productName||'')));
+  const blues=v2866HasBluesEvidence(evidence);
+  const cola=v2866HasColaEvidence(evidence);
+  obj.proBrandShieldV2866=Object.assign({}, obj.proBrandShieldV2866||{}, {checked:true, officialCoca, bluesEvidence:blues, colaEvidence:cola, rule:'Coca-Cola solo con testo/barcode ufficiale; Cola generica non decide la marca'});
+  if(/^coca[\s-]*cola$/i.test(String(obj.brand||'')) && !officialCoca){
+    obj.proBrandShieldV2866.correctedBrandFrom='Coca-Cola';
+    obj.brand = blues ? 'Blues' : '';
+  }
+  if(/^coca[\s-]*cola$/i.test(String(obj.productName||'')) && !officialCoca){
+    obj.proBrandShieldV2866.correctedNameFrom='Coca-Cola';
+    obj.productName = blues ? 'Cola Blues' : 'Bibita cola da confermare';
+  }
+  if(cola && blues){
+    if(!obj.brand || /^coca[\s-]*cola$/i.test(String(obj.brand||''))) obj.brand='Blues';
+    if(v2866GenericColaName(obj.productName||'') || /^bibita\s+tipo\s+cola$/i.test(String(obj.productName||''))) obj.productName = /lemon\s*taste|limone/.test(n) ? 'Cola - Lemon Taste' : 'Cola Blues';
+  }
+  if(/^bibita\s+tipo\s+cola$/i.test(String(obj.productName||'')) && !obj.brand){
+    obj.productName='Bibita cola da confermare';
+  }
+  if(obj.category==='soft_drinks' && !obj.unit) obj.unit='bt';
+  return obj;
+}
+function v2866SanitizeRecord(record={}){
+  if(!record || typeof record!=='object') return record;
+  v2866SanitizeIdentityObject(record, {});
+  record.aliases=Array.isArray(record.aliases)?record.aliases:[]; record.brands=Array.isArray(record.brands)?record.brands:[];
+  if(record.brand && !record.brands.includes(record.brand)) record.brands.unshift(record.brand);
+  if(record.productName && !record.aliases.includes(record.productName)) record.aliases.unshift(record.productName);
+  const photos=Number(record.objectFolder?.photos?.length||record.objectFolder?.photoCount||0);
+  const confirmations=Number(record.confirmations||0);
+  if(record.ownerOverrides?.enabled || record.lockedByOwner) record.reliability='alta';
+  else if(confirmations>=1 && photos>=1) record.reliability = record.reliability==='alta'?'alta':'media';
+  if(record.memoryCard?.identity){
+    record.memoryCard.identity.productName=record.productName||record.memoryCard.identity.productName;
+    record.memoryCard.identity.brand=record.brand||record.memoryCard.identity.brand;
+    record.memoryCard.identity.format=record.format||record.memoryCard.identity.format;
+  }
+  record.learningQuality=Object.assign({},record.learningQuality||{},{brandShieldV2866:true,dedupeV2866:true,currentPhotoAuthority:'foto/OCR attuale battono memoria se in conflitto'});
+  return record;
+}
+function v2866MergeArrays(a,b,limit=120){ return [...new Set([...(Array.isArray(a)?a:[]),...(Array.isArray(b)?b:[])].map(x=>typeof x==='string'?v2866Clean(x,260):x).filter(Boolean))].slice(0,limit); }
+function v2866MergeVotes(a={}, b={}){ const out=Object.assign({},a||{}); for(const [k,v] of Object.entries(b||{})){ if(!k) continue; out[k]=Number(out[k]||0)+Number(v||0); } return out; }
+function v2866RecordScore(r={}){ return (r.ownerOverrides?.enabled?10000:0)+(r.lockedByOwner?5000:0)+Number(r.confirmations||0)*50+Number(r.objectFolder?.photos?.length||0)*8+(Array.isArray(r.barcodes)&&r.barcodes.length?90:0)+(r.reliability==='alta'?60:r.reliability==='media'?30:0)+Number(r.updatedAt||0)/1e13; }
+function v2866CanMerge(a={}, b={}){
+  if(!a||!b||a===b) return false;
+  const aBc=v2866List(a.barcodes,a.barcode).find(x=>/\d{8,14}/.test(String(x||'')));
+  const bBc=v2866List(b.barcodes,b.barcode).find(x=>/\d{8,14}/.test(String(x||'')));
+  if(aBc && bBc && aBc===bBc) return true;
+  const ea=v2866RecordEvidenceText(a), eb=v2866RecordEvidenceText(b);
+  const aOfficial=v2866HasOfficialCocaEvidence(ea), bOfficial=v2866HasOfficialCocaEvidence(eb);
+  const aBrand=v2866Norm(a.brand||''), bBrand=v2866Norm(b.brand||'');
+  if(aBrand && bBrand && aBrand!==bBrand){
+    if(!((aBrand==='coca cola'&&!aOfficial)||(bBrand==='coca cola'&&!bOfficial))) return false;
+  }
+  const coreA=v2866CoreName([a.productName,(a.aliases||[]).join(' ')].join(' '));
+  const coreB=v2866CoreName([b.productName,(b.aliases||[]).join(' ')].join(' '));
+  if(!coreA || !coreB) return false;
+  const coreSame=coreA===coreB || coreA.includes(coreB) || coreB.includes(coreA);
+  if(!coreSame) return false;
+  const fmtA=v2866NormalizeFormat(a.format||''), fmtB=v2866NormalizeFormat(b.format||'');
+  if(fmtA && fmtB && fmtA!==fmtB) return false;
+  const famA=v2866CategoryFam(a.category), famB=v2866CategoryFam(b.category);
+  if(famA && famB && famA!==famB){
+    const drinkish=new Set(['drinks','water','soft_drinks','juice']);
+    const homeish=new Set(['house','cleaning','laundry','dishwashing','paper_house']);
+    if(!((drinkish.has(famA)&&drinkish.has(famB)) || (homeish.has(famA)&&homeish.has(famB)))) return false;
+  }
+  return !!(aBrand || bBrand || fmtA || fmtB || aBc || bBc);
+}
+function v2866MergeRecordInto(target={}, src={}){
+  v2866SanitizeRecord(target); v2866SanitizeRecord(src);
+  target.aliases=v2866MergeArrays(target.aliases,[src.productName,src.aliases].flat(),40);
+  target.brands=v2866MergeArrays(target.brands,[src.brand,src.brands].flat(),30);
+  target.barcodes=v2866MergeArrays(target.barcodes,src.barcodes,20);
+  ['ingredients','allergens','possibleTraces','traces','colors','labels','visibleEvidence','detectedText','evidenceTokens','knowledgeSources','conflictRejects','confirmedExamples'].forEach(k=>{ target[k]=v2866MergeArrays(target[k],src[k], k==='confirmedExamples'?80:120); });
+  ['nameVotes','brandVotes','formatVotes','categoryVotes','unitVotes'].forEach(k=>{ target[k]=v2866MergeVotes(target[k],src[k]); });
+  if(!target.productName || v2866GenericColaName(target.productName)) target.productName=src.productName||target.productName;
+  if(!target.brand) target.brand=src.brand||target.brand;
+  if(!target.format) target.format=src.format||target.format;
+  if(!target.category || target.category==='food') target.category=src.category||target.category;
+  if(!target.unit || target.unit==='pz') target.unit=src.unit||target.unit;
+  target.confirmations=Math.max(Number(target.confirmations||0),0)+Math.max(Number(src.confirmations||0),0);
+  target.teacherHelp=Number(target.teacherHelp||0)+Number(src.teacherHelp||0);
+  target.localRecognitions=Number(target.localRecognitions||0)+Number(src.localRecognitions||0);
+  target.households=Object.assign({},src.households||{},target.households||{});
+  target.sources=Object.assign({},src.sources||{},target.sources||{});
+  target.objectFolder=target.objectFolder||{}; src.objectFolder=src.objectFolder||{};
+  target.objectFolder.photos=v2866MergeArrays(target.objectFolder.photos,src.objectFolder.photos,60);
+  target.objectFolder.visualSignatures=v2866MergeArrays(target.objectFolder.visualSignatures,src.objectFolder.visualSignatures,40);
+  target.objectFolder.visualFeatureSamples=v2866MergeArrays(target.objectFolder.visualFeatureSamples,src.objectFolder.visualFeatureSamples,80);
+  if(!target.objectFolder.representativePhoto && src.objectFolder.representativePhoto) target.objectFolder.representativePhoto=src.objectFolder.representativePhoto;
+  if(!target.objectFolder.representativePhotoId && src.objectFolder.representativePhotoId) target.objectFolder.representativePhotoId=src.objectFolder.representativePhotoId;
+  target.objectFolder.photoCount=(target.objectFolder.photos||[]).length;
+  target.objectFolder.hasRealProfilePhoto=!!((target.objectFolder.representativePhoto||{}).dataUrl||(target.objectFolder.representativePhoto||{}).externalUrl||(target.objectFolder.photos||[]).some(p=>p.dataUrl||p.externalUrl));
+  target.duplicateMergedV2866=Array.isArray(target.duplicateMergedV2866)?target.duplicateMergedV2866:[];
+  target.duplicateMergedV2866.unshift({at:Date.now(),fromKey:src.key||'',productName:src.productName||'',brand:src.brand||'',format:src.format||''});
+  target.duplicateMergedV2866=target.duplicateMergedV2866.slice(0,30);
+  target.updatedAt=Math.max(Number(target.updatedAt||0),Number(src.updatedAt||0),Date.now());
+  v2866SanitizeRecord(target);
+  try{ updateFieldConfidence(target); v2840AttachMemoryCard(target,{}); }catch(_){ }
+  return target;
+}
+function v2866DedupeGlobalProductMemory(){
+  try{
+    ensureDbShape(); const g=db.assistantBrain.globalProductMemory||{products:{}}; g.products=g.products||{};
+    const records=Object.values(g.products); records.forEach(v2866SanitizeRecord);
+    let merges=0;
+    for(let i=0;i<records.length;i++){
+      const a=records[i]; if(!a || !g.products[a.key]) continue;
+      for(let j=i+1;j<records.length;j++){
+        const b=records[j]; if(!b || !g.products[b.key]) continue;
+        if(!v2866CanMerge(a,b)) continue;
+        const target=v2866RecordScore(a)>=v2866RecordScore(b)?a:b; const src=target===a?b:a;
+        v2866MergeRecordInto(target,src);
+        const srcKey=src.key; if(srcKey && g.products[srcKey] && srcKey!==target.key) delete g.products[srcKey];
+        g.products[target.key||productMemoryGlobalKey(target.productName,target.brand,target.format)]=target;
+        merges++; records[j]=null;
+      }
+    }
+    if(merges){ g.updatedAt=Date.now(); updateGlobalLearningAudit({type:'v2866-brain-dedupe-merged',merges,policy:'same barcode or same strong identity/brand/format'}); try{ saveDb().catch(()=>{}); }catch(_){ } }
+    return merges;
+  }catch(e){ try{ updateGlobalLearningAudit({type:'v2866-dedupe-error',reason:String(e?.message||e).slice(0,180)}); }catch(_){} return 0; }
+}
+(function(){
+  try{
+    if(typeof upsertGlobalProductMemory==='function' && !global.__v2866UpsertWrapped){
+      const prev=upsertGlobalProductMemory;
+      upsertGlobalProductMemory=function(confirmed={}){
+        v2866SanitizeIdentityObject(confirmed, confirmed.productMemory||{});
+        const out=prev.call(this,confirmed);
+        try{ ensureDbShape(); Object.values(db.assistantBrain?.globalProductMemory?.products||{}).forEach(v2866SanitizeRecord); v2866DedupeGlobalProductMemory(); }catch(_){ }
+        return out;
+      };
+      global.__v2866UpsertWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof matchGlobalProductMemory==='function' && !global.__v2866MatchWrapped){
+      const prev=matchGlobalProductMemory;
+      matchGlobalProductMemory=function(query={}){
+        v2866SanitizeIdentityObject(query, query.productMemory||{});
+        try{ Object.values(db.assistantBrain?.globalProductMemory?.products||{}).forEach(v2866SanitizeRecord); }catch(_){ }
+        const hit=prev.call(this,query||{});
+        if(hit?.product){ v2866SanitizeIdentityObject(hit.product,query||{}); }
+        return hit;
+      };
+      global.__v2866MatchWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof publicServerBrainV2840==='function' && !global.__v2866ServerBrainWrapped){
+      const prev=publicServerBrainV2840;
+      publicServerBrainV2840=function(opts={}){
+        v2866DedupeGlobalProductMemory();
+        try{ Object.values(db.assistantBrain?.globalProductMemory?.products||{}).forEach(r=>{ v2866SanitizeRecord(r); try{ v2840AttachMemoryCard(r,{}); }catch(_){} }); }catch(_){ }
+        const out=prev.call(this,opts||{});
+        out.version='V28.66 PRO Single Vision Truth + Brain Dedupe';
+        out.dedupeV2866={active:true,policy:'barcode + identità forte + brand/formato, niente duplicati Cola/Dexal'};
+        return out;
+      };
+      global.__v2866ServerBrainWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof serverPixelOcrJudgeV2864==='function' && !global.__v2866PixelJudgeWrapped){
+      const prev=serverPixelOcrJudgeV2864;
+      serverPixelOcrJudgeV2864=async function(args={}){
+        const out=await prev.call(this,args||{});
+        if(out?.result) v2866SanitizeIdentityObject(out.result,{ocrText:out.ocr?.text||'', text:out.ocr?.text||''});
+        if(out?.fields) v2866SanitizeIdentityObject(out.fields,{ocrText:out.ocr?.text||''});
+        if(out) out.version=V2866_VERSION;
+        return out;
+      };
+      global.__v2866PixelJudgeWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof visionAnalyze==='function' && !global.__v2866VisionAnalyzeWrapped){
+      const prev=visionAnalyze;
+      visionAnalyze=async function(payload={}){
+        const out=await prev.call(this,payload||{});
+        return v2866SanitizeIdentityObject(out||{}, payload||{});
+      };
+      global.__v2866VisionAnalyzeWrapped=true;
+    }
+  }catch(_){ }
+  try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2866PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this); s.version='V28.66'; s.brain=Object.assign({},s.brain||{},{version:'V28.66',singleVisionTruth:'active',brandShield:'cola_not_coca_without_official_evidence',brainDedupe:'active',visionBridge:'VisionAI + Pixel/OCR judge + memoria server sanificati in uscita'}); return s; }; global.__v2866PreflightWrapped=true; } }catch(_){ }
+  console.log('[Spesa Pronta] V28.66 PRO Single Vision Truth + Brand Shield + Brain Dedupe active');
+})();
+
+// =============================================================
+// V28.67 PRO Human Reasoning Bus + Virtual Product Render + Owner Delete
+// Obiettivo: far dialogare VisionAI, OCR, pixel judge, memoria e console titolare.
+// - OCR.space riceve crop migliori e il server valuta qualita' prima di compilare.
+// - Ogni scheda espone un "ragionamento umano" leggibile.
+// - Il Cervello Server puo' generare un render virtuale del prodotto.
+// - Il titolare puo' eliminare articoli errati/duplicati dalla memoria server.
+// =============================================================
+const V2867_VERSION = 'V28.67';
+function v2867Str(v='', max=220){ return String(v==null?'':v).replace(/[\u0000-\u001f\u007f]+/g,' ').replace(/\s+/g,' ').trim().slice(0,max); }
+function v2867Norm(v=''){ return String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[’'`]/g,' ').replace(/[^a-z0-9]+/g,' ').trim(); }
+function v2867List(...vals){
+  const out=[]; const push=x=>{ if(x==null) return; if(Array.isArray(x)) return x.forEach(push); if(typeof x==='object') return; String(x).split(/\n|\s*[;,]\s*/).forEach(y=>{ const c=v2867Str(y,180); if(c) out.push(c); }); };
+  vals.forEach(push); return [...new Set(out)].slice(0,120);
+}
+function v2867Xml(v=''){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').slice(0,160); }
+function v2867HexForColor(name='', fallback='#dbeafe'){
+  const n=v2867Norm(name);
+  if(/nero|scuro|black|dark/.test(n)) return '#111827';
+  if(/blu|azzurro|blue/.test(n)) return '#1d4ed8';
+  if(/giallo|yellow|oro/.test(n)) return '#facc15';
+  if(/rosso|red/.test(n)) return '#ef4444';
+  if(/arancio|orange/.test(n)) return '#f97316';
+  if(/verde|green/.test(n)) return '#10b981';
+  if(/viola|purple/.test(n)) return '#7c3aed';
+  if(/bianco|chiaro|white|trasparente|clear/.test(n)) return '#f8fafc';
+  if(/grigio|gray|grey/.test(n)) return '#94a3b8';
+  return fallback;
+}
+function v2867RecordEvidence(record={}, card={}, extra={}){
+  return [record.productName,record.brand,record.format,record.category,record.productType,record.packageType,record.packaging,card?.identity?.productName,card?.identity?.brand,card?.identity?.format,card?.classification?.category,card?.visualAppearance?.productType,card?.visualAppearance?.packageType,card?.visualAppearance?.visualSignature,extra.ocrText,extra.text,...v2867List(record.detectedText,record.visibleEvidence,card?.detectedText,card?.visibleEvidence,record.evidenceTokens)].filter(Boolean).join(' ');
+}
+function v2867OfficialCocaEvidence(text=''){ return /\bcoca\s+cola\b|\bcoca-cola\b|\bcoke\b|\bthe\s+coca\s+cola\s+company\b/.test(v2867Norm(text)); }
+function v2867HasBlues(text=''){ return /\bblues\b|\bblues\s+cola\b|\bcola\s+blues\b/.test(v2867Norm(text)); }
+function v2867ProductShape(card={}, record={}){
+  const cat=v2867Norm(card?.classification?.category||record.category||'');
+  const fam=v2867Norm(card?.classification?.categoryFamily||record.categoryFamily||'');
+  const pkg=v2867Norm([card?.visualAppearance?.packageType,card?.packaging,record.packageType,record.packaging,card?.visualAppearance?.visualSignature].filter(Boolean).join(' '));
+  const ev=v2867Norm(v2867RecordEvidence(record,card));
+  if(/flacone|tanica|candeggina|detersivo|bucato|laundry|cleaning|detergente|ammorbidente/.test(pkg+' '+cat+' '+ev)) return 'detergent_jug';
+  if(/bottiglia|bottle|cola|acqua|drink|soft|juice|t[eè]|the|bevanda|water/.test(pkg+' '+cat+' '+fam+' '+ev)) return 'bottle';
+  if(/vasetto|barattolo|jar|pesto|salsa|spread|condiment/.test(pkg+' '+cat+' '+ev)) return 'jar';
+  if(/busta|sacchetto|pouch|bag/.test(pkg+' '+ev)) return 'pouch';
+  if(/scatola|box|cartone|cereal|pasta|riso|farina/.test(pkg+' '+cat+' '+ev)) return 'box';
+  return 'package';
+}
+function v2867RenderSpec(card={}, record={}){
+  const colors=v2867List(card?.visualAppearance?.colors,record.colors,record.memoryCard?.visualAppearance?.colors).slice(0,8);
+  const ev=v2867Norm(v2867RecordEvidence(record,card));
+  const shape=v2867ProductShape(card,record);
+  let body='#e5e7eb', body2='#f8fafc', label='#1d4ed8', label2='#facc15', cap='#facc15', content='none', contentColor='#0f172a';
+  if(colors.length){ body=v2867HexForColor(colors[0],body); label=v2867HexForColor(colors[1]||colors[0],label); label2=v2867HexForColor(colors[2]||colors[1]||'bianco',label2); }
+  if(/cola|liquido\s+scuro|dark_liquid|bibita\s+cola|lemon\s*taste/.test(ev)){ content='liquido scuro'; contentColor='#171717'; body='#dbeafe'; label='#1e3a8a'; label2='#facc15'; cap='#facc15'; }
+  if(/acqua|sant\s*anna|naturale|minerale|clear_liquid/.test(ev)){ content='liquido chiaro'; contentColor='rgba(125,211,252,.42)'; body='#e0f2fe'; label='#38bdf8'; label2='#ffffff'; cap='#60a5fa'; }
+  if(/dexal|candeggina|detersivo|laundry|bucato/.test(ev)){ body='#21c7bd'; body2='#7dd3fc'; label='#ef4444'; label2='#ffffff'; cap='#2563eb'; content='non visibile'; }
+  if(/pesto|salsa|condimento/.test(ev)){ body='#f8fafc'; label='#16a34a'; label2='#fde68a'; cap='#14532d'; content='cremoso/solido'; }
+  const name=v2867Str(card?.identity?.productName||record.productName||'Prodotto',48);
+  const brand=v2867Str(card?.identity?.brand||record.brand||'',34);
+  const format=v2867Str(card?.identity?.format||record.format||'',20);
+  const cat=v2867Str(card?.classification?.category||record.category||'',34);
+  return {version:V2867_VERSION,shape,bodyColor:body,secondaryBodyColor:body2,labelColor:label,labelAccentColor:label2,capColor:cap,content,contentColor,name,brand,format,category:cat,source:'server_memory_fields_plus_pixel_ocr_evidence',colors};
+}
+function v2867VirtualSvg(spec={}, opts={}){
+  const bg=String(opts.background||'transparent').toLowerCase();
+  const bgRect=bg==='white'?`<rect width="480" height="640" rx="36" fill="#ffffff"/>`:'';
+  const name=v2867Xml(spec.name||'Prodotto'), brand=v2867Xml(spec.brand||''), format=v2867Xml(spec.format||''), cat=v2867Xml(spec.category||'');
+  const labelText1=brand||name.split(' ')[0]||'Prodotto';
+  const labelText2=brand?name:name.replace(new RegExp('^'+brand+'\\s*','i'),'');
+  let obj='';
+  if(spec.shape==='detergent_jug'){
+    obj=`<path d="M150 175 Q150 126 199 114 L309 126 Q343 132 350 174 L379 507 Q383 562 327 578 L147 578 Q97 570 104 516 Z" fill="${spec.bodyColor}" stroke="#0f3760" stroke-opacity=".18" stroke-width="8"/><path d="M286 162 Q360 160 366 232 Q368 293 314 315 Q295 322 286 302 Q335 286 331 237 Q328 198 286 198 Z" fill="#f8fafc" fill-opacity=".82"/><rect x="173" y="66" width="116" height="66" rx="18" fill="${spec.capColor}"/><rect x="136" y="274" width="216" height="154" rx="28" fill="${spec.labelColor}"/><path d="M136 274 L352 274 L316 428 L136 428 Z" fill="${spec.labelAccentColor}" opacity=".72"/>`;
+  } else if(spec.shape==='box'){
+    obj=`<rect x="122" y="112" width="236" height="420" rx="28" fill="${spec.bodyColor}" stroke="#0f3760" stroke-opacity=".14" stroke-width="8"/><rect x="146" y="238" width="188" height="160" rx="22" fill="${spec.labelColor}"/><rect x="160" y="256" width="160" height="36" rx="18" fill="${spec.labelAccentColor}" opacity=".85"/>`;
+  } else if(spec.shape==='jar'){
+    obj=`<rect x="164" y="118" width="152" height="72" rx="18" fill="${spec.capColor}"/><path d="M134 190 L346 190 L328 542 Q325 578 288 582 L192 582 Q155 578 152 542 Z" fill="${spec.bodyColor}" stroke="#0f3760" stroke-opacity=".13" stroke-width="8"/><rect x="152" y="302" width="176" height="120" rx="24" fill="${spec.labelColor}"/>`;
+  } else if(spec.shape==='pouch'){
+    obj=`<path d="M132 98 L348 98 Q365 330 342 574 L138 574 Q115 330 132 98 Z" fill="${spec.bodyColor}" stroke="#0f3760" stroke-opacity=".14" stroke-width="8"/><rect x="154" y="250" width="172" height="146" rx="26" fill="${spec.labelColor}"/><path d="M150 115 Q240 160 330 115" fill="none" stroke="#ffffff" stroke-opacity=".55" stroke-width="12"/>`;
+  } else {
+    obj=`<rect x="202" y="62" width="76" height="68" rx="16" fill="${spec.capColor}"/><path d="M185 118 Q185 166 158 206 Q133 244 132 305 L132 526 Q132 578 184 592 L296 592 Q348 578 348 526 L348 305 Q347 244 322 206 Q295 166 295 118 Z" fill="${spec.bodyColor}" stroke="#0f3760" stroke-opacity=".14" stroke-width="8"/><path d="M158 300 L322 300 L322 540 Q296 556 240 556 Q184 556 158 540 Z" fill="${spec.contentColor}" opacity="${spec.content==='liquido chiaro'?'.36':'.86'}"/><rect x="139" y="282" width="202" height="148" rx="28" fill="${spec.labelColor}"/><path d="M139 282 L341 282 L310 430 L139 430 Z" fill="${spec.labelAccentColor}" opacity=".78"/>`;
+  }
+  const txt=`<text x="240" y="330" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="34" font-weight="900" fill="#ffffff">${v2867Xml(labelText1).slice(0,18)}</text><text x="240" y="370" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="25" font-weight="900" fill="#08203e">${v2867Xml(labelText2||cat).slice(0,22)}</text><text x="240" y="410" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="900" fill="#08203e">${format}</text>`;
+  const footer=`<text x="240" y="620" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="16" font-weight="800" fill="#64748b">Render virtuale · ${v2867Xml(spec.shape)} · ${v2867Xml(spec.content)}</text>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="480" height="640" viewBox="0 0 480 640">${bgRect}<defs><filter id="s" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#0f172a" flood-opacity=".18"/></filter></defs><g filter="url(#s)">${obj}${txt}</g>${footer}</svg>`;
+}
+function v2867GenerateVirtualRender(card={}, record={}, opts={}){
+  const spec=v2867RenderSpec(card,record);
+  const svg=v2867VirtualSvg(spec,opts||{});
+  return {version:V2867_VERSION,background:String(opts.background||'transparent'),spec,svgDataUri:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg),svg};
+}
+function v2867BuildHumanReasoning(card={}, record={}, confirmed={}){
+  const ev=v2867RecordEvidence(record,card,confirmed);
+  const n=v2867Norm(ev);
+  const shape=v2867ProductShape(card,record);
+  const colors=v2867List(card?.visualAppearance?.colors,record.colors).slice(0,10);
+  const textTokens=[...new Set((v2867List(record.detectedText,record.visibleEvidence,card.detectedText,card.visibleEvidence,record.evidenceTokens).join(' ')+' '+ev).split(/\s+/).map(x=>v2867Str(x,40)).filter(x=>/[A-Za-zÀ-ÿ0-9]{3}/.test(x)))].slice(0,30);
+  const content=/liquido\s+scuro|dark_liquid|cola|bibita/.test(n)?'liquido scuro visibile':(/acqua|naturale|clear_liquid|trasparente/.test(n)?'liquido chiaro/trasparente visibile':(/candeggina|detersivo|flacone|laundry|cleaning/.test(n)?'contenuto non visibile o prodotto casa in flacone':'contenuto non certo'));
+  const nonFood=/candeggina|detersivo|detergente|ammorbidente|bucato|pulizia|lavatrice|laundry|cleaning|dishwashing/.test(n);
+  const identityEvidence=[];
+  if(card?.identity?.productName) identityEvidence.push('nome confermato: '+card.identity.productName);
+  if(card?.identity?.brand) identityEvidence.push('marca confermata: '+card.identity.brand);
+  if(card?.barcode) identityEvidence.push('barcode/EAN presente');
+  if(textTokens.length) identityEvidence.push('testi/etichette: '+textTokens.slice(0,10).join(', '));
+  return {version:V2867_VERSION,mission:'vedere + leggere + ragionare prima di memoria/OpenAI',subject:{shape,packageType:card?.visualAppearance?.packageType||record.packageType||'',format:card?.identity?.format||record.format||'',category:card?.classification?.category||record.category||''},appearance:{colors,content,visualSignature:card?.visualAppearance?.visualSignature||record.visualSignature||''},identityEvidence,decisionRules:['testo attuale/barcode/valori titolare vincono sulla memoria vecchia','forma e colore sono indizi, non identità','ingredienti/allergeni/tracce non decidono il nome prodotto',nonFood?'prodotto non alimentare rilevato da parole di pulizia/bucato':'categoria alimentare/bevanda solo se coerente con testo/barcode/foto'],riskFlags:[!card?.identity?.brand?'marca da verificare':'',!card?.barcode?'EAN mancante':'',!card?.objectFolder?.photoCount?'foto reali mancanti':''].filter(Boolean),engines:{pixelJudge:'V28.67 human reasoning bus',ocr:'client OCR + OCR.space crop router + quality gate',memory:'cartella oggetto + valori titolare + dedupe',openai:'docente finale solo se prove gratuite non bastano'}};
+}
+function v2867EnhanceCard(card={}, record={}, confirmed={}){
+  if(!card || typeof card!=='object') return card;
+  try{ card.humanReasoningV2867=v2867BuildHumanReasoning(card,record,confirmed); }catch(_){ }
+  try{ card.virtualRenderV2867=v2867GenerateVirtualRender(card,record,{background:'transparent'}); }catch(_){ }
+  return card;
+}
+function v2867HumanFieldCorrection(fields={}, text='', pixel=null){
+  const f=Object.assign({},fields||{}); const t=v2867Norm(text); const px=pixel?.anchors||{};
+  const officialCoca=v2867OfficialCocaEvidence(text); const blues=v2867HasBlues(text); const cola=/\bcola\b|\blemon\s*taste\b/.test(t);
+  if(blues && cola){ f.brand='Blues'; f.category='soft_drinks'; f.productType='bibita cola'; f.productName=/lemon\s*taste|limone/.test(t)?'Cola - Lemon Taste':'Cola Blues'; f.unit='bt'; f.isLiquid=true; f.confidence=Math.max(Number(f.confidence||0),.84); f.ocrStrong=true; }
+  if(cola && !officialCoca && /^coca[\s-]*cola$/i.test(String(f.brand||''))) f.brand=blues?'Blues':'';
+  if(cola && !officialCoca && /^coca[\s-]*cola$/i.test(String(f.productName||''))) f.productName=blues?'Cola Blues':'Bibita cola da confermare';
+  if(/\bsant\s*anna\b|\bsantanna\b/.test(t)){ f.brand="Sant'Anna"; f.category='water'; f.productType=/frizzante/.test(t)?'acqua frizzante':'acqua naturale'; f.productName="Acqua Sant'Anna"; f.unit='bt'; f.isLiquid=true; f.confidence=Math.max(Number(f.confidence||0),.90); f.ocrStrong=true; }
+  if(/\bdexal\b/.test(t) && /\bcandeggina\b/.test(t)){ f.brand='Dexal'; f.category='laundry'; f.productType=/delicata/.test(t)?'candeggina delicata':'candeggina'; f.productName=/maxi/.test(t)?'Dexal Candeggina Delicata Maxi':'Dexal Candeggina Delicata'; f.unit='conf'; f.isLiquid=true; f.confidence=Math.max(Number(f.confidence||0),.91); f.ocrStrong=true; }
+  if(!text && px.darkLiquid){ f.productName='Bevanda scura in bottiglia da identificare'; f.brand=''; f.category='drinks'; f.unit='bt'; f.isLiquid=true; f.confidence=Math.min(Number(f.confidence||0)||.46,.50); }
+  if(!text && px.clearLiquid){ f.productName='Acqua/bevanda chiara in bottiglia da confermare'; f.brand=''; f.category='water'; f.unit='bt'; f.isLiquid=true; f.confidence=Math.min(Number(f.confidence||0)||.46,.50); }
+  f.humanReasoningV2867={corrected:true,officialCoca,bluesEvidence:blues,colaEvidence:cola,policy:'brand/nome solo da testo reale, barcode, memoria coerente o titolare'};
+  return f;
+}
+async function v2867BuildOcrVariants(dataUrl='', pixel=null){
+  const sharp=await v2864Sharp(); const buf=v2864DataUrlBuffer(dataUrl);
+  if(!sharp || !buf) return [{name:'full_original',dataUrl,bytes:String(dataUrl||'').length}];
+  const base=await sharp(buf,{failOn:'none'}).rotate().resize({width:1600,height:1600,fit:'inside',withoutEnlargement:true}).jpeg({quality:84,mozjpeg:true}).toBuffer({resolveWithObject:true});
+  const w=base.info.width, h=base.info.height, baseBuf=base.data;
+  const pr=pixel?.objectBox && pixel?.resized ? {x:pixel.objectBox.x/Math.max(1,pixel.resized.w), y:pixel.objectBox.y/Math.max(1,pixel.resized.h), w:pixel.objectBox.w/Math.max(1,pixel.resized.w), h:pixel.objectBox.h/Math.max(1,pixel.resized.h)} : {x:.12,y:.04,w:.76,h:.92};
+  const clamp=b=>{ const left=Math.max(0,Math.min(w-2,Math.round(b.x*w))), top=Math.max(0,Math.min(h-2,Math.round(b.y*h))); const right=Math.max(left+2,Math.min(w,Math.round((b.x+b.w)*w))), bottom=Math.max(top+2,Math.min(h,Math.round((b.y+b.h)*h))); return {left,top,width:right-left,height:bottom-top}; };
+  async function mk(name,b,mode='contrast'){
+    const ex=clamp(b); let pipe=sharp(baseBuf,{failOn:'none'}).extract(ex).resize({width:1400,height:850,fit:'inside',withoutEnlargement:false});
+    if(mode==='contrast') pipe=pipe.grayscale().normalize().sharpen({sigma:1.05}).linear(1.25,-12);
+    else if(mode==='hard') pipe=pipe.grayscale().normalize().sharpen({sigma:1.35}).threshold(154).median(1);
+    else if(mode==='color') pipe=pipe.modulate({brightness:1.08,saturation:1.08}).sharpen({sigma:1.0}).normalize();
+    else if(mode==='soft') pipe=pipe.grayscale().normalize().sharpen({sigma:.65});
+    const out=await pipe.jpeg({quality:80,mozjpeg:true}).toBuffer();
+    return {name,mode,dataUrl:'data:image/jpeg;base64,'+out.toString('base64'),bytes:out.length};
+  }
+  const boxes={
+    label_main:{x:pr.x+pr.w*.04,y:pr.y+pr.h*.30,w:pr.w*.92,h:pr.h*.40},
+    label_wide:{x:Math.max(0,pr.x-pr.w*.08),y:pr.y+pr.h*.22,w:Math.min(1,pr.w*1.16),h:pr.h*.52},
+    label_upper:{x:pr.x+pr.w*.02,y:pr.y+pr.h*.18,w:pr.w*.96,h:pr.h*.36},
+    label_lower:{x:pr.x+pr.w*.02,y:pr.y+pr.h*.44,w:pr.w*.96,h:pr.h*.36},
+    product_center:{x:pr.x,y:pr.y+pr.h*.04,w:pr.w,h:pr.h*.88},
+    full_center:{x:.04,y:.10,w:.92,h:.76}
+  };
+  const specs=[['label_main_contrast',boxes.label_main,'contrast'],['label_wide_color',boxes.label_wide,'color'],['label_upper_hard',boxes.label_upper,'hard'],['label_lower_contrast',boxes.label_lower,'contrast'],['product_center_soft',boxes.product_center,'soft'],['full_center_color',boxes.full_center,'color']];
+  const out=[];
+  for(const spec of specs){ try{ const v=await mk(...spec); if(v.bytes<930000) out.push(v); }catch(_){ } }
+  if(!out.length) out.push({name:'full_resized',mode:'fallback',dataUrl:'data:image/jpeg;base64,'+baseBuf.toString('base64'),bytes:baseBuf.length});
+  return out;
+}
+function v2867DeleteBrainProduct(key='', opts={}){
+  ensureDbShape(); const g=db.assistantBrain.globalProductMemory||{products:{}}; g.products=g.products||{};
+  const k=String(key||'').trim(); if(!k) return {ok:false,error:'missing_key'};
+  const rec=g.products[k]; if(!rec) return {ok:false,error:'product_not_found'};
+  const confirm=String(opts.confirmText||'').trim().toUpperCase();
+  if(confirm!=='ELIMINA' && confirm!=='DELETE') return {ok:false,error:'confirm_required',message:'Per eliminare scrivi ELIMINA'};
+  const compact=compactGlobalProductRecord(rec);
+  db.assistantBrain.deletedProductsV2867=Array.isArray(db.assistantBrain.deletedProductsV2867)?db.assistantBrain.deletedProductsV2867:[];
+  db.assistantBrain.deletedProductsV2867.unshift({at:Date.now(),actor:opts.actor||'server_owner',key:k,product:compact,objectFolderId:rec.objectFolder?.folderId||''});
+  db.assistantBrain.deletedProductsV2867=db.assistantBrain.deletedProductsV2867.slice(0,200);
+  try{ for(const b of v2867List(rec.barcodes,rec.barcode)){ const digits=String(b).replace(/\D/g,''); if(digits && db.assistantBrain.barcodeBrain?.products) delete db.assistantBrain.barcodeBrain.products[digits]; } }catch(_){ }
+  delete g.products[k]; g.updatedAt=Date.now(); g.count=Object.keys(g.products||{}).length;
+  updateGlobalLearningAudit({type:'v2867-brain-product-deleted',key:k,productName:compact.productName||'',brand:compact.brand||'',actor:opts.actor||'server_owner'});
+  return {ok:true,deleted:true,product:compact,stats:{count:Object.keys(g.products||{}).length,updatedAt:g.updatedAt},version:V2867_VERSION};
+}
+function v2867RenderBrainProduct(key='', opts={}){
+  ensureDbShape(); const g=db.assistantBrain.globalProductMemory||{products:{}}; const rec=g.products[String(key||'').trim()];
+  if(!rec) return {ok:false,error:'product_not_found'};
+  try{ v2842EnsureObjectFolder(rec); v2842ApplyOwnerOverrides(rec); v2840AttachMemoryCard(rec,{}); }catch(_){ }
+  const card=rec.memoryCard||v2840BuildMemoryCard(rec,{}); const render=v2867GenerateVirtualRender(card,rec,opts||{}); const reasoning=v2867BuildHumanReasoning(card,rec,{});
+  return {ok:true,version:V2867_VERSION,key:rec.key||key,title:rec.productName||card.identity?.productName||'Prodotto',render,reasoning,fields:v2840PublicProductBrainDetail(rec).fields};
+}
+(function(){
+  try{
+    if(typeof v2840BuildMemoryCard==='function' && !global.__v2867CardWrapped){
+      const prev=v2840BuildMemoryCard;
+      v2840BuildMemoryCard=function(record={}, confirmed={}){ const card=prev.call(this,record,confirmed)||{}; return v2867EnhanceCard(card,record,confirmed); };
+      global.__v2867CardWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof v2864FieldsFromText==='function' && !global.__v2867FieldsWrapped){
+      const prev=v2864FieldsFromText;
+      v2864FieldsFromText=function(text='',pixel=null){ return v2867HumanFieldCorrection(prev.call(this,text,pixel)||{}, text, pixel); };
+      global.__v2867FieldsWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof v2864ExternalOcr==='function' && !global.__v2867OcrWrapped){
+      v2864ExternalOcr=async function(dataUrl='', pixel=null){
+        const providers=[]; const candidates=[];
+        const variants=await v2867BuildOcrVariants(dataUrl,pixel).catch(()=>[{name:'full_original',dataUrl,bytes:String(dataUrl||'').length}]);
+        const max=Math.max(1,Math.min(6,Number(process.env.OCR_SPACE_MAX_CROPS||4)||4));
+        for(const v of variants.slice(0,max)){
+          const r=await v2864OcrSpace(v.dataUrl).catch(e=>({provider:'ocr_space',ok:false,error:String(e?.message||e).slice(0,120)}));
+          if(r){ const q=v2865OcrQuality(r.text||''); providers.push({provider:'ocr_space',variant:v.name,mode:v.mode||'',ok:!!r.ok,chars:String(r.text||'').length,score:q.score,error:r.error||'',bytes:v.bytes||0,engine:'v2867_roi_router'}); if(r.ok && String(r.text||'').trim()) candidates.push({text:r.text,provider:'ocr_space',variant:v.name,mode:v.mode||'',score:q.score,quality:q,bytes:v.bytes||0}); }
+          if(candidates.some(c=>c.score>=58 && v2865HasIdentityText(c.text))) break;
+        }
+        const google=await v2864GoogleVisionOcr(dataUrl).catch(e=>({provider:'google_vision_ocr',ok:false,error:String(e?.message||e).slice(0,120)}));
+        if(google){ const q=v2865OcrQuality(google.text||''); providers.push({provider:'google_vision_ocr',ok:!!google.ok,chars:String(google.text||'').length,score:q.score,error:google.error||''}); if(google.ok && String(google.text||'').trim()) candidates.push({text:google.text,provider:'google_vision_ocr',variant:'full',score:q.score,quality:q}); }
+        candidates.sort((a,b)=> (v2865HasIdentityText(b.text)?10:0)-(v2865HasIdentityText(a.text)?10:0) || b.score-a.score || String(b.text).length-String(a.text).length);
+        const best=candidates[0];
+        return {text:(best && (best.score>=20 || v2865HasIdentityText(best.text))) ? best.text : '', providers, best:best?{provider:best.provider,variant:best.variant,mode:best.mode||'',score:best.score,quality:best.quality,bytes:best.bytes||0}:null, rejected:candidates.filter(c=>c!==best).slice(0,6).map(c=>({provider:c.provider,variant:c.variant,score:c.score,chars:String(c.text||'').length})), router:'v2867_detailed_pixel_ocr_router'};
+      };
+      global.__v2867OcrWrapped=true;
+    }
+  }catch(e){ try{ updateGlobalLearningAudit({type:'v2867-ocr-router-error',reason:String(e?.message||e).slice(0,180)}); }catch(_){} }
+  try{
+    if(typeof serverPixelOcrJudgeV2864==='function' && !global.__v2867PixelJudgeWrapped){
+      const prev=serverPixelOcrJudgeV2864;
+      serverPixelOcrJudgeV2864=async function(args={}){
+        const out=await prev.call(this,args||{});
+        try{
+          if(out?.fields) out.fields=v2867HumanFieldCorrection(out.fields,out.ocr?.text||'',out.pixel||null);
+          if(out?.result){ Object.assign(out.result, v2867HumanFieldCorrection(out.result,out.ocr?.text||'',out.pixel||null)); out.result.humanReasoningV2867=v2867BuildHumanReasoning(v2840BuildMemoryCard({productName:out.result.productName,brand:out.result.brand,format:out.result.estimatedSize,category:out.result.category,unit:out.result.unit,colors:out.result.colors||[],detectedText:out.result.detectedText||[],visibleEvidence:out.result.visibleEvidence||[]},{}),{productName:out.result.productName,brand:out.result.brand,format:out.result.estimatedSize,category:out.result.category,unit:out.result.unit,colors:out.result.colors||[],detectedText:out.result.detectedText||[],visibleEvidence:out.result.visibleEvidence||[]},{ocrText:out.ocr?.text||''}); out.result.proHumanReasoningV2867={active:true,source:'server_pixel_ocr_judge',ocrRouter:out.ocr?.best?.provider||'',policy:'vede pixel + legge etichetta + ragiona campi prima della memoria'}; }
+          if(out) out.version=V2867_VERSION;
+        }catch(_){ }
+        return out;
+      };
+      global.__v2867PixelJudgeWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof upsertGlobalProductMemory==='function' && !global.__v2867UpsertWrapped){
+      const prev=upsertGlobalProductMemory;
+      upsertGlobalProductMemory=function(confirmed={}){
+        if(confirmed && typeof confirmed==='object'){
+          confirmed.humanReasoningV2867=confirmed.humanReasoningV2867||{source:'client/server confirmation',policy:'confirmed fields become object memory'};
+          if(confirmed.productMemory) confirmed.productMemory.reasoningBusV2867={pixel:true,ocr:true,barcode:true,openFacts:true,owner:true,memory:true,version:V2867_VERSION};
+        }
+        const out=prev.call(this,confirmed);
+        try{ Object.values(db.assistantBrain?.globalProductMemory?.products||{}).forEach(r=>{ v2866SanitizeRecord(r); v2842EnsureObjectFolder(r); const card=v2840AttachMemoryCard(r,{}); r.humanReasoningV2867=card?.humanReasoningV2867||v2867BuildHumanReasoning(card||{},r,{}); r.virtualRenderV2867=card?.virtualRenderV2867||v2867GenerateVirtualRender(card||{},r,{}); }); }catch(_){ }
+        return out;
+      };
+      global.__v2867UpsertWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof publicServerBrainV2840==='function' && !global.__v2867ServerBrainWrapped){
+      const prev=publicServerBrainV2840;
+      publicServerBrainV2840=function(opts={}){
+        try{ Object.values(db.assistantBrain?.globalProductMemory?.products||{}).forEach(r=>{ v2842EnsureObjectFolder(r); v2840AttachMemoryCard(r,{}); r.humanReasoningV2867=r.memoryCard?.humanReasoningV2867; r.virtualRenderV2867=r.memoryCard?.virtualRenderV2867; }); }catch(_){ }
+        const out=prev.call(this,opts||{});
+        out.version='V28.67 PRO Human Reasoning Bus + Virtual Render';
+        out.reasoningBusV2867={active:true,policy:'unico bus dati: pixel/OCR/barcode/OpenFacts/memoria/owner -> scheda finale',ocrRouter:'OCR.space multi-crop quality gate',virtualRender:'shape+colors+label render from learned fields',ownerDelete:true};
+        return out;
+      };
+      global.__v2867ServerBrainWrapped=true;
+    }
+  }catch(_){ }
+  try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2867PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this); s.version='V28.67'; s.brain=Object.assign({},s.brain||{},{version:'V28.67',humanReasoningBus:'active',ocrSpaceRouter:'multi-crop enhanced ROI + quality gate',virtualProductRender:'active in server brain',ownerDelete:'active',engineBridge:'VisionAI + Pixel/OCR + Memory + OpenFacts pass through final truth bus'}); return s; }; global.__v2867PreflightWrapped=true; } }catch(_){ }
+  console.log('[Spesa Pronta] V28.67 PRO Human Reasoning Bus + OCR.space Router + Virtual Render + Owner Delete active');
+})();
