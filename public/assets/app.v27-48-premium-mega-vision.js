@@ -3256,11 +3256,11 @@ async function analyzeLabelFrameForActiveResult(dataUrl, el, visualSignature='')
       liveScanPendingResult=true;
       liveScanAwaitNextOk=false;
       liveScanCooldownUntil=Date.now()+3300;
-      const msg='Questa foto non sembra contenere una scadenza leggibile: non cambio la scheda. Inquadra solo la data di scadenza oppure dimmela a voce.';
+      const msg='Non ho ancora letto una scadenza sicura. La scheda resta uguale: avvicina solo la data stampata, inclina per togliere riflessi, oppure usa Aggiungi scadenza o Salta scadenza.';
       setScanVoiceHelper(el,msg,'warn');
       setScannerStatus(msg, liveScanActive ? voiceLine('expiry_not_found_keep_card',[
         'Non trovo una data in questa foto. La scheda resta uguale. Cerca solo la scadenza e premi scatta ora.',
-        'Questa sembra ancora una foto del prodotto o dell etichetta, non della scadenza. Non cambio i dati: mostrami solo la data.'
+        'Non ho ancora isolato una data leggibile. Avvicina la zona stampata, inclina per togliere i riflessi, oppure usa Aggiungi scadenza o Salta scadenza.'
       ]) : voiceLine('expiry_not_found_keep_card_photo',[
         'Non trovo una data in questa foto. Carica o scatta una foto solo della scadenza, oppure dimmela a voce.',
         'La scheda resta invariata. Mi serve la foto della data di scadenza o la scadenza detta a voce.'
@@ -7238,7 +7238,7 @@ try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, 
       const prevAsk=askVisionAi;
       askVisionAi=async function(dataUrl, opts={}){
         const stage=String(opts?.stage||'auto').toLowerCase();
-        if(/^(label|expiry|barcode|ingredients)$/.test(stage)){
+        if(/^(label|expiry|barcode|ingredients)$/.test(stage) && !(stage==='expiry' && opts.expiryTeacherImageV2857)){
           const prepared=await prepareOcrTeacherImageV2838(dataUrl,{stage});
           if(prepared && !prepared.skipped){
             const nextOpts=Object.assign({}, opts, {
@@ -7852,3 +7852,610 @@ try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, 
 // V28.54 PRO marker: cost meter + semantic visual signature core
 try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.54', proCostMeter:'openai_vs_openfacts_visible', semanticVisualSignature:'server_identity_signature_after_confirmation', proMode:true}); }catch(_){}
 try{ if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('v2854-cost-meter-semantic-ready',{costMeter:true, semanticSignature:true, policy:'OpenAI only when barcode/OpenFacts/memory not enough'}),1400); }catch(_){}
+
+// =============================================================
+// V28.55 PRO Guided Flow + Adaptive Target + Expiry Controls
+// - Barcode diventa STEP 2 subito dopo la prima foto prodotto
+// - Scadenza: pulsanti premium Salta / Aggiungi-Conferma manuale
+// - Pulsante COMPLETA CONTROLLO nascosto finche' c'e' una scheda aperta
+// - Mirino live adattivo: bottiglie/prodotti lunghi = rettangolo verticale,
+//   barcode = rettangolo largo, scadenza = riquadro stretto leggibile
+// =============================================================
+(function(){
+  const V='V28.55';
+  const $q=(s,r=document)=>r.querySelector(s);
+  const $qa=(s,r=document)=>Array.from(r.querySelectorAll(s));
+  const safeEsc=(v)=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+  const getActive=()=>{
+    try{ const a=typeof getActiveScannerResult==='function' ? getActiveScannerResult() : null; if(a) return a; }catch(_){ }
+    return $q('#scannerResults .scan-result:not(.confirmed):not(.bad)');
+  };
+  function field(el,sel){ return String(el?.querySelector?.(sel)?.value||'').trim(); }
+  function resultOf(el){ return el?._scanResult || {}; }
+  function hasBarcode(el,r=resultOf(el)){
+    const txt=[r.barcode,r.ean,r.code,r.productCode,r.productMemory?.barcode,el?.dataset?.barcodeScanDone].filter(Boolean).join(' ');
+    return /\d{8,14}/.test(String(txt||''));
+  }
+  function hasLabel(el,r=resultOf(el)){
+    const n=field(el,'[data-scan-name]')||r.productName||'';
+    const b=field(el,'[data-scan-brand]')||r.brand||'';
+    const size=field(el,'[data-scan-size]')||r.estimatedSize||r.size||'';
+    return !!(r.labelScanMerged || (String(n).trim().length>2 && (String(b).trim().length>1 || String(size).trim().length>0)));
+  }
+  function hasExpiry(el,r=resultOf(el)){
+    return !!(field(el,'[data-scan-expiry]') || r.expiryDate || el?.dataset?.voiceExpiryDone==='1' || el?.dataset?.expirySkipped==='1');
+  }
+  function smartParseExpiry(raw=''){
+    let exp='';
+    try{ if(typeof parseExpiryLoose==='function') exp=parseExpiryLoose(raw); }catch(_){ }
+    try{ if(!exp && typeof parseExpiryFromSpeech==='function') exp=parseExpiryFromSpeech(raw); }catch(_){ }
+    const s=String(raw||'').trim().replace(/[Oo]/g,'0').replace(/[Il]/g,'1').replace(/[–—]/g,'-');
+    let m;
+    if(!exp && (m=s.match(/\b(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{2,4})\b/))){
+      let d=m[1].padStart(2,'0'), mo=m[2].padStart(2,'0'), y=m[3]; if(y.length===2) y='20'+y;
+      if(+d>=1&&+d<=31&&+mo>=1&&+mo<=12) exp=`${d}/${mo}/${y}`;
+    }
+    if(!exp && (m=s.match(/\b(\d{1,2})\s*[\/\-.]\s*(20\d{2}|\d{2})\b/))){
+      let mo=m[1].padStart(2,'0'), y=m[2]; if(y.length===2) y='20'+y;
+      if(+mo>=1&&+mo<=12) exp=`${mo}/${y}`;
+    }
+    return exp;
+  }
+  function setHelper(el,msg,mode='live'){
+    try{ if(typeof setScanVoiceHelper==='function') return setScanVoiceHelper(el,msg,mode); }catch(_){ }
+    const box=el?.querySelector?.('[data-scan-voice-note]');
+    if(box) box.innerHTML=`<span class="dot"></span><div><strong>Assistente live</strong><br>${safeEsc(msg)}</div>`;
+  }
+  function setStatus(msg,voice='',speak=false){ try{ if(typeof setScannerStatus==='function') setScannerStatus(msg,voice,speak); }catch(_){ } }
+  function markExpiryConfirmed(el,raw){
+    if(!el) return false;
+    const inp=el.querySelector('[data-scan-expiry]');
+    const value=String(raw ?? inp?.value ?? '').trim();
+    const exp=smartParseExpiry(value);
+    if(!exp){
+      if(inp) inp.focus();
+      setStatus('Scrivi una scadenza valida oppure usa Salta scadenza.', 'Scrivi la scadenza nel campo, oppure premi salta scadenza.', true);
+      setHelper(el,'Scadenza non confermata: scrivila nel campo tipo 16/08/2026, oppure premi Salta scadenza.','warn');
+      return false;
+    }
+    const r=resultOf(el);
+    if(inp) inp.value=exp;
+    r.expiryDate=exp; r.expirySkipped=false; r.expiryManualConfirmedV2855=true; el._scanResult=r;
+    el.dataset.voiceExpiryDone='1'; el.dataset.userExpiryEdited='1';
+    setHelper(el,`Scadenza confermata: ${exp}. Ora passo al barcode, che aiuta a riconoscere l’articolo senza spendere OpenAI.`,'live');
+    setStatus(`Scadenza confermata: ${exp}. Ora fai il barcode se disponibile.`, '', false);
+    try{ if(typeof refreshScanResultCard==='function') refreshScanResultCard(el,r); }catch(_){ }
+    try{ if(!hasBarcode(el,r) && typeof guidedStartBarcodeRescan==='function') guidedStartBarcodeRescan(el,r); }catch(_){ }
+    try{ if(typeof refreshGuidedScannerUx==='function') refreshGuidedScannerUx('expiry-confirmed-v2855'); }catch(_){ }
+    updateFinishButtonV2855();
+    return true;
+  }
+  function skipExpiry(el){
+    if(!el) return;
+    const r=resultOf(el);
+    const inp=el.querySelector('[data-scan-expiry]'); if(inp) inp.value='';
+    r.expiryDate=''; r.expirySkipped=true; r.expiryManualConfirmedV2855=false; el._scanResult=r;
+    el.dataset.voiceExpiryDone='1'; el.dataset.expirySkipped='1';
+    setHelper(el,'Scadenza saltata. Non blocco la scheda: ora fai barcode o conferma i dati.','live');
+    setStatus('Scadenza saltata. Puoi fare barcode oppure confermare il prodotto.', '', false);
+    try{ if(typeof refreshScanResultCard==='function') refreshScanResultCard(el,r); }catch(_){ }
+    try{ if(!hasBarcode(el,r) && typeof guidedStartBarcodeRescan==='function') guidedStartBarcodeRescan(el,r); }catch(_){ }
+    try{ if(typeof refreshGuidedScannerUx==='function') refreshGuidedScannerUx('expiry-skipped-v2855'); }catch(_){ }
+    updateFinishButtonV2855();
+  }
+  function injectExpiryControlsV2855(){
+    $qa('#scannerResults .scan-result:not([data-v2855-expiry-ui])').forEach(el=>{
+      el.dataset.v2855ExpiryUi='1';
+      const inp=el.querySelector('[data-scan-expiry]');
+      const label=inp?.closest?.('label');
+      if(label && !el.querySelector('[data-confirm-expiry-v2855]')){
+        const wrap=document.createElement('div');
+        wrap.className='expiry-actions-pro-v2855';
+        wrap.innerHTML='<button type="button" class="primary-btn mini-expiry-confirm" data-confirm-expiry-v2855>Aggiungi / conferma scadenza</button><button type="button" class="outline-btn mini-expiry-skip" data-skip-expiry-v2855>Salta scadenza</button>';
+        label.insertAdjacentElement('afterend',wrap);
+      }
+    });
+    const panel=$q('#guidedScanPanel');
+    if(panel && !panel.querySelector('[data-guided-expiry-bar-v2855]')){
+      const actions=panel.querySelector('.guided-actions');
+      const bar=document.createElement('div');
+      bar.className='guided-expiry-bar-v2855';
+      bar.dataset.guidedExpiryBarV2855='1';
+      bar.innerHTML='<button type="button" class="primary-btn" data-guided-confirm-expiry-v2855>Aggiungi / conferma scadenza</button><button type="button" class="outline-btn" data-guided-skip-expiry-v2855>Salta scadenza</button>';
+      actions?.insertAdjacentElement('beforebegin',bar);
+    }
+    // Nasconde il vecchio pulsante tecnico V28.52 se presente: usiamo quello nuovo premium.
+    $qa('[data-guided-skip-expiry]:not([data-guided-skip-expiry-v2855]), [data-skip-expiry]:not([data-skip-expiry-v2855])').forEach(b=>{ b.classList.add('legacy-expiry-hide-v2855'); });
+    bindGuidedBarcodeButtonV2855();
+  }
+  function bindGuidedBarcodeButtonV2855(){
+    const btn=$q('[data-guided-rescan-barcode]');
+    if(btn && !btn.dataset.v2855Bound){
+      btn.dataset.v2855Bound='1';
+      btn.addEventListener('click',()=>{
+        const el=getActive();
+        if(el && typeof guidedStartBarcodeRescan==='function') guidedStartBarcodeRescan(el,resultOf(el));
+        else setStatus('Prima scansiona un prodotto, poi fai il barcode come secondo passaggio.', '', false);
+      });
+    }
+  }
+  document.addEventListener('click',e=>{
+    const confirmBtn=e.target?.closest?.('[data-confirm-expiry-v2855],[data-guided-confirm-expiry-v2855]');
+    if(confirmBtn){ e.preventDefault(); markExpiryConfirmed(confirmBtn.closest?.('.scan-result') || getActive()); return; }
+    const skipBtn=e.target?.closest?.('[data-skip-expiry-v2855],[data-guided-skip-expiry-v2855]');
+    if(skipBtn){ e.preventDefault(); skipExpiry(skipBtn.closest?.('.scan-result') || getActive()); return; }
+  },true);
+
+  function updateFinishButtonV2855(){
+    const btn=$q('#scannerFinishBtn'); if(!btn) return;
+    const pending=$qa('#scannerResults .scan-result:not(.confirmed):not(.bad)').length;
+    const confirmed=$qa('#scannerResults .scan-result.confirmed').length;
+    const dialogOpen=!!$q('#groceryScannerDialog')?.open;
+    btn.classList.toggle('scanner-finish-hidden-v2855', !!pending || !confirmed || !dialogOpen);
+    btn.disabled=!!pending || !confirmed;
+    btn.textContent=confirmed ? 'COMPLETA CONTROLLO' : 'CONFERMA ALMENO UN ARTICOLO';
+  }
+  document.addEventListener('click',e=>{
+    const btn=e.target?.closest?.('#scannerFinishBtn');
+    if(!btn) return;
+    btn.classList.add('scanner-finish-hidden-v2855');
+    btn.disabled=true;
+  },true);
+
+  function promoteBarcodeAfterFirstPhoto(el){
+    if(!el || el.classList.contains('confirmed') || el.classList.contains('bad')) return;
+    const r=resultOf(el);
+    if(!hasBarcode(el,r)){
+      el.dataset.liveFollowupStep='barcode';
+      setHelper(el,'Prima foto salvata. Ora fai il barcode: costa zero, controlla il prodotto su Open Facts e riduce gli errori.','live');
+      setStatus('Step 2: inquadra il barcode/EAN. È il metodo più economico e preciso per completare nome, marca e formato.', '', false);
+    }
+    updateFinishButtonV2855();
+    try{ if(typeof refreshGuidedScannerUx==='function') refreshGuidedScannerUx('barcode-second-v2855'); }catch(_){ }
+  }
+  try{
+    if(typeof addScannerResult==='function' && !window.__v2855AddScannerWrapped){
+      const prev=addScannerResult;
+      addScannerResult=function(result){
+        const el=prev.call(this,result);
+        setTimeout(()=>{ injectExpiryControlsV2855(); promoteBarcodeAfterFirstPhoto(el || getActive()); },90);
+        return el;
+      };
+      window.__v2855AddScannerWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof confirmScanResult==='function' && !window.__v2855ConfirmWrapped){
+      const prev=confirmScanResult;
+      confirmScanResult=function(el,result={},silent=false){
+        const out=prev.call(this,el,result,silent);
+        setTimeout(()=>{ updateFinishButtonV2855(); injectExpiryControlsV2855(); },180);
+        return out;
+      };
+      window.__v2855ConfirmWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof resetScannerResults==='function' && !window.__v2855ResetWrapped){
+      const prev=resetScannerResults;
+      resetScannerResults=function(){ const out=prev.apply(this,arguments); setTimeout(updateFinishButtonV2855,80); return out; };
+      window.__v2855ResetWrapped=true;
+    }
+  }catch(_){ }
+
+  // Nuovo ordine step: Prodotto -> Barcode -> Etichetta -> Scadenza -> Conferma.
+  try{
+    window.guidedStepMeta=function(step){
+      const map={
+        product:{idx:1,total:5,kicker:'STEP 1/5',title:'Inquadra prodotto',desc:'Fai vedere il prodotto intero. Subito dopo ti chiedo barcode/EAN: è il riconoscimento più preciso e costa zero OpenAI.'},
+        barcode:{idx:2,total:5,kicker:'STEP 2/5',title:'Barcode / EAN',desc:'Inquadra il codice a barre. Se è valido, il server cerca su Open Facts e compila dati con costo quasi zero.'},
+        label:{idx:3,total:5,kicker:'STEP 3/5',title:'Etichetta e ingredienti',desc:'Inquadra nome, marca, formato e ingredienti solo per completare ciò che barcode/API non hanno trovato.'},
+        expiry:{idx:4,total:5,kicker:'STEP 4/5',title:'Scadenza',desc:'Inquadra la data, scrivila a mano e premi Aggiungi scadenza, oppure usa Salta scadenza.'},
+        confirm:{idx:5,total:5,kicker:'STEP 5/5',title:'Conferma articolo',desc:'Controlla i dati e premi Conferma e aggiungi in casa. Da lì il server impara questo articolo.'},
+        done:{idx:5,total:5,kicker:'ARTICOLO OK',title:'Articolo aggiunto',desc:'Prodotto salvato. Puoi passare al prossimo senza contaminare la scheda precedente.'}
+      };
+      return map[step]||map.product;
+    };
+  }catch(_){ }
+  try{
+    window.guidedCurrentStep=function(el=null,result={}){
+      el=el||getActive();
+      if(!el) return 'product';
+      if(el.classList.contains('confirmed')) return 'done';
+      result=result||resultOf(el);
+      const follow=String(el.dataset.liveFollowupStep||'').toLowerCase();
+      if(['barcode','label','expiry','confirm'].includes(follow)) return follow;
+      if(!hasBarcode(el,result)) return 'barcode';
+      if(!hasLabel(el,result)) return 'label';
+      if(!hasExpiry(el,result)) return 'expiry';
+      return 'confirm';
+    };
+  }catch(_){ }
+  function reorderStepperV2855(panel){
+    const stepper=panel?.querySelector?.('[data-guided-stepper]');
+    if(stepper && stepper.dataset.v2855Order!=='1'){
+      stepper.dataset.v2855Order='1';
+      stepper.innerHTML='<span data-step="product">Prodotto</span><span data-step="barcode">Barcode</span><span data-step="label">Etichetta</span><span data-step="expiry">Scadenza</span><span data-step="confirm">Conferma</span>';
+    }
+  }
+  try{
+    if(typeof ensureGuidedScanUx==='function' && !window.__v2855EnsureGuidedWrapped){
+      const prev=ensureGuidedScanUx;
+      ensureGuidedScanUx=function(){ const p=prev.call(this); reorderStepperV2855(p); setTimeout(()=>{ injectExpiryControlsV2855(); bindGuidedBarcodeButtonV2855(); },50); return p; };
+      window.__v2855EnsureGuidedWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof refreshGuidedScannerUx==='function' && !window.__v2855RefreshGuidedWrapped){
+      const prev=refreshGuidedScannerUx;
+      refreshGuidedScannerUx=function(reason=''){
+        const out=prev.call(this,reason);
+        const panel=$q('#guidedScanPanel');
+        reorderStepperV2855(panel);
+        // Corregge lo stato done/active con nuovo ordine.
+        try{
+          const el=getActive() || $q('#scannerResults .scan-result.confirmed');
+          const r=resultOf(el); const step=window.guidedCurrentStep(el,r); const meta=window.guidedStepMeta(step);
+          panel.dataset.step=step;
+          panel.querySelector('[data-guided-kicker]').textContent=meta.kicker;
+          panel.querySelector('[data-guided-title]').textContent=meta.title;
+          panel.querySelector('[data-guided-desc]').textContent=meta.desc;
+          panel.querySelector('[data-guided-counter]').textContent=meta.idx+'/'+meta.total;
+          const order={product:1,barcode:2,label:3,expiry:4,confirm:5};
+          panel.querySelectorAll('[data-step]').forEach(n=>{ const k=n.dataset.step; n.classList.toggle('active',k===step || (step==='done'&&k==='confirm')); n.classList.toggle('done',(order[k]||1)<meta.idx || step==='done'); });
+        }catch(_){ }
+        injectExpiryControlsV2855(); updateFinishButtonV2855();
+        return out;
+      };
+      window.__v2855RefreshGuidedWrapped=true;
+    }
+  }catch(_){ }
+
+  function inferLiveStageV2855(){
+    const el=getActive(); const follow=String(el?.dataset?.liveFollowupStep||'').toLowerCase();
+    if(follow) return follow;
+    try{ return window.guidedCurrentStep ? window.guidedCurrentStep(el,resultOf(el)) : 'product'; }catch(_){ return 'product'; }
+  }
+  function calculateAimFromMetrics(m={},stage='product'){
+    let w=66,h=46,r=24,mode='product';
+    const box=m.objectBoxV2855||{};
+    const ratio=Number(box.ratio||0);
+    if(stage==='barcode'){ w=84; h=30; r=18; mode='barcode'; }
+    else if(stage==='expiry'){ w=74; h=26; r=18; mode='expiry'; }
+    else if(stage==='label'){ w=78; h=42; r=22; mode='label'; }
+    else if(ratio && ratio<0.68){ w=48; h=76; r=28; mode='tall'; }
+    else if(ratio && ratio>1.45){ w=84; h=44; r=24; mode='wide'; }
+    else { w=68; h=58; r=26; mode='box'; }
+    if(m.tooSmall){ w=Math.min(88,w+8); h=Math.min(82,h+6); }
+    if(m.tooBig){ w=Math.max(44,w-8); h=Math.max(28,h-6); }
+    return {w,h,r,mode};
+  }
+  try{
+    if(typeof analyzeLiveFrameMetrics==='function' && !window.__v2855MetricsWrapped){
+      const prev=analyzeLiveFrameMetrics;
+      analyzeLiveFrameMetrics=function(video){
+        const m=prev.call(this,video)||{};
+        try{
+          const c=document.createElement('canvas'); c.width=128; c.height=128;
+          const ctx=c.getContext('2d',{willReadFrequently:true}); ctx.drawImage(video,0,0,128,128);
+          const d=ctx.getImageData(0,0,128,128).data; const lum=[]; let sum=0;
+          for(let i=0;i<d.length;i+=4){ const l=.2126*d[i]+.7152*d[i+1]+.0722*d[i+2]; lum.push(l); sum+=l; }
+          const avg=sum/lum.length; let xs=[],ys=[];
+          for(let y=2;y<126;y+=2){ for(let x=2;x<126;x+=2){ const idx=y*128+x; const diff=Math.abs(lum[idx]-lum[idx-2])+Math.abs(lum[idx]-lum[idx-256]); if(diff>Math.max(18, m.edgeCenter||10) && Math.abs(lum[idx]-avg)>5){ xs.push(x); ys.push(y); } } }
+          if(xs.length>35){
+            xs.sort((a,b)=>a-b); ys.sort((a,b)=>a-b);
+            const q=(arr,p)=>arr[Math.max(0,Math.min(arr.length-1,Math.floor(arr.length*p)))];
+            const x0=q(xs,.05), x1=q(xs,.95), y0=q(ys,.05), y1=q(ys,.95);
+            const bw=Math.max(1,x1-x0), bh=Math.max(1,y1-y0);
+            m.objectBoxV2855={x0,y0,x1,y1,w:bw,h:bh,ratio:bw/bh,coverage:(bw*bh)/(128*128)};
+          }
+        }catch(_){ }
+        return m;
+      };
+      window.__v2855MetricsWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof updateLiveHud==='function' && !window.__v2855HudWrapped){
+      const prev=updateLiveHud;
+      updateLiveHud=function(metrics,ready){
+        const out=prev.call(this,metrics,ready);
+        try{
+          const stage=inferLiveStageV2855();
+          const aim=calculateAimFromMetrics(metrics||{},stage);
+          const guides=$q('#liveScanGuides'); const box=guides?.querySelector?.('.aim-box');
+          if(box){ box.style.setProperty('--aim-w',aim.w+'%'); box.style.setProperty('--aim-h',aim.h+'%'); box.style.setProperty('--aim-r',aim.r+'px'); }
+          if(guides){ guides.dataset.aimMode=aim.mode; guides.dataset.aimStage=stage; }
+          const auto=$q('#liveScanAutoPill');
+          if(auto && ready){ auto.textContent = stage==='barcode' ? 'Barcode centrato: scatto' : stage==='expiry' ? 'Data centrata: scatto' : aim.mode==='tall' ? 'Prodotto lungo centrato' : auto.textContent; }
+        }catch(_){ }
+        return out;
+      };
+      window.__v2855HudWrapped=true;
+    }
+  }catch(_){ }
+
+  setInterval(()=>{ injectExpiryControlsV2855(); updateFinishButtonV2855(); },1200);
+  document.addEventListener('input',e=>{ if(e.target?.matches?.('[data-scan-expiry]')) setTimeout(()=>injectExpiryControlsV2855(),40); },true);
+  document.addEventListener('DOMContentLoaded',()=>{ setTimeout(()=>{ injectExpiryControlsV2855(); updateFinishButtonV2855(); },500); });
+  try{ window.SPESA_PRONTA_VERSION='v28.55-pro-guided-barcode-second-adaptive-target'; window.SPESA_PRONTA_BUILD=Object.assign({},window.SPESA_PRONTA_BUILD||{}, {version:'V28.55', proMode:true, guidedFlow:'product_barcode_label_expiry_confirm', adaptiveAim:true, expiryControls:'confirm_or_skip', finishButton:'hidden_until_cards_confirmed'}); }catch(_){ }
+  try{ if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('v2855-guided-flow-ready',{barcodeStep:2,adaptiveAim:true,expiryConfirm:true,finishHiddenWhilePending:true}),1500); }catch(_){ }
+})();
+
+// =============================================================
+// V28.56 PRO Confirm Button Lock
+// - Dopo "Conferma e aggiungi in casa" il pulsante dell'articolo sparisce.
+// - Previene doppi click, doppio salvataggio e doppio apprendimento server.
+// - Il pulsante COMPLETA CONTROLLO resta gestito separatamente dalla V28.55.
+// =============================================================
+(function(){
+  const V='V28.56';
+  function qs(sel,root=document){ return root?.querySelector?.(sel) || null; }
+  function esc(v){ return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])); }
+  function titleOf(el){ return qs('[data-scan-name]',el)?.value?.trim?.() || el?._scanResult?.productName || 'Prodotto'; }
+  function hideConfirmButtonV2856(el,reason='confirmed'){
+    if(!el) return;
+    el.dataset.productConfirmedV2856='1';
+    el.dataset.productConfirmLockedV2856='1';
+    el.classList.add('product-confirmed-v2856');
+    const btn=qs('[data-confirm-scan]',el);
+    if(btn){
+      btn.disabled=true;
+      btn.hidden=true;
+      btn.setAttribute('aria-hidden','true');
+      btn.dataset.confirmHiddenV2856='1';
+      btn.style.display='none';
+    }
+    const row=qs('.scan-actions-row',el);
+    if(row && !qs('[data-confirm-state-v2856]',row)){
+      const chip=document.createElement('div');
+      chip.className='confirm-state-v2856';
+      chip.dataset.confirmStateV2856='1';
+      chip.innerHTML='<strong>Prodotto confermato ✅</strong><span>Il pulsante conferma è stato chiuso per evitare doppi salvataggi.</span>';
+      row.insertAdjacentElement('afterbegin',chip);
+    }
+    try{ if(typeof setScanVoiceHelper==='function') setScanVoiceHelper(el, reason==='already' ? 'Questo prodotto era già confermato: non lo salvo due volte.' : `Prodotto confermato: ${titleOf(el)}. Ora il server aggiorna memoria e cartella oggetto.`, 'ok'); }catch(_){ }
+    try{ if(typeof logAiDiagnosticV98==='function') logAiDiagnosticV98('v2856-confirm-button-hidden',{productName:titleOf(el), reason}); }catch(_){ }
+  }
+  function setBusyConfirmV2856(el,busy=true){
+    const btn=qs('[data-confirm-scan]',el);
+    if(!btn || btn.dataset.confirmHiddenV2856==='1') return;
+    if(busy){
+      btn.dataset.prevTextV2856=btn.textContent||'Conferma e aggiungi in casa';
+      btn.disabled=true;
+      btn.classList.add('confirm-busy-v2856');
+      btn.textContent='Salvo prodotto…';
+    }else{
+      btn.disabled=false;
+      btn.classList.remove('confirm-busy-v2856');
+      btn.textContent=btn.dataset.prevTextV2856||'Conferma e aggiungi in casa';
+    }
+  }
+  function confirmedByCoreV2856(el){
+    return !!(el?.classList?.contains('confirmed') || el?.dataset?.serverMemorySyncStarted==='1' || el?.dataset?.serverMemorySynced==='1' || el?.dataset?.productConfirmedV2856==='1');
+  }
+  function syncExistingCardsV2856(){
+    document.querySelectorAll('#scannerResults .scan-result.confirmed, #scannerResults .scan-result[data-server-memory-sync-started="1"], #scannerResults .scan-result[data-server-memory-synced="1"]').forEach(el=>hideConfirmButtonV2856(el,'existing'));
+  }
+  try{
+    if(typeof confirmScanResult==='function' && !window.__v2856ConfirmButtonWrapped){
+      const prev=confirmScanResult;
+      confirmScanResult=function(el,result={},silent=false){
+        if(!el) return prev.call(this,el,result,silent);
+        if(el.dataset.productConfirmedV2856==='1' || (el.classList?.contains('confirmed') && qs('[data-confirm-scan]',el)?.dataset.confirmHiddenV2856==='1')){
+          try{ if(typeof toast==='function') toast('Questo prodotto è già stato confermato'); }catch(_){ }
+          hideConfirmButtonV2856(el,'already');
+          return false;
+        }
+        if(el.dataset.productConfirmBusyV2856==='1'){
+          try{ if(typeof toast==='function') toast('Sto già salvando questo prodotto…'); }catch(_){ }
+          return false;
+        }
+        el.dataset.productConfirmBusyV2856='1';
+        setBusyConfirmV2856(el,true);
+        let out;
+        try{
+          out=prev.call(this,el,result,silent);
+        }catch(err){
+          el.dataset.productConfirmBusyV2856='0';
+          setBusyConfirmV2856(el,false);
+          throw err;
+        }
+        const settle=()=>{
+          if(confirmedByCoreV2856(el)){
+            hideConfirmButtonV2856(el,'confirmed');
+          }else{
+            el.dataset.productConfirmBusyV2856='0';
+            setBusyConfirmV2856(el,false);
+          }
+          try{ if(typeof updateFinishButtonV2855==='function') updateFinishButtonV2855(); }catch(_){ }
+        };
+        setTimeout(settle,60);
+        setTimeout(settle,450);
+        return out;
+      };
+      window.__v2856ConfirmButtonWrapped=true;
+    }
+  }catch(_){ }
+  document.addEventListener('click',e=>{
+    const btn=e.target?.closest?.('[data-confirm-scan]');
+    if(!btn) return;
+    const el=btn.closest?.('.scan-result');
+    if(el?.dataset?.productConfirmedV2856==='1'){
+      e.preventDefault(); e.stopPropagation();
+      hideConfirmButtonV2856(el,'already');
+    }
+  },true);
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(syncExistingCardsV2856,600));
+  setInterval(syncExistingCardsV2856,1600);
+  try{ window.SPESA_PRONTA_VERSION='v28.56-pro-confirm-button-lock'; window.SPESA_PRONTA_BUILD=Object.assign({},window.SPESA_PRONTA_BUILD||{}, {version:'V28.56', proMode:true, confirmButtonLock:'hide_after_article_confirmation', duplicateConfirmGuard:true}); }catch(_){ }
+  try{ if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('v2856-confirm-button-lock-ready',{hideConfirmAfterItemConfirmed:true, duplicateGuard:true}),1700); }catch(_){ }
+})();
+
+
+// =============================================================
+// V28.57 PRO Expiry Mission Lock + Dot-Matrix Date Reader
+// Obiettivo: la scansione scadenza non deve più essere trattata come foto prodotto.
+// Legge date a puntini/spaziate e blocca il messaggio ripetitivo "sembra prodotto".
+// =============================================================
+(function(){
+  const V='V28.57';
+  function cleanDateTextV2857(raw=''){
+    let s=String(raw||'');
+    s=s.replace(/[\u2010-\u2015]/g,'-').replace(/[•·∙●]/g,'.').replace(/[\\]/g,'/');
+    s=s.replace(/[OoQ]/g,'0').replace(/[Il|!]/g,'1').replace(/[‚,;]/g,'.');
+    // Ricompone date stampate a puntini/spaziate: 1 6 / 0 8 / 2 0 -> 16/08/20
+    for(let i=0;i<3;i++){
+      s=s.replace(/(\d)\s+(\d)(?=\s*[\/\.\-])/g,'$1$2');
+      s=s.replace(/([\/\.\-]\s*\d)\s+(\d)/g,'$1$2');
+      s=s.replace(/(\d)\s*([\/\.\-])\s*(\d)/g,'$1$2$3');
+    }
+    return s;
+  }
+  function validExpiryDateV2857(d,m,y){
+    d=Number(d); m=Number(m); y=Number(y);
+    if(!(d>=1&&d<=31&&m>=1&&m<=12&&y>=2000&&y<=2059)) return false;
+    const days=[31,((y%4===0&&y%100!==0)||y%400===0)?29:28,31,30,31,30,31,31,30,31,30,31];
+    return d<=days[m-1];
+  }
+  function normalizeYearV2857(y){
+    y=String(y||'').replace(/\D/g,'');
+    if(y.length===2) return (Number(y)<70?'20':'19')+y;
+    return y;
+  }
+  function addExpiryCandidateV2857(list,raw,d,m,y,conf,kind){
+    y=normalizeYearV2857(y);
+    if(!validExpiryDateV2857(d,m,y)) return;
+    list.push({raw:String(raw||'').trim(), text:`${String(Number(d)).padStart(2,'0')}/${String(Number(m)).padStart(2,'0')}/${y}`, confidence:conf, kind});
+  }
+  function expiryFromTextV2857(raw=''){
+    const original=String(raw||'');
+    if(!original.trim()) return null;
+    const text=cleanDateTextV2857(original);
+    const candidates=[];
+    // Forte: data con separatori classici o stampata a puntini.
+    for(const m of text.matchAll(/(?:scad(?:e|enza)?|exp|tmc|bb|best\s*before|entro|consumarsi|preferibilmente)?[^0-9]{0,12}\b([0-3]?\d)\s*[\/\.\-]\s*([01]?\d)\s*[\/\.\-]\s*(\d{2,4})\b/gi)){
+      addExpiryCandidateV2857(candidates,m[0],m[1],m[2],m[3],/(scad|exp|tmc|best|entro|consum|prefer)/i.test(m[0])?.98:.93,'separator');
+    }
+    // Medio: data a gruppi separati da spazi, tipica OCR dot-matrix: 16 08 20.
+    for(const m of text.matchAll(/(?:scad(?:e|enza)?|exp|tmc|bb|best\s*before|entro|consumarsi|preferibilmente)?[^0-9]{0,12}\b([0-3]\d)\s+([01]\d)\s+(\d{2,4})\b/gi)){
+      addExpiryCandidateV2857(candidates,m[0],m[1],m[2],m[3],/(scad|exp|tmc|best|entro|consum|prefer)/i.test(m[0])?.92:.78,'spaced');
+    }
+    // Compatto 6/8 cifre: accettalo solo se vicino a parole scadenza oppure è quasi solo quella sequenza.
+    for(const m of text.matchAll(/(?:scad(?:e|enza)?|exp|tmc|bb|best\s*before|entro|consumarsi|preferibilmente)\D{0,10}([0-3]\d)([01]\d)(\d{2,4})\b/gi)){
+      addExpiryCandidateV2857(candidates,m[0],m[1],m[2],m[3],.84,'compact_with_keyword');
+    }
+    const compactOnly=text.trim().match(/^([0-3]\d)([01]\d)(\d{2}|\d{4})$/);
+    if(compactOnly) addExpiryCandidateV2857(candidates,compactOnly[0],compactOnly[1],compactOnly[2],compactOnly[3],.72,'compact_only');
+    // Mese/anno senza giorno: 08/2026, 08-26, EXP 08/26.
+    for(const m of text.matchAll(/(?:scad(?:e|enza)?|exp|tmc|bb|best\s*before|entro|preferibilmente)?[^0-9]{0,10}\b([01]?\d)\s*[\/\.\-]\s*(20\d{2}|\d{2})\b(?!\s*[\/\.\-]\s*\d)/gi)){
+      let mo=Number(m[1]); let y=normalizeYearV2857(m[2]);
+      if(mo>=1&&mo<=12&&Number(y)>=2000&&Number(y)<=2059){
+        candidates.push({raw:String(m[0]).trim(), text:`${String(mo).padStart(2,'0')}/${y}`, confidence:/(scad|exp|tmc|best|entro|prefer)/i.test(m[0])?.82:.65, kind:'month_year'});
+      }
+    }
+    // Evita lotti lunghi tipo 2342160753: se il candidato viene solo da una sottostringa dentro molti numeri, resta dietro ai separatori.
+    candidates.sort((a,b)=>Number(b.confidence||0)-Number(a.confidence||0));
+    return candidates[0]||null;
+  }
+  function expiryFromResultV2857(r={}){
+    const sources=[];
+    for(const k of ['expiryDate','expiry','expirationDate','expiration','expiryText','expiryDetectedRaw','bestBefore','bestBeforeText','reason','detailQuestion']) if(r&&r[k]) sources.push(r[k]);
+    if(Array.isArray(r?.detectedText)) sources.push(...r.detectedText);
+    if(Array.isArray(r?.visibleEvidence)) sources.push(...r.visibleEvidence);
+    const joined=sources.filter(Boolean).join('  |  ');
+    return expiryFromTextV2857(joined);
+  }
+  try{
+    if(typeof parseExpiryLoose==='function' && !window.__v2857ParseExpiryWrapped){
+      const prev=parseExpiryLoose;
+      parseExpiryLoose=function(raw=''){
+        const e=expiryFromTextV2857(raw);
+        return e?.text || prev.call(this,raw);
+      };
+      window.__v2857ParseExpiryWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof explicitExpiryFromEvidence==='function' && !window.__v2857ExplicitExpiryWrapped){
+      const prev=explicitExpiryFromEvidence;
+      explicitExpiryFromEvidence=function(result={}){
+        const e=expiryFromResultV2857(result);
+        return e?.text || prev.call(this,result);
+      };
+      window.__v2857ExplicitExpiryWrapped=true;
+    }
+  }catch(_){ }
+  function loadImgV2857(dataUrl){ return new Promise((res,rej)=>{ const img=new Image(); img.onload=()=>res(img); img.onerror=rej; img.src=dataUrl; }); }
+  function enhanceExpiryCanvasV2857(ctx,w,h){
+    try{
+      const img=ctx.getImageData(0,0,w,h), d=img.data;
+      for(let i=0;i<d.length;i+=4){
+        const y=.299*d[i]+.587*d[i+1]+.114*d[i+2];
+        // contrasto alto ma non distruttivo: aiuta puntini scuri su plastica chiara/trasparente.
+        const v=Math.max(0,Math.min(255,(y-132)*1.82+132+8));
+        d[i]=d[i+1]=d[i+2]=v;
+      }
+      ctx.putImageData(img,0,0);
+    }catch(_){ }
+  }
+  async function makeExpiryTeacherImageV2857(dataUrl){
+    try{
+      if(!/^data:image\//i.test(String(dataUrl||''))) return null;
+      const img=await loadImgV2857(dataUrl);
+      if(!img.width||!img.height) return null;
+      const W=980, H=1320;
+      const c=document.createElement('canvas'); c.width=W; c.height=H;
+      const ctx=c.getContext('2d',{willReadFrequently:true});
+      ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
+      const drawCrop=(sx,sy,sw,sh,dx,dy,dw,dh)=>{ try{ ctx.drawImage(img,sx,sy,sw,sh,dx,dy,dw,dh); }catch(_){} };
+      // Collage expiry: top/collo, centro, basso + miniatura piena. Così non tagliamo date su tappo, collo, retro o base.
+      const pad=22, colW=W-pad*2;
+      const topH=Math.round(img.height*.42), midH=Math.round(img.height*.42), botH=Math.round(img.height*.38);
+      drawCrop(0,0,img.width,topH,pad,pad,colW,360);
+      drawCrop(0,Math.max(0,Math.round(img.height*.29)),img.width,midH,pad,405,colW,360);
+      drawCrop(0,Math.max(0,img.height-botH),img.width,botH,pad,788,colW,330);
+      // Miniatura completa in basso come contesto, piccola ma utile.
+      const scale=Math.min((W-44)/img.width, 160/img.height);
+      const fw=Math.round(img.width*scale), fh=Math.round(img.height*scale);
+      drawCrop(0,0,img.width,img.height,pad,1140,fw,fh);
+      enhanceExpiryCanvasV2857(ctx,W,H);
+      return {dataUrl:c.toDataURL('image/jpeg',.70), meta:{version:V, source:`${img.width}x${img.height}`, sent:`${W}x${H}`, profile:'expiry-collage-top-middle-bottom-dotmatrix', sourceV2857:'client_expiry_collage'}};
+    }catch(err){ try{ logAiDiagnosticV98?.('expiry-collage-v2857-error',{message:String(err?.message||err).slice(0,120)}); }catch(_){} return null; }
+  }
+  try{
+    if(typeof askVisionAi==='function' && !window.__v2857ExpiryAskWrapped){
+      const prev=askVisionAi;
+      askVisionAi=async function(dataUrl, opts={}){
+        const stage=String(opts?.stage||'auto').toLowerCase();
+        let next=Object.assign({},opts);
+        if(stage==='expiry'){
+          const prepared=await makeExpiryTeacherImageV2857(dataUrl);
+          if(prepared){
+            next=Object.assign({},next,{expiryTeacherImageV2857:true, teacherCroppedV2805:true, teacherImageV2829:prepared.dataUrl, teacherImageMetaV2829:Object.assign({},next.teacherImageMetaV2829||{},prepared.meta)});
+            try{ logAiDiagnosticV98?.('expiry-collage-v2857',prepared.meta); }catch(_){ }
+          }
+        }
+        const r=await prev.call(this,dataUrl,next);
+        if(stage==='expiry' && r && typeof r==='object'){
+          const e=expiryFromResultV2857(r);
+          if(e){
+            r.expiryDate=e.text; r.expiryDetectedRaw=e.raw; r.expiryConfidence=Math.max(Number(r.expiryConfidence||0), Number(e.confidence||.85));
+            r.needsRetake=false; r.needsManual=true; r.shouldAskConfirmation=true;
+            r.proExpiryV2857={ok:true, source:'client_post_parser', raw:e.raw, expiryDate:e.text, confidence:e.confidence, kind:e.kind};
+            r.reason='Scadenza letta: controlla e conferma se corretta.';
+          }else{
+            r.proExpiryV2857=Object.assign({},r.proExpiryV2857||{}, {ok:false, policy:'expiry_only_no_product_identity_retry_or_manual'});
+          }
+        }
+        return r;
+      };
+      window.__v2857ExpiryAskWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    window.SPESA_PRONTA_VERSION='v28.57-pro-expiry-mission-lock';
+    window.SPESA_PRONTA_BUILD=Object.assign({},window.SPESA_PRONTA_BUILD||{}, {version:'V28.57', proMode:true, expiryMissionLock:true, dotMatrixExpiryReader:true, expiryCollageTeacher:true});
+    if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('v2857-expiry-mission-lock-ready',{dotMatrix:true, noProductLoop:true, expiryCollage:true}),1700);
+  }catch(_){ }
+})();

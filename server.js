@@ -3174,7 +3174,7 @@ JSON: {"productName":"","brand":"","variant":"","estimatedSize":"","sizeDetected
         primaryRaw = await visionJsonCall('Solo JSON valido. Analisi rapida prodotto.', fastProductPrompt, openAiTeacherImage, {maxTokens:220, stage:'product'});
         detailRaw = null;
       }else if(stageName==='expiry'){
-        const expiryPrompt=`OCR mirato SOLO SCADENZA V28.50 PRO. Rispondi SOLO JSON valido. Devi leggere anche date stampate a puntini/dot-matrix sul collo o tappo di bottiglie, tipo 16/08/20, 16/08/2026, 16-08-26, 16.08.26, 160826. Cerca date vicino a: SCAD, Scadenza, EXP, TMC, Da consumarsi entro, Preferibilmente entro, Lotto/L. Se ci sono due righe, la riga con formato data è expiryDate; la riga lunga numerica tipo lotto/batch va in detectedText e NON in expiryDate. Non riscrivere nome/marca/categoria durante scansione scadenza. Se leggi 16/08/20 restituisci expiryDate 16/08/2020 e expiryDetectedRaw 16/08/20. Se non sei sicuro lascia expiryDate vuota ma detectedText deve contenere TUTTI i caratteri letti. Schema: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","estimatedSize":"","expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"detectedText":[],"visibleEvidence":[],"confidence":0.1,"category":"food","reason":""}`;
+        const expiryPrompt=`OCR mirato SOLO SCADENZA V28.57 PRO. Rispondi SOLO JSON valido. Non dire mai che è foto prodotto/etichetta: la missione è leggere eventuali numeri/data presenti. Se non trovi data, riporta comunque detectedText e reason pratico senza cambiare prodotto. Devi leggere anche date stampate a puntini/dot-matrix sul collo o tappo di bottiglie, tipo 16/08/20, 16/08/2026, 16-08-26, 16.08.26, 160826. Cerca date vicino a: SCAD, Scadenza, EXP, TMC, Da consumarsi entro, Preferibilmente entro, Lotto/L. Se ci sono due righe, la riga con formato data è expiryDate; la riga lunga numerica tipo lotto/batch va in detectedText e NON in expiryDate. Non riscrivere nome/marca/categoria durante scansione scadenza. Se leggi 16/08/20 restituisci expiryDate 16/08/2020 e expiryDetectedRaw 16/08/20. Se non sei sicuro lascia expiryDate vuota ma detectedText deve contenere TUTTI i caratteri letti. Schema: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","estimatedSize":"","expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"detectedText":[],"visibleEvidence":[],"confidence":0.1,"category":"food","reason":""}`;
         primaryRaw = await visionJsonCall('Solo JSON valido. OCR scadenza.', expiryPrompt, openAiTeacherImage, {maxTokens:VISION_EXPIRY_MAX_OUTPUT_TOKENS, stage:'expiry'});
         detailRaw = null;
       }else if(stageName==='label'){
@@ -5682,4 +5682,82 @@ try{
 
   try{ v2854EnsureMeter(); }catch(_){ }
   console.log('[Spesa Pronta] V28.54 PRO Cost Meter + Semantic Visual Signature Core active');
+})();
+
+
+// =============================================================
+// V28.57 PRO EXPIRY MISSION LOCK SERVER
+// La foto scadenza non cambia identità prodotto: estrae solo date plausibili,
+// anche se OCR/OpenAI restituisce testo a puntini o spaziato.
+// =============================================================
+(function(){
+  const V='V28.57';
+  function cleanDateTextV2857(raw=''){
+    let s=String(raw||'');
+    s=s.replace(/[\u2010-\u2015]/g,'-').replace(/[•·∙●]/g,'.').replace(/[\\]/g,'/');
+    s=s.replace(/[OoQ]/g,'0').replace(/[Il|!]/g,'1').replace(/[‚,;]/g,'.');
+    for(let i=0;i<3;i++){
+      s=s.replace(/(\d)\s+(\d)(?=\s*[\/\.\-])/g,'$1$2');
+      s=s.replace(/([\/\.\-]\s*\d)\s+(\d)/g,'$1$2');
+      s=s.replace(/(\d)\s*([\/\.\-])\s*(\d)/g,'$1$2$3');
+    }
+    return s;
+  }
+  function normYear(y){ y=String(y||'').replace(/\D/g,''); return y.length===2 ? ((Number(y)<70?'20':'19')+y) : y; }
+  function valid(d,m,y){ d=Number(d); m=Number(m); y=Number(y); if(!(d>=1&&d<=31&&m>=1&&m<=12&&y>=2000&&y<=2059)) return false; const days=[31,((y%4===0&&y%100!==0)||y%400===0)?29:28,31,30,31,30,31,31,30,31,30,31]; return d<=days[m-1]; }
+  function add(list,raw,d,m,y,confidence,kind){ y=normYear(y); if(valid(d,m,y)) list.push({raw:String(raw||'').trim(), text:`${String(Number(d)).padStart(2,'0')}/${String(Number(m)).padStart(2,'0')}/${y}`, confidence, kind}); }
+  function expiryFromTextV2857(raw=''){
+    const text=cleanDateTextV2857(raw); if(!text.trim()) return null;
+    const out=[];
+    for(const m of text.matchAll(/(?:scad(?:e|enza)?|exp|tmc|bb|best\s*before|entro|consumarsi|preferibilmente)?[^0-9]{0,12}\b([0-3]?\d)\s*[\/\.\-]\s*([01]?\d)\s*[\/\.\-]\s*(\d{2,4})\b/gi)) add(out,m[0],m[1],m[2],m[3],/(scad|exp|tmc|best|entro|consum|prefer)/i.test(m[0])?.98:.93,'separator');
+    for(const m of text.matchAll(/(?:scad(?:e|enza)?|exp|tmc|bb|best\s*before|entro|consumarsi|preferibilmente)?[^0-9]{0,12}\b([0-3]\d)\s+([01]\d)\s+(\d{2,4})\b/gi)) add(out,m[0],m[1],m[2],m[3],/(scad|exp|tmc|best|entro|consum|prefer)/i.test(m[0])?.92:.78,'spaced');
+    for(const m of text.matchAll(/(?:scad(?:e|enza)?|exp|tmc|bb|best\s*before|entro|consumarsi|preferibilmente)\D{0,10}([0-3]\d)([01]\d)(\d{2,4})\b/gi)) add(out,m[0],m[1],m[2],m[3],.84,'compact_with_keyword');
+    const compactOnly=text.trim().match(/^([0-3]\d)([01]\d)(\d{2}|\d{4})$/); if(compactOnly) add(out,compactOnly[0],compactOnly[1],compactOnly[2],compactOnly[3],.72,'compact_only');
+    for(const m of text.matchAll(/(?:scad(?:e|enza)?|exp|tmc|bb|best\s*before|entro|preferibilmente)?[^0-9]{0,10}\b([01]?\d)\s*[\/\.\-]\s*(20\d{2}|\d{2})\b(?!\s*[\/\.\-]\s*\d)/gi)){
+      const mo=Number(m[1]); const y=normYear(m[2]); if(mo>=1&&mo<=12&&Number(y)>=2000&&Number(y)<=2059) out.push({raw:String(m[0]).trim(), text:`${String(mo).padStart(2,'0')}/${y}`, confidence:/(scad|exp|tmc|best|entro|prefer)/i.test(m[0])?.82:.65, kind:'month_year'});
+    }
+    out.sort((a,b)=>Number(b.confidence||0)-Number(a.confidence||0)); return out[0]||null;
+  }
+  function expiryFromResultV2857(r={}){
+    const fields=[r.expiryDate,r.expiry,r.expirationDate,r.expiration,r.expiryText,r.expiryDetectedRaw,r.bestBefore,r.bestBeforeText,r.reason,r.detailQuestion]
+      .concat(Array.isArray(r.detectedText)?r.detectedText:[])
+      .concat(Array.isArray(r.visibleEvidence)?r.visibleEvidence:[])
+      .filter(Boolean);
+    return expiryFromTextV2857(fields.join(' | '));
+  }
+  try{
+    if(typeof visionAnalyze==='function' && !global.__v2857VisionAnalyzeWrapped){
+      const prev=visionAnalyze;
+      visionAnalyze=async function(payload={}){
+        const stage=String(payload.stage||'auto').toLowerCase();
+        const r=await prev.call(this,payload);
+        if(stage==='expiry' && r && typeof r==='object'){
+          const exp=expiryFromResultV2857(r);
+          r.proExpiryMissionLockV2857=Object.assign({}, r.proExpiryMissionLockV2857||{}, {stage:'expiry', identityFrozen:true, parser:'dot_matrix_space_separator'});
+          if(exp){
+            r.expiryDate=exp.text; r.expiryDetectedRaw=exp.raw; r.expiryConfidence=Math.max(Number(r.expiryConfidence||0), Number(exp.confidence||.85));
+            r.needsRetake=false; r.needsManual=true; r.shouldAskConfirmation=true;
+            r.reason='Scadenza letta: controlla e conferma se corretta.';
+            r.proExpiryMissionLockV2857.ok=true; r.proExpiryMissionLockV2857.expiryDate=exp.text; r.proExpiryMissionLockV2857.raw=exp.raw; r.proExpiryMissionLockV2857.confidence=exp.confidence; r.proExpiryMissionLockV2857.kind=exp.kind;
+          }else{
+            r.reason='Non ho isolato una data di scadenza sicura. La foto resta nello step scadenza: avvicina solo la data stampata, inclina per togliere riflessi, oppure compila manualmente/salta.';
+            r.needsRetake=false; r.needsManual=true; r.shouldAskConfirmation=true;
+            r.proExpiryMissionLockV2857.ok=false;
+          }
+          // In modalità scadenza il server non deve proporre identità nuove.
+          r.productName=''; r.brand=''; r.category=r.category||'';
+        }
+        return r;
+      };
+      global.__v2857VisionAnalyzeWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof preflightSnapshotV98==='function' && !global.__v2857PreflightWrapped){
+      const prev=preflightSnapshotV98;
+      preflightSnapshotV98=function(){ const snap=prev.call(this); snap.version='V28.57'; snap.brain=Object.assign({}, snap.brain||{}, {version:'V28.57', name:'PRO Expiry Mission Lock + Dot-Matrix Reader', expiry:'missione solo scadenza, parser date puntini/spazi, niente loop foto prodotto'}); return snap; };
+      global.__v2857PreflightWrapped=true;
+    }
+  }catch(_){ }
+  console.log('[Spesa Pronta] V28.57 PRO Expiry Mission Lock active');
 })();
