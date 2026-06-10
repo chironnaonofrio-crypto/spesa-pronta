@@ -28,8 +28,16 @@ const PORT = process.env.PORT || 3000;
 const DB_PATH = path.resolve(process.env.DB_PATH || './cloud-db.json');
 const STATIC_DIR = path.resolve(process.env.STATIC_DIR || './public');
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.5';
-const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || OPENAI_MODEL;
-const OPENAI_MODEL_FALLBACKS = String(process.env.OPENAI_MODEL_FALLBACKS || 'gpt-5.5,gpt-5.4-mini,gpt-5.4-nano').split(',').map(s=>s.trim()).filter(Boolean);
+const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || 'gpt-5.4-mini'; // V28.51: vision default cheap/pro, chat can stay stronger
+const OPENAI_MODEL_FALLBACKS = String(process.env.OPENAI_MODEL_FALLBACKS || 'gpt-5.4-mini,gpt-5.4-nano,gpt-5.5').split(',').map(s=>s.trim()).filter(Boolean);
+// V28.51 PRO Cost Firewall: la Vision non deve mai bruciare token enormi per una singola foto.
+const VISION_COST_SAVER_MODE = !/^false$/i.test(String(process.env.VISION_COST_SAVER_MODE || 'true'));
+const VISION_MAX_OUTPUT_TOKENS = Math.max(80, Math.min(360, Number(process.env.VISION_MAX_OUTPUT_TOKENS || 240)));
+const VISION_EXPIRY_MAX_OUTPUT_TOKENS = Math.max(60, Math.min(220, Number(process.env.VISION_EXPIRY_MAX_OUTPUT_TOKENS || 120)));
+const VISION_LABEL_MAX_OUTPUT_TOKENS = Math.max(120, Math.min(380, Number(process.env.VISION_LABEL_MAX_OUTPUT_TOKENS || 260)));
+const VISION_MICRO_MAX_OUTPUT_TOKENS = Math.max(60, Math.min(220, Number(process.env.VISION_MICRO_MAX_OUTPUT_TOKENS || 120)));
+const VISION_ALLOW_SECOND_OPENAI_PASS = /^true$/i.test(String(process.env.VISION_ALLOW_SECOND_OPENAI_PASS || 'false'));
+const VISION_PROMPT_CONTEXT_CHARS = Math.max(600, Math.min(5000, Number(process.env.VISION_PROMPT_CONTEXT_CHARS || 1800)));
 const OPENAI_TIMEOUT_MS = Number(process.env.OPENAI_TIMEOUT_MS || 45000);
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const APP_BASE_URL = (process.env.APP_BASE_URL || process.env.PUBLIC_URL || 'https://spesa-pronta.it').replace(/\/$/, '');
@@ -2813,17 +2821,25 @@ function applyVisionMatching(result, candidates){
   return result;
 }
 async function visionJsonCall(systemText, userText, image, opts={}){
-  const maxTokens = Math.max(220, Math.min(900, Number(opts.maxTokens||650)));
+  // V28.51 PRO Cost Firewall: prompt e output sempre compatti.
+  const requested = Number(opts.maxTokens || VISION_MAX_OUTPUT_TOKENS || 220);
+  const stage = String(opts.stage || '').toLowerCase();
+  const cap = stage === 'expiry' ? VISION_EXPIRY_MAX_OUTPUT_TOKENS : (stage === 'label' ? VISION_LABEL_MAX_OUTPUT_TOKENS : VISION_MAX_OUTPUT_TOKENS);
+  const maxTokens = VISION_COST_SAVER_MODE ? Math.max(16, Math.min(cap, requested)) : Math.max(16, Math.min(900, requested));
+  const maxPromptChars = VISION_COST_SAVER_MODE ? Math.max(1200, Number(process.env.VISION_MAX_PROMPT_CHARS || 5200)) : 90000;
+  const compactUserText = String(userText || '').slice(0, maxPromptChars);
   const payload={
     model:OPENAI_VISION_MODEL,
     max_output_tokens: maxTokens,
     input:[
-      {role:'system',content:systemText},
-      {role:'user',content:[{type:'input_text',text:userText},{type:'input_image',image_url:image}]}
+      {role:'system',content:String(systemText||'').slice(0,900)},
+      {role:'user',content:[{type:'input_text',text:compactUserText},{type:'input_image',image_url:image}]}
     ]
   };
-  const resp=await openAiResponse(payload);
-  return extractJsonObject(outputText(resp));
+  const resp=await openAiResponse(payload, {kind:'vision'});
+  const out=extractJsonObject(outputText(resp));
+  if(out && typeof out==='object') out.openAiCostFirewallV2851={maxTokens, promptChars:compactUserText.length, model:OPENAI_VISION_MODEL, stage:stage||'auto', secondPassAllowed:VISION_ALLOW_SECOND_OPENAI_PASS};
+  return out;
 }
 function mergeVisionOutputs(primaryRaw, ocrRaw){
   const primary=normalizeVisionResult(primaryRaw||{});
@@ -3136,9 +3152,9 @@ Regole severe anti-errore:
 - Scegli categoria con regole realtà precise, non a caso. Prima parole chiave etichetta/nome, poi forma confezione, poi memoria/web come supporto. Scegli categoria fra categorie reali: food, drinks, water, soft_drinks, juice, sports_energy_drinks, milk_drinks, coffee_tea, yogurt, dairy, eggs, pasta_rice, flour_baking, bakery, breakfast_cereals, breakfast_snacks, chocolate_sweets, spreads, jams_honey, sauces_condiments, oil_vinegar, spices_broths, preserves_jars, canned_fish_meat, legumes_canned, frozen, ice_cream, ready_meals, meat_deli, fish, fruit, veg, baby_food, diet_special, house, laundry, dishwashing, cleaning, paper_house, personal_care, oral_care, hair_body, pharmacy, pets, pet_food, aquarium. Usa drinks solo per bevande da bere; salsa/pesto/cioccolata/yogurt non devono diventare bevande solo perché sono in confezione o semiliquidi.
 Schema JSON: {"needsRetake":boolean,"needsManual":boolean,"multipleItems":boolean,"shouldAskConfirmation":boolean,"reason":"breve in italiano","productName":"nome prodotto","brand":"marca","variant":"variante/gusto/formato","productType":"tipo prodotto","packageType":"tipo confezione","estimatedSize":"formato/capienza","sizeDetectedRaw":"testo volume letto","sizeConfidence":number,"expiryDate":"data visibile o vuota","expiryDetectedRaw":"testo data letto","expiryConfidence":number,"detailQuestion":"domanda se mancano capienza/scadenza/ingredienti","isLiquid":boolean,"isDamaged":boolean,"damageType":"tipo danno o vuota","quantity":number,"unit":"pz|bt|lattina|conf|kg|g|lt|ml|busta|scatola","category":"food|drinks|water|soft_drinks|juice|milk_drinks|yogurt|dairy|pasta_rice|bakery|breakfast_snacks|chocolate_sweets|spreads|sauces_condiments|preserves_jars|frozen|meat_deli|fish|fruit|veg|house|personal_care|pets|pharmacy|aquarium","confidence":number,"ingredients":["ingredienti letti o chiaramente dedotti dall etichetta"],"allergens":["allergeni evidenti o obbligatori letti"],"possibleAllergens":["possibili tracce lette"],"colors":["colori dominanti confezione"],"nutrition":{"kcal":"","proteine":"","carboidrati":"","grassi":""},"ingredientsVerified":boolean,"detectedText":["testi letti"],"visibleEvidence":["prove visive"],"items":[]}
 Contesto utile, ma non deve sovrascrivere ciò che vedi nella foto:
-Catalogo ridotto: ${JSON.stringify(compact).slice(0,12000)}
-Prodotti imparati: ${JSON.stringify(learned).slice(0,9000)}
-Candidati memoria: ${JSON.stringify(candidates).slice(0,9000)}`;
+Catalogo ridotto: ${JSON.stringify(compact.slice(0,12)).slice(0,VISION_PROMPT_CONTEXT_CHARS)}
+Prodotti imparati: ${JSON.stringify(learned.slice(0,12)).slice(0,VISION_PROMPT_CONTEXT_CHARS)}
+Candidati memoria: ${JSON.stringify(candidates.slice(0,16)).slice(0,VISION_PROMPT_CONTEXT_CHARS)}`;
   const detailPrompt=`Sei OCR specialist di Spesa Pronta. Ignora lo sfondo e concentrati su etichetta, collo, tappo, retro e base del prodotto.
 Leggi piccoli testi con attenzione: capienza/formato, scadenza/TMC/EXP, lotto, marca, variante. Se la data è sul tappo/collo e non leggibile, non inventare: chiedi scan ravvicinato della data.
 Output SOLO JSON con gli stessi campi, includendo anche ingredients, allergens, possibleAllergens, colors e nutrition quando visibili. Regole:
@@ -3155,28 +3171,28 @@ JSON: {"productName":"","brand":"","variant":"","estimatedSize":"","sizeDetected
       const stageName=stageNameV2838;
       if(stageName==='product'){
         const fastProductPrompt=`Analizza la foto prodotto. Rispondi SOLO JSON valido. PRIORITÀ: scegli il prodotto centrale/più grande, non oggetti laterali o sfondo. Se al centro c'è una bottiglia Coca-Cola/cola o altra confezione idonea, analizza quella e ignora persone/piatti/tavolo/salse laterali. Devi essere veloce: riconosci prodotto, marca, tipo, formato se leggibile e categoria reale. Non cercare di leggere tutta la tabella ingredienti se non è visibile. Se vedi cane, vestiti, telecomando, TV, mobili o oggetti non consumabili rispondi {"needsRetake":true,"notConsumable":true,"reason":"Oggetto non idoneo","productName":"","confidence":0}. Categoria: usa regole realtà professionali v27.96: scegli per prove dell etichetta, non per forma generica; confezione è solo indizio. Bevanda solo se è davvero da bere (acqua, cola, bibita gassata, succo, latte da bere). Se leggi Cola/Coca-Cola/Pepsi/Fanta/Sprite non classificarla come acqua: categoria soft_drinks, unit bt/lattina. Se leggi THE/THÉ/TÈ/ICE TEA/THÉ FUSION/PESCA/ROSA o Estathè è bevanda al tè: categoria juice, mai cola o bibite gassate solo per colore etichetta. Pesto/salsa/BBQ/ketchup/maionese/condimento = sauces_condiments; olio/aceto = oil_vinegar; yogurt/kefir = yogurt; cioccolata/dolci = chocolate_sweets; crema spalmabile = spreads; marmellata/miele = jams_honey; cibo animali = pet_food; bucato/piatti/pulizia/carta casa hanno categorie dedicate; Dexal/Candeggina Delicata/Grandi del risparmio/colori sicuri = prodotto casa/bucato, mai bevanda/succo/tè/verdura; barattolo/vasetto/bottiglia/flacone sono solo confezione, non categoria se il testo dice altro. Schema JSON: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","variant":"","productType":"","packageType":"","estimatedSize":"","sizeDetectedRaw":"","sizeConfidence":0,"quantity":1,"unit":"pz","category":"food","confidence":0.1,"isLiquid":false,"isDamaged":false,"damageType":"","expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"barcode":"","detectedText":[],"visibleEvidence":[],"detailQuestion":"","reason":""}`;
-        primaryRaw = await visionJsonCall('Solo JSON valido. Analisi rapida prodotto.', fastProductPrompt, openAiTeacherImage, {maxTokens:520});
+        primaryRaw = await visionJsonCall('Solo JSON valido. Analisi rapida prodotto.', fastProductPrompt, openAiTeacherImage, {maxTokens:220, stage:'product'});
         detailRaw = null;
       }else if(stageName==='expiry'){
         const expiryPrompt=`OCR mirato SOLO SCADENZA V28.50 PRO. Rispondi SOLO JSON valido. Devi leggere anche date stampate a puntini/dot-matrix sul collo o tappo di bottiglie, tipo 16/08/20, 16/08/2026, 16-08-26, 16.08.26, 160826. Cerca date vicino a: SCAD, Scadenza, EXP, TMC, Da consumarsi entro, Preferibilmente entro, Lotto/L. Se ci sono due righe, la riga con formato data è expiryDate; la riga lunga numerica tipo lotto/batch va in detectedText e NON in expiryDate. Non riscrivere nome/marca/categoria durante scansione scadenza. Se leggi 16/08/20 restituisci expiryDate 16/08/2020 e expiryDetectedRaw 16/08/20. Se non sei sicuro lascia expiryDate vuota ma detectedText deve contenere TUTTI i caratteri letti. Schema: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","estimatedSize":"","expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"detectedText":[],"visibleEvidence":[],"confidence":0.1,"category":"food","reason":""}`;
-        primaryRaw = await visionJsonCall('Solo JSON valido. OCR scadenza.', expiryPrompt, openAiTeacherImage, {maxTokens:340});
+        primaryRaw = await visionJsonCall('Solo JSON valido. OCR scadenza.', expiryPrompt, openAiTeacherImage, {maxTokens:VISION_EXPIRY_MAX_OUTPUT_TOKENS, stage:'expiry'});
         detailRaw = null;
       }else if(stageName==='label'){
         const labelPrompt=`OCR mirato etichetta/ingredienti V28.38. Rispondi SOLO JSON valido e compatto. Concentrati SOLO sul prodotto principale e sulla sua etichetta, ignorando sfondo e oggetti vicini. Leggi con priorità: nome commerciale, marca/logo, variante/gusto, formato/capienza netta, categoria reale, ingredienti, allergeni, possibili tracce, barcode se visibile. detectedText deve contenere le righe/frammenti OCR letti anche se incompleti, senza inventare. Correggi solo errori OCR evidenti: O/0, I/1, l/1, S/5 quando serve per date, capienze e barcode. Se non sei sicuro lascia campo vuoto e spiega cosa rifotografare. Categoria: cola/bibita gassata solo con testo esplicito cola/coca/pepsi/fanta/sprite = soft_drinks; tè/thé/ice tea/the fusion = juice; acqua = water; latte = milk_drinks; yogurt/kefir = yogurt; pesto/salsa/BBQ/ketchup/maionese/sugo = sauces_condiments; crema spalmabile = spreads; olio/aceto = oil_vinegar; candeggina/detersivo/pulizia = cleaning/laundry/dishwashing; Dexal Candeggina Delicata Maxi / candeggina delicata / colori sicuri = laundry o cleaning, mai food/drinks/juice/veg. Schema: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","variant":"","productType":"","packageType":"","estimatedSize":"","sizeDetectedRaw":"","sizeConfidence":0,"category":"food","ingredients":[],"allergens":[],"possibleAllergens":[],"barcode":"","detectedText":[],"visibleEvidence":[],"confidence":0.1,"reason":""}`;
-        primaryRaw = await visionJsonCall('Solo JSON valido. OCR etichetta low-cost.', labelPrompt, openAiTeacherImage, {maxTokens:620});
+        primaryRaw = await visionJsonCall('Solo JSON valido. OCR etichetta low-cost.', labelPrompt, openAiTeacherImage, {maxTokens:VISION_LABEL_MAX_OUTPUT_TOKENS, stage:'label'});
         detailRaw = null;
       }else if(stageName==='barcode'){
         const barcodePrompt=`OCR mirato SOLO codice a barre/EAN/UPC V28.38. Rispondi SOLO JSON valido. Cerca la sequenza numerica sotto o vicino al barcode: 8, 12, 13 o 14 cifre. Rimuovi spazi/trattini/punti e restituisci il codice completo in barcode/ean. Non inventare cifre mancanti. Se trovi testo prodotto collegato al barcode puoi proporre nome, marca, formato e categoria come miglioramento, ma non toccare ingredienti/scadenza. detectedText deve includere anche il numero grezzo letto. Schema: {"needsRetake":false,"needsManual":true,"barcode":"","ean":"","code":"","productCode":"","productName":"","brand":"","estimatedSize":"","category":"food","detectedText":[],"visibleEvidence":[],"confidence":0.1,"reason":""}`;
-        primaryRaw = await visionJsonCall('Solo JSON valido. OCR barcode.', barcodePrompt, openAiTeacherImage, {maxTokens:300});
+        primaryRaw = await visionJsonCall('Solo JSON valido. OCR barcode.', barcodePrompt, openAiTeacherImage, {maxTokens:120, stage:'barcode'});
         detailRaw = null;
       }else{
         // V28.03: anche in auto evito doppia chiamata pesante. Una sola analisi completa compatta.
-        primaryRaw = await visionJsonCall('Rispondi solo con JSON valido. Analisi completa low-cost.', oneShotPrompt, openAiTeacherImage, {maxTokens:760});
+        primaryRaw = await visionJsonCall('Rispondi solo con JSON valido. Analisi completa low-cost.', oneShotPrompt, openAiTeacherImage, {maxTokens:260, stage:'auto'});
         detailRaw = null;
       }
     }catch(firstErr){
       const shortPrompt=`Analizza la foto. Rispondi SOLO JSON. PRIORITÀ: prodotto centrale/più grande; ignora persone, piatti, tavolo, sfondo e oggetti laterali. Riconosci solo prodotti alimentari/casa/farmacia/animali/acquario. Se vedi cane, vestiti, telecomando, TV, mobili o oggetti non consumabili rispondi {"needsRetake":true,"notConsumable":true,"reason":"Oggetto non idoneo","productName":"","confidence":0}. Riconosci prodotto, marca, testo etichetta, capienza, categoria reale, scadenza, danni. Se leggi Dexal, Candeggina Delicata, Grandi del risparmio o colori sicuri è prodotto casa/bucato. Categoria: usa regole realtà professionali v27.96: scegli per prove dell etichetta, non per forma generica; confezione è solo indizio. Bevanda solo se è davvero da bere (acqua, cola, bibita gassata, succo, latte da bere). Se leggi Cola/Coca-Cola/Pepsi/Fanta/Sprite non classificarla come acqua: categoria soft_drinks, unit bt/lattina. Se leggi THE/THÉ/TÈ/ICE TEA/THÉ FUSION/PESCA/ROSA o Estathè è bevanda al tè: categoria juice, mai cola o bibite gassate solo per colore etichetta. Pesto/salsa/BBQ/ketchup/maionese/condimento = sauces_condiments; olio/aceto = oil_vinegar; yogurt/kefir = yogurt; cioccolata/dolci = chocolate_sweets; crema spalmabile = spreads; marmellata/miele = jams_honey; cibo animali = pet_food; bucato/piatti/pulizia/carta casa hanno categorie dedicate; Dexal/Candeggina Delicata/Grandi del risparmio/colori sicuri = prodotto casa/bucato, mai bevanda/succo/tè/verdura; barattolo/vasetto/bottiglia/flacone sono solo confezione, non categoria se il testo dice altro. Non inventare. Se capienza non leggibile lascia estimatedSize "Capienza da confermare". Se è bottiglia d'acqua, productName acqua naturale o acqua in bottiglia, category water, unit bt. Se è Cola/Blues/Pepsi/Fanta/Sprite, category soft_drinks, mai water. Schema: {"needsRetake":false,"needsManual":true,"productName":"","brand":"","variant":"","estimatedSize":"","sizeDetectedRaw":"","sizeConfidence":0,"quantity":1,"unit":"pz","category":"food","confidence":0.1,"isLiquid":false,"isDamaged":false,"damageType":"","expiryDate":"","expiryDetectedRaw":"","expiryConfidence":0,"detectedText":[],"visibleEvidence":[],"detailQuestion":"","reason":""}`;
-      primaryRaw = await visionJsonCall('Solo JSON valido.', shortPrompt, openAiTeacherImage, {maxTokens:560});
+      primaryRaw = await visionJsonCall('Solo JSON valido.', shortPrompt, openAiTeacherImage, {maxTokens:220, stage:'auto'});
       detailRaw = null;
     }
     if(!primaryRaw && !detailRaw) throw new Error('empty_json_from_openai');
@@ -3556,6 +3572,10 @@ const server = http.createServer(async (req,res)=>{
     if((req.method === 'GET' || req.method === 'POST') && (pathName === '/api/ai/openai-check' || pathName === '/ai/openai-check')) {
       const result=await openAiHealthCheckV2836();
       return send(res, result.ok ? 200 : 200, Object.assign({type:'openai-check-v2837'}, result));
+    }
+
+    if(req.method === 'GET' && (pathName === '/api/ai/cost-meter' || pathName === '/ai/cost-meter')) {
+      return send(res, 200, { ok:true, version:'V28.54', costMeter:db.assistantBrain?.proCostMeterV2854||null, generatedAt:Date.now() });
     }
 
     if(req.method === 'GET' && (pathName === '/api/ai/preflight' || pathName === '/ai/preflight')) {
@@ -4885,11 +4905,11 @@ try{
     if(!img || !String(img).startsWith('data:image/')) return null;
     const prompt=`MICRO IDENTIFICAZIONE PRODOTTO V28.50. Rispondi SOLO JSON valido. Usa pochissime parole. Obiettivo: leggere il nome/marca/categoria del prodotto centrale. Non leggere ingredienti/tracce/scadenza. Se il nome non è visibile, lascia productName vuoto. Non inventare da colore o forma. Categoria solo se supportata da etichetta/oggetto evidente. Schema: {"productName":"","brand":"","variant":"","category":"food|drinks|water|soft_drinks|juice|milk_drinks|coffee_tea|yogurt|dairy|sauces_condiments|spreads|pasta_rice|bakery|breakfast_snacks|chocolate_sweets|frozen|meat_deli|fish|fruit|veg|laundry|dishwashing|cleaning|paper_house|personal_care|oral_care|pharmacy|pet_food|pets|aquarium|house","estimatedSize":"","detectedText":[],"visibleEvidence":[],"confidence":0,"reason":""}`;
     try{
-      const raw=await visionJsonCall('Sei un lettore etichetta ultra economico. SOLO JSON valido.', prompt, img, {maxTokens:240});
+      const raw=await visionJsonCall('Sei un lettore etichetta ultra economico. SOLO JSON valido.', prompt, img, {maxTokens:VISION_MICRO_MAX_OUTPUT_TOKENS, stage:'micro'});
       const r=normalizeVisionResult(raw||{});
       const t=norm2850([r.productName,r.brand,r.category,...(r.detectedText||[]),...(r.visibleEvidence||[])].join(' '));
       if(!t || weakIdentity2850(r)) return null;
-      r.proMicroIdentityV2850={used:true, maxTokens:240, policy:'low_token_identity_only_no_ingredients_no_expiry', source:'openai_micro_teacher'};
+      r.proMicroIdentityV2850={used:true, maxTokens:VISION_MICRO_MAX_OUTPUT_TOKENS, policy:'low_token_identity_only_no_ingredients_no_expiry', source:'openai_micro_teacher'};
       return r;
     }catch(err){
       return {proMicroIdentityV2850:{used:false,error:String(err?.message||err).slice(0,160)}};
@@ -4926,9 +4946,14 @@ try{
         let r=await prev.call(this,payload);
         r=applyExpiry2850(r,payload.stage||'auto');
         if(weakIdentity2850(r)){
-          const micro=await microIdentityTeacher2850(payload,r).catch(()=>null);
-          if(micro && !micro.proMicroIdentityV2850?.error) r=mergeMicroIdentity2850(r,micro);
-          else if(micro?.proMicroIdentityV2850) r.proMicroIdentityV2850=micro.proMicroIdentityV2850;
+          // V28.51: niente doppia chiamata OpenAI di default. Se il primo docente ha già girato, non fare il micro-docente extra.
+          if(!VISION_ALLOW_SECOND_OPENAI_PASS && (r.cloudVision || r.visionPipelineV2829?.openAiTeacherImage)){
+            r.proMicroIdentityV2850=Object.assign({}, r.proMicroIdentityV2850||{}, {used:false, blocked:true, reason:'second_openai_pass_blocked_by_v2851_cost_firewall'});
+          }else{
+            const micro=await microIdentityTeacher2850(payload,r).catch(()=>null);
+            if(micro && !micro.proMicroIdentityV2850?.error) r=mergeMicroIdentity2850(r,micro);
+            else if(micro?.proMicroIdentityV2850) r.proMicroIdentityV2850=micro.proMicroIdentityV2850;
+          }
         }
         r.proVisionV2850=Object.assign({}, r.proVisionV2850||{}, {expiryDotMatrix:true, microIdentityTeacher:true, lowTokenPolicy:'micro identity only when local/server identity is weak', noMoneyWaste:'one tiny identity call only if needed; paid external APIs still disabled by default'});
         return r;
@@ -4939,9 +4964,722 @@ try{
   try{
     if(typeof preflightSnapshotV98==='function' && !global.__v2850PreflightWrapped){
       const prev=preflightSnapshotV98;
-      preflightSnapshotV98=function(){ const snap=prev.call(this); snap.version='V28.50'; snap.brain=Object.assign({}, snap.brain||{}, {version:'V28.50', name:'PRO Expiry + Micro Identity Teacher', expiryDotMatrix:true, microIdentityLowToken:true}); return snap; };
+      preflightSnapshotV98=function(){ const snap=prev.call(this); snap.version='V28.52'; snap.brain=Object.assign({}, snap.brain||{}, {version:'V28.52', name:'PRO Cost Firewall + Barcode/OpenFacts/Expiry Safety', expiryDotMatrix:true, microIdentityLowToken:true, costFirewall:true, secondPassAllowed:VISION_ALLOW_SECOND_OPENAI_PASS, visionModel:OPENAI_VISION_MODEL}); return snap; };
       global.__v2850PreflightWrapped=true;
     }
   }catch(_){ }
-  console.log('[Spesa Pronta] V28.50 PRO Expiry + Micro Identity Teacher active');
+  console.log('[Spesa Pronta] V28.51 PRO Cost Firewall + Expiry Safety active');
+})();
+
+
+// =============================================================
+// V28.52 PRO BARCODE + OPEN FACTS LOW COST ROUTING
+// Obiettivo: costi bassi e precisione alta.
+// - Barcode/GTIN validato con checksum GS1 prima di usarlo.
+// - Barcode -> Open Facts family prima di OpenAI.
+// - Etichetta -> Open Facts family quando abbiamo già nome/barcode, senza nuova chiamata OpenAI.
+// - Scadenza -> parser interno più severo: accetta solo pattern data plausibili, non lotti.
+// =============================================================
+(function(){
+  const V='28.52';
+  function digitsV2852(v){ return String(v||'').replace(/\D+/g,''); }
+  function gtinCheckDigitV2852(body){
+    const s=String(body||'').replace(/\D+/g,''); let sum=0;
+    for(let i=s.length-1, pos=0; i>=0; i--, pos++) sum += Number(s[i]) * (pos%2===0 ? 3 : 1);
+    return String((10 - (sum % 10)) % 10);
+  }
+  function validGtinV2852(code){
+    const s=digitsV2852(code);
+    if(!/^(\d{8}|\d{12}|\d{13}|\d{14})$/.test(s)) return false;
+    if(/^(\d)\1+$/.test(s)) return false;
+    return gtinCheckDigitV2852(s.slice(0,-1)) === s.slice(-1);
+  }
+  function barcodeCandidatesV2852(...parts){
+    const raw=parts.flatMap(p=>Array.isArray(p)?p:[p]).filter(Boolean).join(' ');
+    const out=[]; const re=/(?:^|\D)(\d[\d\s.\-]{6,20}\d)(?!\d)/g; let m;
+    while((m=re.exec(raw))){ const c=digitsV2852(m[1]); if(c.length>=8&&c.length<=14&&!/^0+$/.test(c)) out.push(c); }
+    const unique=[...new Set(out)];
+    const valid=unique.filter(validGtinV2852);
+    return valid.length ? valid : [];
+  }
+  function allOpenFactsSourcesV2852(preferredCat=''){
+    const seen=new Set(); const arr=[];
+    const add=(s)=>{ if(s&&s.id&&!seen.has(s.id)){ seen.add(s.id); arr.push(s); } };
+    try{ add(openFactsSourceForCategory(preferredCat)); }catch(_){ }
+    add({id:'open_food_facts', label:'Open Food Facts', base:'https://world.openfoodfacts.org'});
+    add({id:'open_products_facts', label:'Open Products Facts', base:'https://world.openproductsfacts.org'});
+    add({id:'open_beauty_facts', label:'Open Beauty Facts', base:'https://world.openbeautyfacts.org'});
+    add({id:'open_pet_food_facts', label:'Open Pet Food Facts', base:'https://world.openpetfoodfacts.org'});
+    return arr;
+  }
+  async function lookupBarcodeOpenFactsV2852(barcode, context={}){
+    const code=digitsV2852(barcode);
+    if(!validGtinV2852(code)) return {ok:false, reason:'invalid_gtin_checksum', barcode:code};
+    const cacheKey='v2852|barcode|'+code+'|'+String(context.category||'');
+    try{ const cached=getKnowledgeCache(cacheKey); if(cached) return Object.assign({cacheHit:true}, cached); }catch(_){ }
+    const sources=allOpenFactsSourcesV2852(context.category||'');
+    const attempts=[];
+    for(const source of sources){
+      try{
+        const product=await fetchOpenFactsByBarcode(source, code);
+        attempts.push({source:source.id, hit:!!product});
+        if(product){
+          const k=mapOpenFactsProduct(Object.assign({}, product, {code: product.code || code}), Object.assign({}, context, {barcode:code}), source);
+          k.matchScore=10; k.confidence=.98; k.barcodeVerified=true; k.code=code;
+          const row={ok:true, barcode:code, source:source.id, sourceLabel:source.label, knowledge:k, attempts, updatedAt:Date.now()};
+          try{ setKnowledgeCache(cacheKey,row); }catch(_){ }
+          return row;
+        }
+      }catch(err){ attempts.push({source:source.id, hit:false, error:String(err?.message||err).slice(0,80)}); }
+    }
+    const miss={ok:false, barcode:code, reason:'barcode_not_found_in_open_facts_family', attempts, updatedAt:Date.now()};
+    try{ setKnowledgeCache(cacheKey,miss); }catch(_){ }
+    return miss;
+  }
+  function resultFromOpenFactsV2852(lookup={}, stage='barcode'){
+    const k=lookup.knowledge||{};
+    const category=k.category || (stage==='barcode'?'food':'');
+    return {
+      needsRetake:false, needsManual:true, shouldAskConfirmation:true,
+      productName:k.productName||'', brand:k.brand||'', estimatedSize:k.quantity||'', sizeDetectedRaw:k.quantity||'',
+      category:category||'food', quantity:1, unit:k.quantity ? 'conf' : 'pz', barcode:lookup.barcode||k.code||'', ean:lookup.barcode||k.code||'',
+      confidence:k.productName ? .96 : .72,
+      ingredients:k.ingredients||[], allergens:k.allergens||[], possibleAllergens:k.traces||[], nutrition:k.nutrition||{},
+      detectedText:[lookup.barcode||k.code||'', k.productName||'', k.brand||'', k.quantity||'', k.sourceLabel||lookup.sourceLabel||''].filter(Boolean),
+      visibleEvidence:[`Barcode verificato checksum: ${lookup.barcode||k.code||''}`, `${lookup.sourceLabel||k.sourceLabel||'Open Facts'}: ${[k.productName,k.brand,k.quantity].filter(Boolean).join(' · ')}`].filter(Boolean),
+      cloudVision:false, cloudOffline:false, cloudFallback:false, localFirst:true, memoryVision:false,
+      reason: k.productName ? 'Barcode verificato: dati recuperati da Open Facts senza spendere OpenAI.' : 'Barcode valido letto: prodotto da confermare manualmente.',
+      knowledgeFeeder:{enriched:!!k.productName, source:k.source||lookup.source, sourceLabel:k.sourceLabel||lookup.sourceLabel, confidence:k.confidence||.98, category:k.category||'', code:lookup.barcode||k.code||'', barcodeVerified:true},
+      productMemory:{barcode:lookup.barcode||k.code||'', productName:k.productName||'', brand:k.brand||'', format:k.quantity||'', category:k.category||'', ingredients:k.ingredients||[], allergens:k.allergens||[], possibleTraces:k.traces||[], nutrition:k.nutrition||{}, externalKnowledge:k},
+      barcodeAnalysisV2852:{ok:true, validChecksum:true, source:lookup.source, attempts:lookup.attempts||[], policy:'barcode_gtin_checksum_then_open_facts_no_openai'}
+    };
+  }
+  async function lowCostLabelFactsV2852(payload={}){
+    const lg=payload.localGuess||{};
+    const context={
+      productName:lg.productName||lg.name||'', brand:lg.brand||'', size:lg.estimatedSize||lg.size||lg.format||'', category:lg.category||'',
+      barcode:lg.barcode||lg.ean||lg.code||lg.productCode||''
+    };
+    const bc=barcodeCandidatesV2852(context.barcode, ...(Array.isArray(lg.detectedText)?lg.detectedText:[]), ...(Array.isArray(lg.visibleEvidence)?lg.visibleEvidence:[]))[0]||'';
+    if(bc){
+      const lookup=await lookupBarcodeOpenFactsV2852(bc, context);
+      if(lookup.ok) return resultFromOpenFactsV2852(lookup,'label');
+      return {needsRetake:false, needsManual:true, shouldAskConfirmation:true, productName:context.productName||'', brand:context.brand||'', estimatedSize:context.size||'', category:context.category||'food', barcode:bc, ean:bc, confidence:.55, cloudVision:false, localFirst:true, reason:'Barcode valido ma non trovato nelle API Open Facts: completa/controlla manualmente.', barcodeAnalysisV2852:lookup};
+    }
+    if((context.productName||context.brand) && typeof enrichConfirmedProductWithKnowledge==='function'){
+      const enriched=await enrichConfirmedProductWithKnowledge(Object.assign({}, context, {productName:context.productName, brand:context.brand, category:context.category||'food'})).catch(()=>null);
+      if(enriched?.knowledge){
+        const c=enriched.confirmed||{}; const k=enriched.knowledge||{};
+        return {needsRetake:false, needsManual:true, shouldAskConfirmation:true, productName:c.productName||k.productName||context.productName, brand:c.brand||k.brand||context.brand, estimatedSize:c.size||k.quantity||context.size, category:c.category||k.category||context.category||'food', confidence:.82, ingredients:c.productMemory?.ingredients||k.ingredients||[], allergens:c.productMemory?.allergens||k.allergens||[], possibleAllergens:k.traces||[], nutrition:c.productMemory?.nutrition||k.nutrition||{}, detectedText:[context.productName,context.brand,k.productName,k.brand,k.quantity].filter(Boolean), visibleEvidence:[`${k.sourceLabel||'Open Facts'}: ${[k.productName,k.brand,k.quantity].filter(Boolean).join(' · ')}`], cloudVision:false, localFirst:true, reason:'Etichetta arricchita da Open Facts tramite nome/marca già noti, senza OpenAI.', knowledgeFeeder:c.knowledgeFeeder||{enriched:true,source:k.source,sourceLabel:k.sourceLabel}};
+      }
+    }
+    return {needsRetake:false, needsManual:true, shouldAskConfirmation:true, productName:context.productName||'', brand:context.brand||'', estimatedSize:context.size||'', category:context.category||'food', confidence:.42, cloudVision:false, localFirst:true, reason:'Etichetta non mandata a OpenAI: servono nome o barcode per interrogare Open Facts a costo basso.', proLabelV2852:{noOpenAI:true, reason:'missing_name_or_barcode_for_open_facts'}};
+  }
+  function expiryFromEvidenceV2852(r={}){
+    const fields=[r.expiryDate,r.expiryDetectedRaw,r.reason,r.detailQuestion]
+      .concat(Array.isArray(r.detectedText)?r.detectedText:[])
+      .concat(Array.isArray(r.visibleEvidence)?r.visibleEvidence:[])
+      .filter(Boolean);
+    const text=fields.join(' · ').replace(/[Oo]/g,'0').replace(/[Il|]/g,'1').replace(/[‚·•]/g,'.');
+    const out=[];
+    const add=(raw,d,m,y,conf)=>{ d=Number(d); m=Number(m); y=String(y); if(y.length===2) y=(Number(y)<70?'20':'19')+y; y=Number(y); if(d>=1&&d<=31&&m>=1&&m<=12&&y>=2000&&y<=2055) out.push({raw:String(raw).trim(), text:`${String(d).padStart(2,'0')}/${String(m).padStart(2,'0')}/${y}`, confidence:conf}); };
+    for(const m of text.matchAll(/(?:scad(?:enza)?|exp|tmc|entro|bb|best before)?\s*([^0-9]|^)([0-3]?\d)\s*[\/\.\-]\s*([01]?\d)\s*[\/\.\-]\s*(\d{2,4})(?!\d)/gi)) add(m[0],m[2],m[3],m[4],/scad|exp|tmc|entro|best/i.test(m[0])?.97:.9);
+    for(const m of text.matchAll(/(?:scad(?:enza)?|exp|tmc|entro|bb|best before)\s*(\d{2})(\d{2})(\d{2,4})/gi)) add(m[0],m[1],m[2],m[3],.82);
+    out.sort((a,b)=>b.confidence-a.confidence);
+    return out[0]||null;
+  }
+  try{
+    if(typeof visionAnalyze==='function' && !global.__v2852VisionAnalyzeWrapped){
+      const prev=visionAnalyze;
+      visionAnalyze=async function(payload={}){
+        const stage=String(payload.stage||'auto').toLowerCase();
+        const lg=payload.localGuess||{};
+        const bc=barcodeCandidatesV2852(lg.barcode,lg.ean,lg.code,lg.productCode, ...(Array.isArray(lg.detectedText)?lg.detectedText:[]), ...(Array.isArray(lg.visibleEvidence)?lg.visibleEvidence:[]))[0]||'';
+        if(stage==='barcode' && bc){
+          const lookup=await lookupBarcodeOpenFactsV2852(bc, lg);
+          if(lookup.ok) return resultFromOpenFactsV2852(lookup,'barcode');
+          return {needsRetake:false, needsManual:true, shouldAskConfirmation:true, barcode:bc, ean:bc, productName:lg.productName||'', brand:lg.brand||'', estimatedSize:lg.estimatedSize||lg.size||'', category:lg.category||'food', confidence:.58, cloudVision:false, localFirst:true, reason:'Barcode valido letto dal dispositivo, ma non trovato nelle API Open Facts. Controlla manualmente.', barcodeAnalysisV2852:lookup};
+        }
+        if(stage==='label' || stage==='ingredients'){
+          const low=await lowCostLabelFactsV2852(payload).catch(()=>null);
+          if(low && (low.knowledgeFeeder?.enriched || low.barcode || low.proLabelV2852)) return low;
+        }
+        let r=await prev.call(this,payload);
+        const found=barcodeCandidatesV2852(r.barcode,r.ean,r.code,r.productCode, ...(Array.isArray(r.detectedText)?r.detectedText:[]), ...(Array.isArray(r.visibleEvidence)?r.visibleEvidence:[]))[0]||'';
+        if(found){
+          const lookup=await lookupBarcodeOpenFactsV2852(found, r).catch(()=>null);
+          if(lookup?.ok){
+            const bres=resultFromOpenFactsV2852(lookup,stage);
+            r=Object.assign({}, r, bres, {detectedText:[...(r.detectedText||[]),...(bres.detectedText||[])].filter(Boolean).slice(0,24), visibleEvidence:[...(r.visibleEvidence||[]),...(bres.visibleEvidence||[])].filter(Boolean).slice(0,24), confidence:Math.max(Number(r.confidence||0), Number(bres.confidence||0))});
+          }else{
+            r.barcode=found; r.ean=found; r.barcodeAnalysisV2852=lookup||{ok:false,barcode:found,reason:'lookup_failed'};
+          }
+        }else if(r.barcode || r.ean || r.code || r.productCode){
+          r.barcodeAnalysisV2852={ok:false, validChecksum:false, reason:'barcode_rejected_invalid_checksum', raw:[r.barcode,r.ean,r.code,r.productCode].filter(Boolean).join(' ')};
+          r.barcode=''; r.ean='';
+        }
+        if(stage==='expiry'){
+          const exp=expiryFromEvidenceV2852(r);
+          if(exp && (!r.expiryDate || exp.confidence>=Number(r.expiryConfidence||0))){ r.expiryDate=exp.text; r.expiryDetectedRaw=exp.raw; r.expiryConfidence=exp.confidence; r.proExpiryV2852={ok:true, internalParser:true, raw:exp.raw, expiryDate:exp.text, confidence:exp.confidence}; }
+          else r.proExpiryV2852=Object.assign({}, r.proExpiryV2852||{}, {ok:!!r.expiryDate, internalParser:true, policy:'accetta solo date plausibili, non lotti/batch'});
+        }
+        r.proVisionV2852=Object.assign({}, r.proVisionV2852||{}, {costPlan:'product_openai_240_max; label_open_facts_when_identity_exists; expiry_internal_parser_plus_optional_low_token; barcode_gtin_checksum_open_facts_first', openAiWasteGuard:true});
+        return r;
+      };
+      global.__v2852VisionAnalyzeWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof preflightSnapshotV98==='function' && !global.__v2852PreflightWrapped){
+      const prev=preflightSnapshotV98;
+      preflightSnapshotV98=function(){ const snap=prev.call(this); snap.version='V28.52'; snap.brain=Object.assign({}, snap.brain||{}, {version:'V28.52', name:'PRO Barcode + Open Facts Low Cost Routing', barcode:'GTIN checksum + Open Facts first', label:'Open Facts when identity/barcode exists, no automatic OpenAI label spend', expiry:'internal date parser + skip expiry button'}); return snap; };
+      global.__v2852PreflightWrapped=true;
+    }
+  }catch(_){ }
+  console.log('[Spesa Pronta] V28.52 PRO Barcode/OpenFacts/Expiry low-cost routing active');
+})();
+
+
+// =============================================================
+// V28.53 PRO EXTERNAL KNOWLEDGE -> SERVER MEMORY LEARNING LOOP
+// Obiettivo: quando il server consulta Open Facts / fonti esterne non deve solo "guardare".
+// Deve trasformare il risultato utile in memoria interna DOPO conferma utente/titolare:
+// - foto riferimento API salvata nella cartella oggetto;
+// - firma visiva semantica da nome/marca/barcode/categoria/fonte;
+// - fonti e candidati ispezionabili nel Cervello Server;
+// - barcode senza nome -> lookup API prima di perdere l'apprendimento.
+// =============================================================
+(function(){
+  const V='28.53';
+  const EXTERNAL_KNOWLEDGE_LEARNING_ENABLED = String(process.env.EXTERNAL_KNOWLEDGE_LEARNING_ENABLED || 'true').toLowerCase() !== 'false';
+  const EXTERNAL_REFERENCE_IMAGE_ENABLED = String(process.env.EXTERNAL_REFERENCE_IMAGE_ENABLED || 'true').toLowerCase() !== 'false';
+
+  function v2853GtinCheckDigit(body=''){
+    const digits=String(body||'').replace(/\D+/g,'');
+    let sum=0;
+    for(let i=digits.length-1,pos=0;i>=0;i--,pos++) sum += Number(digits[i]) * (pos%2===0 ? 3 : 1);
+    return String((10 - (sum % 10)) % 10);
+  }
+  function v2853ValidGtin(code=''){
+    const s=String(code||'').replace(/\D+/g,'');
+    if(!/^(\d{8}|\d{12}|\d{13}|\d{14})$/.test(s)) return false;
+    if(/^(\d)\1+$/.test(s)) return false;
+    return v2853GtinCheckDigit(s.slice(0,-1)) === s.slice(-1);
+  }
+
+  function v2853CleanUrl(v=''){
+    const s=String(v||'').trim();
+    if(!s || !/^https?:\/\//i.test(s) || s.length>1400 || /[<>"']/g.test(s)) return '';
+    return s;
+  }
+  function v2853List(...xs){
+    try{ return v2840List(...xs); }catch(_){ return xs.flatMap(x=>Array.isArray(x)?x:String(x||'').split(/[;,\n]+/)).map(x=>String(x||'').trim()).filter(Boolean); }
+  }
+  function v2853Clean(v='',n=180){
+    try{ return v2840CleanString(v,n); }catch(_){ return String(v||'').trim().slice(0,n); }
+  }
+  function v2853ReferenceFromKnowledge(k={}, reason='open_facts_lookup'){
+    const imageUrl=v2853CleanUrl(k.imageUrl||k.image_front_url||k.image_url||'');
+    return {
+      version:'V28.53_external_reference',
+      role:'api_reference_product',
+      source:v2853Clean(k.source||'',80),
+      sourceLabel:v2853Clean(k.sourceLabel||k.source||'Fonte prodotto esterna',120),
+      reason,
+      code:v2853Clean(k.code||k.barcode||'',32),
+      productName:v2853Clean(k.productName||'',160),
+      brand:v2853Clean(k.brand||'',120),
+      quantity:v2853Clean(k.quantity||k.format||'',80),
+      category:v2853Clean(k.category||'',80),
+      imageUrl,
+      confidence:k.confidence ?? null,
+      matchScore:k.matchScore ?? null,
+      barcodeVerified:!!k.barcodeVerified,
+      fetchedAt:Number(k.fetchedAt||Date.now()),
+      importedAt:Date.now()
+    };
+  }
+  function v2853SignatureParts(confirmed={}, ref={}){
+    const pm=confirmed.productMemory||{};
+    return [
+      ref.productName, ref.brand, ref.quantity, ref.category, ref.code, ref.sourceLabel,
+      confirmed.productName, confirmed.brand, confirmed.size, confirmed.format, confirmed.category, confirmed.barcode,
+      pm.productName, pm.brand, pm.format, pm.category, pm.barcode,
+      ...(confirmed.detectedText||[]), ...(confirmed.visibleEvidence||[]),
+      ...(pm.ingredients||[]).slice(0,12), ...(pm.allergens||[]).slice(0,10)
+    ].filter(Boolean).join(' ');
+  }
+  function v2853SemanticVisualSignature(confirmed={}, ref={}){
+    const raw=v2853SignatureParts(confirmed,ref);
+    const tokens=(typeof productCoreTokens==='function'?productCoreTokens(raw):raw.toLowerCase().split(/\W+/)).filter(Boolean).slice(0,24);
+    const hash=(typeof hashStable==='function'?hashStable(raw):String(Math.abs(raw.split('').reduce((a,c)=>((a<<5)-a+c.charCodeAt(0))|0,0)))).slice(0,18);
+    return `extsig:${hash}:${tokens.join('|')}`.slice(0,260);
+  }
+  function v2853SemanticMatchScore(confirmed={}, ref={}){
+    const a=(typeof productStrongTokens==='function'?productStrongTokens([confirmed.productName,confirmed.brand,confirmed.size,confirmed.category,(confirmed.detectedText||[]).join(' '),(confirmed.visibleEvidence||[]).join(' ')].join(' ')):[]);
+    const b=(typeof productStrongTokens==='function'?productStrongTokens([ref.productName,ref.brand,ref.quantity,ref.category,ref.code].join(' ')):[]);
+    let overlap=0;
+    try{ overlap=tokenJaccard(a,b); }catch(_){
+      const A=new Set(a), B=new Set(b); const inter=[...A].filter(x=>B.has(x)).length; const uni=new Set([...A,...B]).size||1; overlap=inter/uni;
+    }
+    let score=overlap;
+    if(ref.code && String(ref.code)===String(bestBarcodeFromConfirmed(confirmed)||'')) score=Math.max(score,.98);
+    if(ref.barcodeVerified) score=Math.max(score,.94);
+    if(ref.brand && confirmed.brand && normalizeText(ref.brand)===normalizeText(confirmed.brand)) score=Math.max(score,.72);
+    return Number(Math.max(0,Math.min(.99,score)).toFixed(3));
+  }
+  function v2853DedupeRefs(refs=[]){
+    const out=[]; const seen=new Set();
+    for(const r of refs||[]){
+      if(!r) continue;
+      const key=[r.source||'',r.code||'',r.imageUrl||'',normalizeText([r.productName,r.brand,r.quantity].filter(Boolean).join(' '))].join('|');
+      if(seen.has(key)) continue; seen.add(key); out.push(r);
+    }
+    return out.slice(0,18);
+  }
+  function v2853EnrichConfirmedWithReference(confirmed={}, knowledge=null, reason='external_lookup'){
+    if(!EXTERNAL_KNOWLEDGE_LEARNING_ENABLED) return confirmed;
+    const k=knowledge || confirmed.knowledgeFeeder?.knowledge || confirmed.productMemory?.externalKnowledge || null;
+    if(!k) return confirmed;
+    const ref=v2853ReferenceFromKnowledge(k, reason);
+    if(!ref.productName && !ref.brand && !ref.code && !ref.imageUrl) return confirmed;
+    const out=Object.assign({}, confirmed);
+    const pm=Object.assign({}, out.productMemory||{});
+    const sig=v2853SemanticVisualSignature(out, ref);
+    const semanticScore=v2853SemanticMatchScore(out, ref);
+    pm.externalKnowledge=Object.assign({}, pm.externalKnowledge||{}, k, {
+      productName:k.productName||pm.externalKnowledge?.productName||'',
+      brand:k.brand||pm.externalKnowledge?.brand||'',
+      quantity:k.quantity||pm.externalKnowledge?.quantity||'',
+      category:k.category||pm.externalKnowledge?.category||'',
+      imageUrl:ref.imageUrl||pm.externalKnowledge?.imageUrl||'',
+      referenceLearned:true,
+      learnedBy:'V28.53_external_knowledge_loop',
+      semanticVisualScore:semanticScore
+    });
+    pm.externalReferences=v2853DedupeRefs([...(pm.externalReferences||[]), ref]);
+    pm.externalReferenceImages=v2853DedupeRefs([...(pm.externalReferenceImages||[]), ref].filter(x=>x.imageUrl));
+    pm.referenceImageUrl = pm.referenceImageUrl || ref.imageUrl || '';
+    pm.imageUrl = pm.imageUrl || ref.imageUrl || '';
+    pm.visualSignature = pm.visualSignature || sig;
+    pm.referenceVisualSignature = sig;
+    pm.referenceVisualMatch = {semanticScore, mode:'semantic_identity_plus_barcode', imagePixelComparison:false, note:'Foto riferimento API salvata; confronto pixel/embedding demandato a Home Brain/API visuale opzionale.'};
+    const sample={
+      kind:'external_reference',
+      externalUrl:ref.imageUrl,
+      visualSignature:sig,
+      colors:[],
+      visibleEvidence:[`${ref.sourceLabel||ref.source}: ${[ref.productName,ref.brand,ref.quantity].filter(Boolean).join(' · ')}`, ref.code?`Barcode/API code: ${ref.code}`:''].filter(Boolean),
+      detectedText:[ref.productName,ref.brand,ref.quantity,ref.category,ref.code].filter(Boolean),
+      source:'external_api_reference_v2853',
+      score: ref.barcodeVerified ? 96 : Math.round(70 + semanticScore*20)
+    };
+    if(ref.imageUrl && EXTERNAL_REFERENCE_IMAGE_ENABLED){
+      out.photoSamples=[...(Array.isArray(out.photoSamples)?out.photoSamples:[]), sample].slice(0,18);
+      pm.photoSamples=[...(Array.isArray(pm.photoSamples)?pm.photoSamples:[]), sample].slice(0,18);
+      pm.objectFolder=Object.assign({}, pm.objectFolder||{}, {photos:[...(pm.objectFolder?.photos||[]), sample].slice(0,18)});
+    }
+    out.productMemory=pm;
+    out.imageUrl = out.imageUrl || ref.imageUrl || '';
+    out.visualSignature = out.visualSignature || sig;
+    out.visibleEvidence=v2853List(out.visibleEvidence, `Fonte esterna salvata nel cervello: ${ref.sourceLabel||ref.source}`, ref.imageUrl?'Foto riferimento API collegata':'').slice(0,30);
+    out.detectedText=v2853List(out.detectedText, ref.productName, ref.brand, ref.quantity, ref.code).slice(0,30);
+    out.knowledgeFeeder=Object.assign({}, out.knowledgeFeeder||{}, {
+      enriched:true,
+      source:ref.source||out.knowledgeFeeder?.source||'',
+      sourceLabel:ref.sourceLabel||out.knowledgeFeeder?.sourceLabel||'',
+      confidence:ref.confidence||out.knowledgeFeeder?.confidence||null,
+      category:ref.category||out.knowledgeFeeder?.category||'',
+      code:ref.code||out.knowledgeFeeder?.code||'',
+      externalReferenceImage:ref.imageUrl||'',
+      referenceLearning:true,
+      semanticVisualScore:semanticScore,
+      policy:'external_api_proposes; user_or_owner_confirmation_turns_it_into_server_memory'
+    });
+    out.externalLearningV2853={active:true, pendingUntilUserConfirmation:true, reference:ref, semanticVisualSignature:sig, semanticVisualScore:semanticScore, policy:'API esterna propone dati/foto; conferma utente/titolare rende memoria ufficiale.'};
+    return out;
+  }
+  function v2853FinalizeRecord(record={}, confirmed={}){
+    if(!record || !EXTERNAL_KNOWLEDGE_LEARNING_ENABLED) return record;
+    const refs=v2853DedupeRefs(v2853List(record.externalReferences, confirmed.productMemory?.externalReferences, confirmed.productMemory?.externalReferenceImages).map(x=>typeof x==='object'?x:null).filter(Boolean));
+    // v2840List converte oggetti in stringhe, quindi ricostruisci dai campi diretti se necessario.
+    const direct=[];
+    for(const r of [ ...(record.externalReferences||[]), ...(confirmed.productMemory?.externalReferences||[]), ...(confirmed.productMemory?.externalReferenceImages||[]) ]) if(r&&typeof r==='object') direct.push(r);
+    const pmK=confirmed.productMemory?.externalKnowledge;
+    if(pmK && typeof pmK==='object') direct.push(v2853ReferenceFromKnowledge(pmK,'confirmed_external_knowledge'));
+    record.externalReferences=v2853DedupeRefs([...(record.externalReferences||[]), ...direct]);
+    record.externalReferenceImages=record.externalReferences.filter(r=>r.imageUrl).slice(0,12);
+    record.externalKnowledge=Object.assign({}, record.externalKnowledge||{}, pmK&&typeof pmK==='object'?pmK:{});
+    record.referenceVisualSignatures=Array.isArray(record.referenceVisualSignatures)?record.referenceVisualSignatures:[];
+    const ref=record.externalReferences[0]||null;
+    if(ref){
+      const sig=v2853SemanticVisualSignature(confirmed, ref);
+      if(!record.referenceVisualSignatures.find(x=>x.signature===sig)) record.referenceVisualSignatures.unshift({signature:sig, at:Date.now(), source:'external_reference_v2853', sourceLabel:ref.sourceLabel||ref.source||'', imageUrl:ref.imageUrl||''});
+      record.referenceVisualSignatures=record.referenceVisualSignatures.slice(0,18);
+      record.visualComparisonV2853={status:'reference_saved', semanticVisualScore:v2853SemanticMatchScore(confirmed,ref), referenceSource:ref.sourceLabel||ref.source||'', referenceImageUrl:ref.imageUrl||'', policy:'server memory can compare against this reference later; owner values still win'};
+      record.sources=Object.assign({}, record.sources||{}, {externalKnowledgeReference:Number(record.sources?.externalKnowledgeReference||0)+1});
+    }
+    try{ v2842MergeObjectFolder(record, confirmed); }catch(_){ }
+    try{ v2840AttachMemoryCard(record, confirmed); }catch(_){ }
+    if(record.memoryCard){
+      record.memoryCard.externalLearning={version:'V28.53', references:record.externalReferences||[], referenceImages:record.externalReferenceImages||[], visualComparison:record.visualComparisonV2853||null, policy:'fonti esterne + foto riferimento diventano memoria solo dopo conferma'};
+    }
+    updateGlobalLearningAudit({type:'external-reference-learned-v2853', key:record.key||'', productName:record.productName||'', brand:record.brand||'', references:(record.externalReferences||[]).length, images:(record.externalReferenceImages||[]).length});
+    return record;
+  }
+  async function v2853LookupBarcodeAllOpenFacts(barcode, context={}){
+    const code=String(barcode||'').replace(/\D+/g,'');
+    if(!v2853ValidGtin(code)) return null;
+    const sources=[]; const seen=new Set();
+    const add=s=>{ if(s&&s.id&&!seen.has(s.id)){ seen.add(s.id); sources.push(s); } };
+    try{ add(openFactsSourceForCategory(context.category||'')); }catch(_){ }
+    add({id:'open_food_facts', label:'Open Food Facts', base:'https://world.openfoodfacts.org'});
+    add({id:'open_products_facts', label:'Open Products Facts', base:'https://world.openproductsfacts.org'});
+    add({id:'open_beauty_facts', label:'Open Beauty Facts', base:'https://world.openbeautyfacts.org'});
+    add({id:'open_pet_food_facts', label:'Open Pet Food Facts', base:'https://world.openpetfoodfacts.org'});
+    for(const source of sources){
+      try{
+        const p=await fetchOpenFactsByBarcode(source, code);
+        if(p) return Object.assign(mapOpenFactsProduct(Object.assign({},p,{code:p.code||code}), Object.assign({},context,{barcode:code}), source), {barcodeVerified:true, confidence:.98, matchScore:10, code});
+      }catch(_){ }
+    }
+    return null;
+  }
+  try{
+    if(typeof mergeExternalKnowledgeIntoConfirmed==='function' && !global.__v2853MergeExternalWrapped){
+      const prevMerge=mergeExternalKnowledgeIntoConfirmed;
+      mergeExternalKnowledgeIntoConfirmed=function(confirmed={}, knowledge=null){
+        const out=prevMerge.call(this, confirmed, knowledge);
+        return v2853EnrichConfirmedWithReference(out, knowledge, 'merge_external_knowledge');
+      };
+      global.__v2853MergeExternalWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof upsertGlobalProductMemory==='function' && !global.__v2853UpsertWrapped){
+      const prevUpsert=upsertGlobalProductMemory;
+      upsertGlobalProductMemory=function(confirmed={}){
+        const enriched=v2853EnrichConfirmedWithReference(confirmed, null, 'upsert_confirmed_memory');
+        const compact=prevUpsert.call(this, enriched);
+        try{
+          const g=db.assistantBrain.globalProductMemory||{products:{}};
+          const record=compact?.key ? g.products[compact.key] : null;
+          if(record){ v2853FinalizeRecord(record,enriched); record.updatedAt=Date.now(); g.products[record.key]=record; g.updatedAt=Date.now(); return compactGlobalProductRecord(record); }
+        }catch(e){ updateGlobalLearningAudit({type:'external-reference-finalize-error-v2853', reason:String(e?.message||e).slice(0,180)}); }
+        return compact;
+      };
+      global.__v2853UpsertWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof learnAutonomyOnServer==='function' && !global.__v2853LearnWrapped){
+      const prevLearn=learnAutonomyOnServer;
+      learnAutonomyOnServer=async function(h,payload={}){
+        try{
+          let c=Object.assign({}, payload.confirmed||{});
+          const barcode=(typeof bestBarcodeFromConfirmed==='function'?bestBarcodeFromConfirmed(c):'');
+          if(barcode && !c.productName){
+            const k=await v2853LookupBarcodeAllOpenFacts(barcode,c).catch(()=>null);
+            if(k){ c=mergeExternalKnowledgeIntoConfirmed(Object.assign({},c,{barcode}),k); }
+          } else if(c.productMemory?.externalKnowledge){
+            c=v2853EnrichConfirmedWithReference(c,c.productMemory.externalKnowledge,'learn_confirmed_existing_external');
+          }
+          payload.confirmed=c;
+        }catch(e){ updateGlobalLearningAudit({type:'external-reference-learn-pre-error-v2853', reason:String(e?.message||e).slice(0,180)}); }
+        return prevLearn.call(this,h,payload);
+      };
+      global.__v2853LearnWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof preflightSnapshotV98==='function' && !global.__v2853PreflightWrapped){
+      const prev=preflightSnapshotV98;
+      preflightSnapshotV98=function(){
+        const snap=prev.call(this);
+        snap.version='V28.53';
+        snap.brain=Object.assign({}, snap.brain||{}, {
+          version:'V28.53',
+          name:'PRO External Knowledge Learning Loop',
+          externalKnowledgeLearning:EXTERNAL_KNOWLEDGE_LEARNING_ENABLED,
+          referenceImages:EXTERNAL_REFERENCE_IMAGE_ENABLED,
+          policy:'Open Facts/API/web propone dati e foto; conferma utente/titolare trasforma tutto in cartella oggetto server.'
+        });
+        return snap;
+      };
+      global.__v2853PreflightWrapped=true;
+    }
+  }catch(_){ }
+  console.log('[Spesa Pronta] V28.53 PRO external knowledge -> server memory learning loop active');
+})();
+
+
+// =============================================================
+// V28.54 PRO COST METER + SEMANTIC VISUAL SIGNATURE CORE
+// Obiettivo:
+// - vedere chiaramente dove si spende: OpenAI vs API gratuite Open Facts vs memoria server.
+// - trasformare ogni fonte esterna confermata in una firma visiva semantica leggibile.
+// - non usare ingredienti/tracce/colore come identità primaria del prodotto.
+// =============================================================
+(function(){
+  const V='28.54';
+  function v2854Now(){ return Date.now(); }
+  function v2854Short(v,n=180){ return String(v==null?'':v).replace(/\s+/g,' ').trim().slice(0,n); }
+  function v2854KbFromImage(data=''){
+    const s=String(data||'');
+    if(!s.startsWith('data:image/')) return 0;
+    const b64=s.split(',')[1]||'';
+    return Math.round((b64.length*0.75)/1024);
+  }
+  function v2854EnsureMeter(){
+    ensureDbShape();
+    const b=db.assistantBrain=db.assistantBrain||{};
+    const m=b.proCostMeterV2854=b.proCostMeterV2854||{
+      version:'V28.54',
+      policy:'OpenAI solo se memoria/barcode/Open Facts non bastano. Open Facts e checksum barcode sono segnati come costo token zero.',
+      openAiCalls:0, openAiFailures:0, openAiMaxTokensRequested:0, openAiPromptChars:0, openAiImageKB:0,
+      openFactsCalls:0, openFactsHits:0, openFactsMisses:0, openFactsFailures:0,
+      barcodeLookups:0, barcodeValidations:0, freeLookups:0,
+      byStage:{}, bySource:{}, last:[], updatedAt:0
+    };
+    m.byStage=m.byStage||{}; m.bySource=m.bySource||{}; m.last=Array.isArray(m.last)?m.last:[];
+    return m;
+  }
+  function v2854StageInc(m,stage,field){
+    stage=v2854Short(stage||'auto',40); m.byStage[stage]=m.byStage[stage]||{openAi:0, openFacts:0, hits:0, failures:0, imageKB:0, maxTokens:0};
+    m.byStage[stage][field]=Number(m.byStage[stage][field]||0)+1;
+  }
+  function v2854SourceInc(m,source,field){
+    source=v2854Short(source||'unknown',60); m.bySource[source]=m.bySource[source]||{calls:0,hits:0,misses:0,failures:0};
+    m.bySource[source][field]=Number(m.bySource[source][field]||0)+1;
+  }
+  function v2854Record(type,data={}){
+    try{
+      const m=v2854EnsureMeter();
+      const ev=Object.assign({at:v2854Now(), type, version:'V28.54'}, data||{});
+      if(type==='openai_vision'){
+        m.openAiCalls++; if(ev.ok===false) m.openAiFailures++;
+        m.openAiMaxTokensRequested+=Number(ev.maxTokens||0); m.openAiPromptChars+=Number(ev.promptChars||0); m.openAiImageKB+=Number(ev.imageKB||0);
+        v2854StageInc(m,ev.stage||'auto','openAi');
+        const st=m.byStage[v2854Short(ev.stage||'auto',40)]; st.imageKB+=Number(ev.imageKB||0); st.maxTokens+=Number(ev.maxTokens||0); if(ev.ok===false) st.failures++;
+      }else if(type==='open_facts_barcode' || type==='open_facts_search'){
+        m.openFactsCalls++; m.freeLookups++;
+        if(type==='open_facts_barcode') m.barcodeLookups++;
+        if(ev.hit){ m.openFactsHits++; v2854SourceInc(m,ev.source,'hits'); }
+        else { m.openFactsMisses++; v2854SourceInc(m,ev.source,'misses'); }
+        v2854SourceInc(m,ev.source,'calls');
+        if(ev.ok===false){ m.openFactsFailures++; v2854SourceInc(m,ev.source,'failures'); }
+        v2854StageInc(m,ev.stage||type,'openFacts');
+      }else if(type==='barcode_validation'){
+        m.barcodeValidations++;
+      }
+      m.last.unshift(ev); m.last=m.last.slice(0,80); m.updatedAt=v2854Now();
+      return m;
+    }catch(_){ return null; }
+  }
+  function v2854PublicMeter(){
+    const m=v2854EnsureMeter();
+    return {
+      version:m.version,
+      policy:m.policy,
+      openAiCalls:m.openAiCalls||0,
+      openAiFailures:m.openAiFailures||0,
+      openAiMaxTokensRequested:m.openAiMaxTokensRequested||0,
+      openAiPromptChars:m.openAiPromptChars||0,
+      openAiImageKB:m.openAiImageKB||0,
+      openFactsCalls:m.openFactsCalls||0,
+      openFactsHits:m.openFactsHits||0,
+      openFactsMisses:m.openFactsMisses||0,
+      openFactsFailures:m.openFactsFailures||0,
+      barcodeLookups:m.barcodeLookups||0,
+      barcodeValidations:m.barcodeValidations||0,
+      freeLookups:m.freeLookups||0,
+      byStage:m.byStage||{}, bySource:m.bySource||{}, last:(m.last||[]).slice(0,25), updatedAt:m.updatedAt||0,
+      interpretation:'Se openAiCalls resta 0, quella scansione non ha speso token OpenAI. Open Facts/Barcode sono lookup a costo token zero.'
+    };
+  }
+
+  function v2854Tokens(...parts){
+    const raw=parts.flatMap(p=>Array.isArray(p)?p:[p]).filter(Boolean).join(' ');
+    const toks=(typeof productStrongTokens==='function'?productStrongTokens(raw):String(raw).toLowerCase().split(/[^a-z0-9]+/)).filter(Boolean);
+    const banned=new Set(['contiene','tracce','puo','può','latte','glutine','soia','uova','frutta','guscio','ingredienti','allergeni','verde','rosso','blu','bianco','nero','giallo','arancione','colore','bottiglia','barattolo','vasetto','flacone','confezione','etichetta']);
+    return [...new Set(toks.filter(t=>t.length>2 && !banned.has(t)))].slice(0,20);
+  }
+  function v2854Family(category=''){
+    try{ return productCategoryFamily(category||'')||''; }catch(_){ return String(category||''); }
+  }
+  function v2854SemanticSignature(confirmed={}, record={}, ref={}){
+    const pm=confirmed.productMemory||{};
+    const barcode=(typeof bestBarcodeFromConfirmed==='function'?bestBarcodeFromConfirmed(confirmed):'') || (record.barcodes||[])[0] || pm.barcode || ref.code || '';
+    const productName=v2854Short(confirmed.productName||record.productName||pm.productName||ref.productName||'',120);
+    const brand=v2854Short(confirmed.brand||record.brand||pm.brand||ref.brand||'',90);
+    const category=v2854Short(confirmed.category||record.category||pm.category||ref.category||'',80);
+    const family=v2854Family(category);
+    const format=v2854Short(confirmed.size||confirmed.format||confirmed.estimatedSize||record.format||pm.format||ref.quantity||'',80);
+    const packageType=v2854Short(confirmed.packageType||pm.packageType||record.packageType||record.packaging||'',90);
+    const productType=v2854Short(confirmed.productType||pm.productType||record.productType||'',90);
+    const colors=[...new Set([...(confirmed.colors||[]),...(pm.colors||[]),...(record.colors||[])].map(x=>v2854Short(x,40)).filter(Boolean))].slice(0,8);
+    const strongText=v2854Tokens(productName,brand,category,format,productType,packageType,barcode,(confirmed.detectedText||[]).join(' '),(confirmed.visibleEvidence||[]).join(' '),ref.productName,ref.brand,ref.quantity,ref.code);
+    const identityRaw=[brand,productName,format,category,barcode,strongText.join('|')].filter(Boolean).join(' | ');
+    const hash=(typeof hashStable==='function'?hashStable(identityRaw):String(Math.abs(identityRaw.split('').reduce((a,c)=>((a<<5)-a+c.charCodeAt(0))|0,0)))).slice(0,22);
+    return {
+      version:'V28.54_semantic_visual_signature',
+      hash,
+      signature:`semsig:v2854:${family||'generic'}:${hash}`,
+      identity:{productName,brand,category,categoryFamily:family,format,barcode},
+      visual:{productType,packageType,colors,strongText},
+      reference:{source:ref.sourceLabel||ref.source||'', imageUrl:ref.imageUrl||'', code:ref.code||''},
+      rules:'identità = nome/marca/barcode/categoria/formato/testi forti; ingredienti/tracce/colori/confezione aiutano ma non comandano.'
+    };
+  }
+  function v2854AttachSignature(record={}, confirmed={}){
+    try{
+      const ref=(record.externalReferences||[])[0] || confirmed.productMemory?.externalKnowledge || {};
+      const sig=v2854SemanticSignature(confirmed,record,ref);
+      record.semanticVisualSignatureV2854=sig;
+      if(!record.ownerOverrides?.fields?.visualSignature){ record.visualSignature=sig.signature; }
+      record.objectFolder=record.objectFolder||{};
+      try{ if(typeof v2842EnsureObjectFolder==='function') v2842EnsureObjectFolder(record); }catch(_){ }
+      const vf=record.objectFolder.visualSignatures=Array.isArray(record.objectFolder.visualSignatures)?record.objectFolder.visualSignatures:[];
+      if(!vf.find(x=>x.signature===sig.signature)) vf.unshift({signature:sig.signature, semantic:sig, at:v2854Now(), source:'server_semantic_signature_v2854'});
+      record.objectFolder.visualSignatures=vf.slice(0,24);
+      record.memoryCard=record.memoryCard||{};
+      record.memoryCard.semanticVisualSignatureV2854=sig;
+      record.memoryCard.visualAppearance=Object.assign({}, record.memoryCard.visualAppearance||{}, {visualSignature:sig.signature, semanticVisualSignature:sig});
+      record.sources=Object.assign({}, record.sources||{}, {semanticSignatureV2854:Number(record.sources?.semanticSignatureV2854||0)+1});
+      return sig;
+    }catch(e){ try{ updateGlobalLearningAudit({type:'semantic-signature-error-v2854', reason:String(e?.message||e).slice(0,180)}); }catch(_){} return null; }
+  }
+
+  try{
+    if(typeof visionJsonCall==='function' && !global.__v2854VisionJsonMeterWrapped){
+      const prev=visionJsonCall;
+      visionJsonCall=async function(systemText,userText,image,opts={}){
+        const start=v2854Now();
+        const stage=String(opts.stage||'auto').toLowerCase();
+        const maxTokens=Number(opts.maxTokens||0);
+        const promptChars=String(userText||'').length;
+        const imageKB=v2854KbFromImage(image);
+        try{
+          const out=await prev.call(this,systemText,userText,image,opts);
+          v2854Record('openai_vision',{ok:true, stage, maxTokens, promptChars, imageKB, ms:v2854Now()-start, model:OPENAI_VISION_MODEL, reason:opts.reason||opts.mode||''});
+          if(out && typeof out==='object') out.costMeterV2854={openAiCall:true, stage, maxTokens, imageKB, ms:v2854Now()-start, policy:'una chiamata conteggiata dal firewall costi V28.54'};
+          return out;
+        }catch(err){
+          v2854Record('openai_vision',{ok:false, stage, maxTokens, promptChars, imageKB, ms:v2854Now()-start, model:OPENAI_VISION_MODEL, error:String(err?.message||err).slice(0,160)});
+          throw err;
+        }
+      };
+      global.__v2854VisionJsonMeterWrapped=true;
+    }
+  }catch(_){ }
+
+  try{
+    if(typeof fetchOpenFactsByBarcode==='function' && !global.__v2854OpenFactsBarcodeMeterWrapped){
+      const prev=fetchOpenFactsByBarcode;
+      fetchOpenFactsByBarcode=async function(source, code){
+        const start=v2854Now();
+        const src=source?.id||source?.label||'';
+        try{
+          const out=await prev.call(this,source,code);
+          v2854Record('open_facts_barcode',{ok:true, hit:!!out, source:src, code:v2854Short(code,20), ms:v2854Now()-start, cost:'token_zero'});
+          return out;
+        }catch(err){
+          v2854Record('open_facts_barcode',{ok:false, hit:false, source:src, code:v2854Short(code,20), ms:v2854Now()-start, error:String(err?.message||err).slice(0,120), cost:'token_zero'});
+          throw err;
+        }
+      };
+      global.__v2854OpenFactsBarcodeMeterWrapped=true;
+    }
+  }catch(_){ }
+
+  try{
+    if(typeof fetchOpenFactsSearch==='function' && !global.__v2854OpenFactsSearchMeterWrapped){
+      const prev=fetchOpenFactsSearch;
+      fetchOpenFactsSearch=async function(source, query){
+        const start=v2854Now();
+        const src=source?.id||source?.label||'';
+        try{
+          const out=await prev.call(this,source,query);
+          const products=Array.isArray(out?.products)?out.products.length:0;
+          v2854Record('open_facts_search',{ok:true, hit:products>0, products, source:src, query:v2854Short(query,90), ms:v2854Now()-start, cost:'token_zero'});
+          return out;
+        }catch(err){
+          v2854Record('open_facts_search',{ok:false, hit:false, source:src, query:v2854Short(query,90), ms:v2854Now()-start, error:String(err?.message||err).slice(0,120), cost:'token_zero'});
+          throw err;
+        }
+      };
+      global.__v2854OpenFactsSearchMeterWrapped=true;
+    }
+  }catch(_){ }
+
+  try{
+    if(typeof upsertGlobalProductMemory==='function' && !global.__v2854UpsertSignatureWrapped){
+      const prev=upsertGlobalProductMemory;
+      upsertGlobalProductMemory=function(confirmed={}){
+        const compact=prev.call(this,confirmed);
+        try{
+          const g=db.assistantBrain.globalProductMemory||{products:{}};
+          const key=compact?.key || ((typeof bestBarcodeFromConfirmed==='function'&&bestBarcodeFromConfirmed(confirmed)) ? `ean:${bestBarcodeFromConfirmed(confirmed)}` : '');
+          const record=(key&&g.products?.[key]) || Object.values(g.products||{}).find(r=>r.productName===compact?.productName && r.brand===compact?.brand) || null;
+          if(record){
+            const sig=v2854AttachSignature(record, confirmed);
+            if(sig){ updateGlobalLearningAudit({type:'semantic-signature-saved-v2854', key:record.key||'', productName:record.productName||'', brand:record.brand||'', signature:sig.signature}); }
+            record.updatedAt=v2854Now(); g.updatedAt=v2854Now();
+          }
+        }catch(e){ try{ updateGlobalLearningAudit({type:'semantic-signature-upsert-error-v2854', reason:String(e?.message||e).slice(0,180)}); }catch(_){} }
+        return compact;
+      };
+      global.__v2854UpsertSignatureWrapped=true;
+    }
+  }catch(_){ }
+
+  try{
+    if(typeof v2840PublicProductBrainDetail==='function' && !global.__v2854PublicBrainDetailWrapped){
+      const prev=v2840PublicProductBrainDetail;
+      v2840PublicProductBrainDetail=function(record={}){
+        if(!record.semanticVisualSignatureV2854){ try{ v2854AttachSignature(record,{}); }catch(_){ } }
+        const out=prev.call(this,record);
+        out.semanticVisualSignatureV2854=record.semanticVisualSignatureV2854||null;
+        if(out.fields) out.fields.semanticVisualSignatureV2854=record.semanticVisualSignatureV2854||null;
+        return out;
+      };
+      global.__v2854PublicBrainDetailWrapped=true;
+    }
+  }catch(_){ }
+
+  try{
+    if(typeof publicServerBrainV2840==='function' && !global.__v2854PublicServerBrainWrapped){
+      const prev=publicServerBrainV2840;
+      publicServerBrainV2840=function(opts={}){
+        const out=prev.call(this,opts);
+        out.version='V28.54 Brain Premium + Cost Meter + Semantic Signatures';
+        out.costMeterV2854=v2854PublicMeter();
+        return out;
+      };
+      global.__v2854PublicServerBrainWrapped=true;
+    }
+  }catch(_){ }
+
+  try{
+    if(typeof preflightSnapshotV98==='function' && !global.__v2854PreflightWrapped){
+      const prev=preflightSnapshotV98;
+      preflightSnapshotV98=function(){
+        const snap=prev.call(this);
+        snap.version='V28.54';
+        snap.costMeterV2854=v2854PublicMeter();
+        snap.brain=Object.assign({}, snap.brain||{}, {
+          version:'V28.54',
+          name:'PRO Cost Meter + Semantic Visual Signature Core',
+          costMeter:'openai_calls_vs_free_openfacts_visible',
+          semanticVisualSignature:'server_identity_signature_saved_after_confirmation',
+          policy:'barcode/Open Facts/memoria prima; OpenAI solo micro-identità quando non basta; ingredienti/tracce/colori non comandano identità.'
+        });
+        return snap;
+      };
+      global.__v2854PreflightWrapped=true;
+    }
+  }catch(_){ }
+
+  try{ v2854EnsureMeter(); }catch(_){ }
+  console.log('[Spesa Pronta] V28.54 PRO Cost Meter + Semantic Visual Signature Core active');
 })();

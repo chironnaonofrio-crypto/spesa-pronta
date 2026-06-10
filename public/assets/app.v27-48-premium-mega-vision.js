@@ -6126,7 +6126,7 @@ try{ document.dispatchEvent(new CustomEvent('spesa-pronta:v2799-sync-ready')); }
 // avviso cache/build e report copiabile per debug rapido.
 // =============================================================
 window.SPESA_PRONTA_VERSION='v28.00-final-test-tools';
-window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.50', brain:'Ultra Error Reduction Core + Sync Hash Fix + Barcode Dedupe', finalTestTools:'v28_02'});
+window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.52', brain:'Ultra Error Reduction Core + Sync Hash Fix + Barcode Dedupe', finalTestTools:'v28_02'});
 function v2800BuildAgeWarning(){
   try{
     const key='spesaProntaLastBuildVersion';
@@ -6420,8 +6420,8 @@ try{
         // immagini più piccole = meno costo Vision. La qualità resta sufficiente per etichette grandi.
         const requested=Number(max)||1080;
         // V28.28: non scendere sotto una dimensione utile, altrimenti lo scanner rifiuta la foto come troppo piccola.
-        const hardMax=Math.max(requested, 1080);
-        const hardQuality=Math.max(Math.min(Number(quality)||.78, .78), .68);
+        const hardMax=Math.min(Math.max(requested, 720), 900); // V28.51: non forzare 1080, taglia costo immagini
+        const hardQuality=Math.max(Math.min(Number(quality)||.68, .72), .50);
         return originalCompress.call(this,dataUrl,hardMax,hardQuality);
       };
       window.__v2804CompressWrapped=true;
@@ -6495,13 +6495,13 @@ try{
   function loadImgV2805(dataUrl){ return new Promise((res,rej)=>{ const img=new Image(); img.onload=()=>res(img); img.onerror=rej; img.src=dataUrl; }); }
   function cropProfile(stage='auto'){
     stage=String(stage||'auto').toLowerCase();
-    if(stage==='expiry') return {w:.96,h:.82,max:900,q:.72,label:'expiry-date-safe-v2828'};
-    if(stage==='label') return {w:.96,h:.90,max:980,q:.74,label:'label-safe-v2828'};
-    if(stage==='ingredients') return {w:.96,h:.92,max:1000,q:.74,label:'ingredients-safe-v2828'};
+    if(stage==='expiry') return {w:.98,h:.86,max:940,q:.70,label:'expiry-date-readable-v2851'};
+    if(stage==='label') return {w:.96,h:.90,max:820,q:.62,label:'label-cost-safe-v2851'};
+    if(stage==='ingredients') return {w:.96,h:.92,max:860,q:.62,label:'ingredients-cost-safe-v2851'};
     // V28.28: nelle foto prodotto privilegio il soggetto centrale.
     // Serve a ignorare bottiglie/oggetti laterali e ridurre i falsi match.
-    if(stage==='product' || stage==='auto') return {w:.64,h:.92,max:980,q:.74,label:'primary-center-product-v2828'};
-    return {w:.74,h:.92,max:960,q:.74,label:'primary-center-safe-v2828'};
+    if(stage==='product' || stage==='auto') return {w:.70,h:.94,max:760,q:.58,label:'primary-center-product-cost-v2851'};
+    return {w:.78,h:.92,max:780,q:.58,label:'primary-center-safe-cost-v2851'};
   }
   async function cropCentralForTeacherV2805(dataUrl, opts={}){
     try{
@@ -6589,7 +6589,7 @@ try{
 (function(){
   try{
     window.SPESA_PRONTA_VERSION='v28.06-debug-console-page';
-    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.50', brain:'Ultra Error Reduction Core + Cost Guard + Debug Console Page', debugConsole:'debug.html'});
+    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.52', brain:'Ultra Error Reduction Core + Cost Guard + Debug Console Page', debugConsole:'debug.html'});
     try{ localStorage.setItem('spesa_pronta_debug_build','V28.06'); }catch(_){ }
     const isDebugPage=()=>/\/debug\.html(?:$|[?#])/.test(location.pathname+location.search);
     const removeInlineDebug=()=>{ try{ if(!isDebugPage()) document.getElementById('preflightPanelV98')?.remove(); }catch(_){ } };
@@ -6663,7 +6663,7 @@ window.SPESA_PRONTA_VERSION='v28.43-pro-cinematic-onboarding';
 // =============================================================
 (function(){
   try{
-    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.50', visionPipeline:'server_full_teacher_slim_barcode_step'});
+    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.52', visionPipeline:'server_full_teacher_slim_barcode_step'});
     if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('vision-pipeline-v2829-ready',{serverImage:'full',teacherImage:'cropped_compressed',policy:'local_memory_cache_first_openai_last'}),1200);
   }catch(_){ }
 })();
@@ -6911,7 +6911,7 @@ window.SPESA_PRONTA_VERSION='v28.43-pro-cinematic-onboarding';
   window.addEventListener('pagehide',()=>saveScanDraftNow('pagehide'));
   window.addEventListener('beforeunload',()=>saveScanDraftNow('beforeunload'));
   window.spesaProntaScanDraftV2831={save:saveScanDraftNow,load:readDraft,clear:clearDraft,show:()=>showDraftRecoveryIfNeeded(true),restore:restoreDraft};
-  try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.50', scanDraftRecovery:'autosave_resume_unconfirmed_items'}); }catch(_){ }
+  try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.52', scanDraftRecovery:'autosave_resume_unconfirmed_items'}); }catch(_){ }
 })();
 
 
@@ -6922,7 +6922,7 @@ window.SPESA_PRONTA_VERSION='v28.43-pro-cinematic-onboarding';
 // - Se server/docente non risponde, viene generata una scheda locale compilabile.
 // - Stepper corretto a 5 fasi con Barcode.
 // =============================================================
-try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.50', scanStability:'live_photo_server_first_timeout_fallback', guidedSteps:'5_with_barcode'}); }catch(_){ }
+try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.52', scanStability:'live_photo_server_first_timeout_fallback', guidedSteps:'5_with_barcode'}); }catch(_){ }
 
 
 // =============================================================
@@ -7110,7 +7110,7 @@ try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, 
 (function(){
   try{
     window.SPESA_PRONTA_VERSION='v28.43-pro-cinematic-onboarding';
-    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.50', preflightBugSweep:'regex_boundary_cache_runtime_marker'});
+    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.52', preflightBugSweep:'regex_boundary_cache_runtime_marker'});
     if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('openai-connection-guard-v2836-ready',{regexBoundaryFixed:true,cache:'v2836',loadedScript:'app.v27-48-premium-mega-vision'}),900);
   }catch(_){ }
 })();
@@ -7120,7 +7120,7 @@ try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, 
 (function(){
   try{
     window.SPESA_PRONTA_VERSION='v28.43-pro-cinematic-onboarding';
-    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.50', openAiConnectionGuard:'server_key_aliases_real_healthcheck_model_fallback'});
+    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.52', openAiConnectionGuard:'server_key_aliases_real_healthcheck_model_fallback'});
     function endpointV2836(path){ const base=((window.settings&&settings.apiEndpoint)||'/api').replace(/\/$/,''); return base+path; }
     async function runOpenAiCheckV2836(){
       const btn=document.querySelector('[data-openai-check-v2836]');
@@ -7257,7 +7257,7 @@ try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, 
   }catch(_){ }
   try{
     window.SPESA_PRONTA_VERSION='v28.43-pro-cinematic-onboarding';
-    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.50', ocrBoostPro:'highres_contrast_teacher_image_label_expiry_barcode', openaiHomePro:'premium_landing_fridge_mount'});
+    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.52', ocrBoostPro:'highres_contrast_teacher_image_label_expiry_barcode', openaiHomePro:'premium_landing_fridge_mount'});
     if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('ocr-boost-ready-v2838',{version:V, stages:['label','expiry','barcode','ingredients']}),1400);
   }catch(_){ }
 })();
@@ -7698,14 +7698,14 @@ try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, 
     try{
       if(!/^data:image\//i.test(String(dataUrl||''))) return '';
       const img=await loadImg2850(dataUrl);
-      const max=560;
+      const max=448;
       const scale=Math.min(1, max/Math.max(img.width,img.height));
       const w=Math.max(1,Math.round(img.width*scale)), h=Math.max(1,Math.round(img.height*scale));
       const canvas=document.createElement('canvas'); canvas.width=w; canvas.height=h;
       const ctx=canvas.getContext('2d',{willReadFrequently:false});
       try{ ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='medium'; }catch(_){ }
       ctx.drawImage(img,0,0,w,h);
-      const out=canvas.toDataURL('image/jpeg', .52);
+      const out=canvas.toDataURL('image/jpeg', .44);
       try{ logAiDiagnosticV98?.('micro-identity-image-v2850',{version:V,before:Math.round(String(dataUrl).length*.75),after:Math.round(String(out).length*.75),size:`${w}x${h}`}); }catch(_){ }
       return out;
     }catch(err){ try{ logAiDiagnosticV98?.('micro-identity-image-v2850-error',{message:String(err?.message||err)}); }catch(_){ } return ''; }
@@ -7726,8 +7726,129 @@ try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, 
     }
   }catch(_){ }
   try{
-    window.SPESA_PRONTA_VERSION='v28.50-pro-expiry-micro-identity';
-    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.50', expiryMicroIdentity:'dot_matrix_expiry_low_token_name_probe'});
-    if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('v2850-pro-ready',{expiryDotMatrix:true,microIdentity:true}),1300);
+    window.SPESA_PRONTA_VERSION='v28.54-pro-cost-meter-semantic-signature';
+    window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.52', costFirewall:'one_openai_call_max_tiny_images', expiryMicroIdentity:'dot_matrix_expiry_low_token_name_probe'});
+    if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('v2851-cost-firewall-ready',{expiryDotMatrix:true,microIdentity:true,oneTeacherCall:true,tinyImages:true}),1300);
   }catch(_){ }
 })();
+
+
+// =============================================================
+// V28.52 PRO CLIENT: Salta scadenza + BarcodeDetector + Open Facts low-cost routing
+// =============================================================
+(function(){
+  const V='V28.52';
+  function digits(v){ return String(v||'').replace(/\D+/g,''); }
+  function gtinCheck(body){ const s=digits(body); let sum=0; for(let i=s.length-1,pos=0;i>=0;i--,pos++) sum+=Number(s[i])*(pos%2===0?3:1); return String((10-(sum%10))%10); }
+  function validGtin(code){ const s=digits(code); return /^(\d{8}|\d{12}|\d{13}|\d{14})$/.test(s) && !/^(\d)\1+$/.test(s) && gtinCheck(s.slice(0,-1))===s.slice(-1); }
+  function activeScanLocalGuessV2852(){
+    const el=(typeof getActiveScannerResult==='function' ? getActiveScannerResult() : null) || document.querySelector('#scannerResults .scan-result:not(.confirmed):not(.bad)');
+    const r=el?._scanResult||{};
+    const val=(sel)=>String(el?.querySelector?.(sel)?.value||'').trim();
+    const barcode=(typeof extractBarcodeFromScanResult==='function') ? extractBarcodeFromScanResult(r,el) : (r.barcode||r.ean||'');
+    return {productName:val('[data-scan-name]')||r.productName||'', brand:val('[data-scan-brand]')||r.brand||'', estimatedSize:val('[data-scan-size]')||r.estimatedSize||'', size:val('[data-scan-size]')||r.size||'', category:val('[data-scan-cat]')||r.category||'', barcode:barcode||'', detectedText:r.detectedText||[], visibleEvidence:r.visibleEvidence||[]};
+  }
+  async function dataUrlToBlobV2852(dataUrl){ const r=await fetch(dataUrl); return await r.blob(); }
+  async function browserBarcodeDetectV2852(dataUrl){
+    try{
+      if(!('BarcodeDetector' in window)) return null;
+      const Detector=window.BarcodeDetector;
+      let formats=[]; try{ formats=await Detector.getSupportedFormats(); }catch(_){ formats=['ean_13','ean_8','upc_a','upc_e','code_128']; }
+      const wanted=['ean_13','ean_8','upc_a','upc_e','code_128','itf'];
+      const detector=new Detector({formats:wanted.filter(f=>!formats.length||formats.includes(f))});
+      const blob=await dataUrlToBlobV2852(dataUrl); const bmp=await createImageBitmap(blob);
+      const codes=await detector.detect(bmp); try{ bmp.close?.(); }catch(_){ }
+      const val=(codes||[]).map(x=>digits(x.rawValue||x.rawData||'')).find(validGtin)||'';
+      return val ? {barcode:val, source:'browser_barcode_detector', count:(codes||[]).length} : null;
+    }catch(_){ return null; }
+  }
+  function skipExpiryForResultV2852(el){
+    if(!el) return;
+    const result=el._scanResult||{};
+    el.dataset.voiceExpiryDone='1';
+    el.dataset.expirySkipped='1';
+    const inp=el.querySelector('[data-scan-expiry]'); if(inp) inp.value='';
+    result.expiryDate=''; result.expirySkipped=true; el._scanResult=result;
+    if(typeof setScanVoiceHelper==='function') setScanVoiceHelper(el,'Scadenza saltata: passo al barcode o alla conferma senza bloccare la scheda.','live');
+    if(typeof setScannerStatus==='function') setScannerStatus('Scadenza saltata. Puoi fare barcode oppure confermare il prodotto.', '', false);
+    try{ if(typeof refreshScanResultCard==='function') refreshScanResultCard(el,result); }catch(_){ }
+    try{ if(typeof refreshGuidedScannerUx==='function') refreshGuidedScannerUx('expiry-skipped'); }catch(_){ }
+    try{ if(typeof guidedStartBarcodeRescan==='function' && !(result.barcode||result.ean||el.dataset.barcodeScanDone==='1')) guidedStartBarcodeRescan(el,result); }catch(_){ }
+  }
+  function injectSkipExpiryButtonsV2852(){
+    document.querySelectorAll('#scannerResults .scan-result:not([data-v2852-skip-ready])').forEach(el=>{
+      el.dataset.v2852SkipReady='1';
+      const expiry=el.querySelector('[data-scan-expiry]');
+      if(expiry && !el.querySelector('[data-skip-expiry]')){
+        const btn=document.createElement('button'); btn.type='button'; btn.className='outline-btn skip-expiry-pro'; btn.dataset.skipExpiry='1'; btn.textContent='Salta scadenza';
+        const label=expiry.closest('label'); label?.insertAdjacentElement('afterend',btn);
+      }
+    });
+    const panel=document.querySelector('#guidedScanPanel .guided-actions');
+    if(panel && !panel.querySelector('[data-guided-skip-expiry]')){
+      const btn=document.createElement('button'); btn.type='button'; btn.className='outline-btn skip-expiry-pro'; btn.dataset.guidedSkipExpiry='1'; btn.textContent='Salta scadenza';
+      panel.insertBefore(btn, panel.firstChild);
+    }
+  }
+  document.addEventListener('click', e=>{
+    const b=e.target?.closest?.('[data-skip-expiry],[data-guided-skip-expiry]');
+    if(!b) return;
+    e.preventDefault();
+    const el=b.closest?.('.scan-result') || (typeof getActiveScannerResult==='function' ? getActiveScannerResult() : document.querySelector('#scannerResults .scan-result:not(.confirmed):not(.bad)'));
+    skipExpiryForResultV2852(el);
+  }, true);
+  try{
+    if(typeof addScannerResult==='function' && !window.__v2852AddScannerWrapped){
+      const prev=addScannerResult;
+      addScannerResult=function(result){ const out=prev.call(this,result); setTimeout(injectSkipExpiryButtonsV2852,80); return out; };
+      window.__v2852AddScannerWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof ensureGuidedScanUx==='function' && !window.__v2852GuidedUxWrapped){
+      const prev=ensureGuidedScanUx;
+      ensureGuidedScanUx=function(){ const p=prev.call(this); setTimeout(injectSkipExpiryButtonsV2852,60); return p; };
+      window.__v2852GuidedUxWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof askVisionAi==='function' && !window.__v2852AskVisionWrapped){
+      const prev=askVisionAi;
+      askVisionAi=async function(dataUrl, opts={}){
+        const stage=String(opts?.stage||'auto').toLowerCase();
+        let next=Object.assign({},opts);
+        if(stage==='label' || stage==='ingredients'){
+          next.localGuess=Object.assign({}, activeScanLocalGuessV2852(), opts.localGuess||{}, {labelLowCostV2852:true});
+        }
+        if(stage==='barcode'){
+          const detected=await browserBarcodeDetectV2852(dataUrl).catch(()=>null);
+          if(detected?.barcode){
+            next.localGuess=Object.assign({}, activeScanLocalGuessV2852(), opts.localGuess||{}, {barcode:detected.barcode, ean:detected.barcode, browserBarcodeDetectorV2852:true});
+            try{ logAiDiagnosticV98?.('barcode-browser-detected-v2852',{barcode:detected.barcode, source:detected.source}); }catch(_){ }
+          }else{
+            next.localGuess=Object.assign({}, activeScanLocalGuessV2852(), opts.localGuess||{}, {browserBarcodeDetectorV2852:false});
+          }
+        }
+        const r=await prev.call(this,dataUrl,next);
+        if(stage==='barcode'){
+          const bc=digits(r?.barcode||r?.ean||r?.code||r?.productCode||'');
+          if(bc && !validGtin(bc)){ r.barcode=''; r.ean=''; r.barcodeAnalysisV2852=Object.assign({}, r.barcodeAnalysisV2852||{}, {ok:false, validChecksum:false, reason:'client_rejected_invalid_gtin'}); }
+        }
+        return r;
+      };
+      window.__v2852AskVisionWrapped=true;
+    }
+  }catch(_){ }
+  setInterval(injectSkipExpiryButtonsV2852,1500);
+  try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.52', barcodeDetector:'browser_gtin_plus_open_facts', labelRouting:'open_facts_low_cost_when_identity_exists', skipExpiryButton:true}); }catch(_){ }
+  try{ if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('v2852-low-cost-routing-ready',{barcodeDetector:'BarcodeDetector if supported', skipExpiry:true, labelNoOpenAIWhenPossible:true}),1300); }catch(_){ }
+})();
+
+
+// V28.53 client marker: PRO external knowledge learning loop active on server
+try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.54', serverLearning:'external_api_reference_images_to_object_folder_after_confirmation', proCostMeter:'active', semanticVisualSignature:'active', proMode:true}); }catch(_){}
+
+
+// V28.54 PRO marker: cost meter + semantic visual signature core
+try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, {version:'V28.54', proCostMeter:'openai_vs_openfacts_visible', semanticVisualSignature:'server_identity_signature_after_confirmation', proMode:true}); }catch(_){}
+try{ if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('v2854-cost-meter-semantic-ready',{costMeter:true, semanticSignature:true, policy:'OpenAI only when barcode/OpenFacts/memory not enough'}),1400); }catch(_){}
