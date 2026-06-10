@@ -6403,12 +6403,12 @@ try{ window.SPESA_PRONTA_BUILD=Object.assign({}, window.SPESA_PRONTA_BUILD||{}, 
 
 
 // =============================================================
-// V28.38 OCR BOOST PRO
+// V28.39 OPENAI TOKEN MIN FIX + OCR BOOST PRO
 // Migliora lettura etichetta/scadenza/barcode senza mandare la foto piena a OpenAI.
 // Server: foto piena. Docente: crop OCR ad alta leggibilità.
 // =============================================================
 (function(){
-  const V='V28.38';
+  const V='V28.39';
   function dataUrlBytesV2838(s=''){ return Math.round(String(s||'').length*0.75); }
   function loadImgV2838(dataUrl){ return new Promise((res,rej)=>{ const img=new Image(); img.onload=()=>res(img); img.onerror=rej; img.src=dataUrl; }); }
   function clampV2838(v){ return Math.max(0, Math.min(255, v)); }

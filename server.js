@@ -48,7 +48,7 @@ const VISION_SEED_MEMORY = loadVisionSeedMemory();
 const VISION_MEGA_INDEX = loadVisionMegaIndex();
 const WHATSAPP_ENABLED = !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_WHATSAPP_FROM);
 
-// V28.38 - OpenAI connection guard: chiave solo lato server, diagnostica reale e fallback modelli.
+// V28.39 - OpenAI max_output_tokens guard + OpenAI connection guard: chiave solo lato server, diagnostica reale e fallback modelli.
 let lastOpenAiRuntimeV2836 = { ok:null, testedAt:0, model:'', status:'not_tested', message:'Connessione OpenAI non ancora testata', source:'', maskedKey:'' };
 function pickEnvValueV2836(names=[]){
   for(const name of names){
@@ -124,7 +124,7 @@ async function openAiHealthCheckV2836(){
     return {ok:false, connected:false, teacherActive:false, status:diag.reason, message:lastOpenAiRuntimeV2836.message, diagnostics:diag, model:OPENAI_MODEL, visionModel:OPENAI_VISION_MODEL};
   }
   try{
-    const resp=await openAiResponse({model:OPENAI_MODEL,max_output_tokens:8,input:[{role:'user',content:'Rispondi solo OK'}]}, {kind:'health'});
+    const resp=await openAiResponse({model:OPENAI_MODEL,max_output_tokens:16,input:[{role:'user',content:'Rispondi solo OK'}]}, {kind:'health'});
     const txt=outputText(resp).trim();
     lastOpenAiRuntimeV2836=Object.assign({},lastOpenAiRuntimeV2836,{ok:true,testedAt:Date.now(),status:'active',message:'OpenAI raggiunto correttamente',source:diag.source,maskedKey:diag.maskedKey});
     return {ok:true, connected:true, teacherActive:true, status:'active', message:'OpenAI raggiunto correttamente', output:txt.slice(0,40), diagnostics:diag, model:lastOpenAiRuntimeV2836.model||OPENAI_MODEL, visionModel:OPENAI_VISION_MODEL, testedAt:lastOpenAiRuntimeV2836.testedAt};
@@ -1622,6 +1622,8 @@ function localAiReply({message,state=[],settings={},memory={}}){
 }
 function aiConnected(){ return Boolean(getOpenAiKeyV2836()); }
 async function openAiResponse(payload, opts={}){
+  // V28.39 max_output_tokens minimum guard: Responses API refuses values below 16.
+  try{ if(payload && Object.prototype.hasOwnProperty.call(payload,'max_output_tokens')) payload.max_output_tokens=Math.max(16, Number(payload.max_output_tokens||16)); }catch(_){}
   const key=getOpenAiKeyV2836();
   if(!key) throw new Error('missing_openai_api_key');
   const candidates=openAiModelCandidatesV2836(payload?.model || (opts.kind==='vision'?OPENAI_VISION_MODEL:OPENAI_MODEL));
@@ -2913,7 +2915,7 @@ function preflightSnapshotV98(){
   const keyDiag=openAiKeyDiagnosticV2836();
   const teacherUsable=openAiTeacherIsUsableV2836();
   const teacherMsg=openAiTeacherMessageV2836();
-  const brain={version:'V28.38',name:'OpenAI Connection Guard + Debug OpenAI Test',base:'Ultra Error Reduction Core V27.97 + Sync Handshake V27.99',categoryEngine:'ultra_error_reduction_core_v27_97', costGuardV2804:db.assistantBrain?.costGuardV2804||null,barcodePriority:'barcode > label > user correction > server memory > teacher',syncPolicy:'single item confirm + retry queue',testTools:'diagnostics_copy + server_sync_test + openai_live_check'};
+  const brain={version:'V28.39',name:'OpenAI Token Min Fix + Debug OpenAI Test',base:'Ultra Error Reduction Core V27.97 + Sync Handshake V27.99',categoryEngine:'ultra_error_reduction_core_v27_97', costGuardV2804:db.assistantBrain?.costGuardV2804||null,barcodePriority:'barcode > label > user correction > server memory > teacher',syncPolicy:'single item confirm + retry queue',testTools:'diagnostics_copy + server_sync_test + openai_live_check'};
   const checks=[
     {id:'openai_teacher',label:'Docente OpenAI',ok:teacherUsable,message:teacherMsg,diagnostics:keyDiag,lastRuntime:lastOpenAiRuntimeV2836},
     {id:'vision_backend',label:'Vision backend',ok:teacherUsable,message:teacherUsable?'Vision pronta dal backend':'Vision docente non disponibile: '+teacherMsg},
@@ -2925,7 +2927,7 @@ function preflightSnapshotV98(){
   ];
   const ok=checks.filter(c=>c.ok).length;
   const status= ok===checks.length ? 'ready' : (ok>=4?'warn':'bad');
-  return {ok:true,version:'V28.38',status,ready:status==='ready',brain,checks,teacherActive:teacherUsable,teacherConfigured:keyDiag.configured,teacherMessage:teacherMsg,openAiDiagnostics:keyDiag,lastOpenAiRuntime:lastOpenAiRuntimeV2836,dbMode,databaseConnected:dbMode!=='file',memoryReady:dbMode!=='file',globalProductMemory:gpm,knowledgeCache:{entries:Object.keys(kCache.entries||{}).length,hits:kCache.hits||0,barcodeHits:kCache.barcodeHits||0,updatedAt:kCache.updatedAt||0},barcodeBrain:db.assistantBrain?.barcodeBrain||null,errorLearning:{corrections:(db.assistantBrain?.errorLearning?.corrections||[]).length,patterns:Object.keys(db.assistantBrain?.errorLearning?.patterns||{}).length,updatedAt:db.assistantBrain?.errorLearning?.updatedAt||0},learningAudit:(db.assistantBrain.learningAudit||[]).slice(0,15),generatedAt:Date.now()};
+  return {ok:true,version:'V28.39',status,ready:status==='ready',brain,checks,teacherActive:teacherUsable,teacherConfigured:keyDiag.configured,teacherMessage:teacherMsg,openAiDiagnostics:keyDiag,lastOpenAiRuntime:lastOpenAiRuntimeV2836,dbMode,databaseConnected:dbMode!=='file',memoryReady:dbMode!=='file',globalProductMemory:gpm,knowledgeCache:{entries:Object.keys(kCache.entries||{}).length,hits:kCache.hits||0,barcodeHits:kCache.barcodeHits||0,updatedAt:kCache.updatedAt||0},barcodeBrain:db.assistantBrain?.barcodeBrain||null,errorLearning:{corrections:(db.assistantBrain?.errorLearning?.corrections||[]).length,patterns:Object.keys(db.assistantBrain?.errorLearning?.patterns||{}).length,updatedAt:db.assistantBrain?.errorLearning?.updatedAt||0},learningAudit:(db.assistantBrain.learningAudit||[]).slice(0,15),generatedAt:Date.now()};
 }
 
 const server = http.createServer(async (req,res)=>{
