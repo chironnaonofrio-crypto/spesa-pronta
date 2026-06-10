@@ -8136,3 +8136,526 @@ try{ if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV9
   setInterval(ensureSkipBarcode,800);
   try{ window.SPESA_PRONTA_BUILD=Object.assign({},window.SPESA_PRONTA_BUILD||{}, {version:'V28.58', skipBarcodeToLabel:true}); }catch(_){ }
 })();
+
+// =============================================================
+// V28.59 PRO Barcode Step Hard Lock
+// - Il passaggio barcode NON viene considerato fatto senza EAN/GTIN valido.
+// - Resta sullo step barcode finché: barcode valido letto, oppure utente preme Salta barcode.
+// - Una scansione barcode fallita non manda avanti da sola a etichetta/scadenza.
+// =============================================================
+(function(){
+  const V='V28.59';
+  const $q=(s,r=document)=>r.querySelector(s);
+  function getActive(){
+    try{ const a=typeof getActiveScannerResult==='function'?getActiveScannerResult():null; if(a && !a.classList.contains('confirmed') && !a.classList.contains('bad')) return a; }catch(_){ }
+    return $q('#scannerResults .scan-result:not(.confirmed):not(.bad)');
+  }
+  function rOf(el){ return el?._scanResult||{}; }
+  function val(el,sel){ return String(el?.querySelector?.(sel)?.value||'').trim(); }
+  function digits(v){ return String(v||'').replace(/\D+/g,''); }
+  function validGtin(code){
+    const s=digits(code);
+    if(!/^\d{8,14}$/.test(s)) return false;
+    let sum=0, alt=true;
+    for(let i=s.length-2;i>=0;i--){ const n=Number(s[i]); sum += alt ? n*3 : n; alt=!alt; }
+    return (10-(sum%10))%10 === Number(s[s.length-1]);
+  }
+  function barcodeValue(el,r=rOf(el)){
+    const candidates=[r.barcode,r.ean,r.code,r.productCode,r.productMemory?.barcode,el?.dataset?.barcodeValueV2859,el?.dataset?.barcodeEan,el?.dataset?.barcodeDetected].map(digits).filter(Boolean);
+    return candidates.find(validGtin) || '';
+  }
+  function hasValidBarcode(el,r=rOf(el)){ return !!barcodeValue(el,r); }
+  function hasLabel(el,r=rOf(el)){
+    const n=val(el,'[data-scan-name]')||r.productName||'';
+    const b=val(el,'[data-scan-brand]')||r.brand||'';
+    const sz=val(el,'[data-scan-size]')||r.estimatedSize||r.size||'';
+    return !!(r.labelScanMerged || (String(n).trim().length>2 && (String(b).trim().length>1 || String(sz).trim().length>0)));
+  }
+  function hasExpiry(el,r=rOf(el)){ return !!(val(el,'[data-scan-expiry]') || r.expiryDate || el?.dataset?.voiceExpiryDone==='1' || el?.dataset?.expirySkipped==='1'); }
+  function isBarcodeSkipped(el){ return el?.dataset?.barcodeSkipped==='1' || el?.dataset?.barcodeSkippedV2859==='1'; }
+  function setBarcodeStep(el,msg){
+    if(!el || el.classList.contains('confirmed') || el.classList.contains('bad')) return;
+    el.dataset.liveFollowupStep='barcode';
+    el.dataset.barcodePendingV2859='1';
+    delete el.dataset.barcodeScanDone; // non deve mai valere come barcode letto
+    try{ setActiveScannerResult?.(el); }catch(_){ }
+    try{ setScanVoiceHelper?.(el,msg||'Ora serve il barcode/EAN: inquadra solo le linee nere. Se il prodotto non ha barcode, premi Salta barcode.','live'); }catch(_){ }
+  }
+  function updatePanelButtons(){
+    const panel=$q('#guidedScanPanel'); if(!panel) return;
+    const step=String(panel.dataset.step||'').toLowerCase();
+    let b=panel.querySelector('[data-guided-skip-barcode-v2859]') || panel.querySelector('[data-guided-skip-barcode-v2858]');
+    const actions=panel.querySelector('.guided-actions');
+    if(actions && !b){ b=document.createElement('button'); b.type='button'; b.className='outline-btn barcode-skip-pro-v2859'; b.dataset.guidedSkipBarcodeV2859='1'; b.textContent='Salta barcode / non presente'; actions.insertBefore(b,actions.firstChild); }
+    if(b){ b.dataset.guidedSkipBarcodeV2859='1'; b.textContent='Salta barcode / non presente'; b.hidden=step!=='barcode'; }
+  }
+  function refreshBarcodePanel(reason=''){
+    try{ refreshGuidedScannerUx?.(reason||'barcode-hard-lock-v2859'); }catch(_){ }
+    setTimeout(updatePanelButtons,30);
+  }
+
+  // Override definitivo: ordine reale e blocco barcode.
+  window.guidedCurrentStep=function(el=null,result={}){
+    el=el||getActive();
+    if(!el) return 'product';
+    if(el.classList.contains('confirmed')) return 'done';
+    result=result||rOf(el);
+    const follow=String(el.dataset.liveFollowupStep||'').toLowerCase();
+    if(follow==='barcode') return 'barcode';
+    if(follow==='label' && (hasValidBarcode(el,result) || isBarcodeSkipped(el))) return 'label';
+    if(follow==='expiry' && (hasValidBarcode(el,result) || isBarcodeSkipped(el)) && hasLabel(el,result)) return 'expiry';
+    if(follow==='confirm' && (hasValidBarcode(el,result) || isBarcodeSkipped(el)) && hasLabel(el,result) && hasExpiry(el,result)) return 'confirm';
+    if(!hasValidBarcode(el,result) && !isBarcodeSkipped(el)) return 'barcode';
+    if(!hasLabel(el,result)) return 'label';
+    if(!hasExpiry(el,result)) return 'expiry';
+    return 'confirm';
+  };
+
+  // Wrapper voce: se barcode non valido/non saltato, la voce resta su barcode.
+  try{
+    if(typeof getNextScanMicStep==='function' && !window.__v2859MicStepWrapped){
+      const prev=getNextScanMicStep;
+      getNextScanMicStep=function(el,result={}){
+        el=el||getActive(); result=result||rOf(el);
+        if(el && !el.classList.contains('confirmed') && !hasValidBarcode(el,result) && !isBarcodeSkipped(el)) return 'barcode';
+        return prev.call(this,el,result);
+      };
+      window.__v2859MicStepWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof scanMicPromptForStep==='function' && !window.__v2859PromptWrapped){
+      const prev=scanMicPromptForStep;
+      scanMicPromptForStep=function(step,el,result={}){
+        if(step==='barcode') return 'Ora serve il barcode/EAN. Inquadra solo il codice a barre con le linee nere. Se non c’è, premi Salta barcode.';
+        return prev.call(this,step,el,result);
+      };
+      window.__v2859PromptWrapped=true;
+    }
+  }catch(_){ }
+
+  // Se viene creata una scheda nuova e non ha barcode, forza STEP 2. Non deve scivolare al prossimo.
+  try{
+    if(typeof addScannerResult==='function' && !window.__v2859AddScannerWrapped){
+      const prev=addScannerResult;
+      addScannerResult=function(result){
+        const el=prev.call(this,result);
+        setTimeout(()=>{
+          const card=el||getActive(); const r=rOf(card);
+          if(card && !hasValidBarcode(card,r) && !isBarcodeSkipped(card)){
+            setBarcodeStep(card,'Prima foto acquisita. Adesso non vado avanti da solo: inquadra il barcode/EAN oppure premi Salta barcode.');
+            try{ setScannerStatus?.('Step 2 bloccato su barcode: inquadra il codice a barre oppure premi Salta barcode.', liveScanSpeechEnabled?'Ora serve il barcode. Se non c è, premi Salta barcode.':'', true); }catch(_){ }
+          }
+          refreshBarcodePanel('add-card-barcode-lock-v2859');
+        },160);
+        return el;
+      };
+      window.__v2859AddScannerWrapped=true;
+    }
+  }catch(_){ }
+
+  // Se una foto viene scattata durante lo step barcode ma non contiene EAN valido, NON passare a label/expiry/confirm.
+  try{
+    if(typeof askVisionAi==='function' && !window.__v2859AskBarcodeWrapped){
+      const prev=askVisionAi;
+      askVisionAi=async function(dataUrl,opts={}){
+        const stage=String(opts?.stage||'').toLowerCase();
+        const active=getActive();
+        const forcedBarcode=stage==='barcode' || String(active?.dataset?.liveFollowupStep||'').toLowerCase()==='barcode';
+        const r=await prev.call(this,dataUrl,opts);
+        if(forcedBarcode){
+          const bc=barcodeValue(active,r||{});
+          if(bc){
+            if(active){
+              active.dataset.barcodeValueV2859=bc;
+              active.dataset.barcodePendingV2859='0';
+              active.dataset.liveFollowupStep='label';
+              const ar=rOf(active); ar.barcode=bc; ar.ean=bc; active._scanResult=Object.assign(ar,r||{}, {barcode:bc, ean:bc, barcodeConfirmedV2859:true});
+            }
+            if(r && typeof r==='object'){ r.barcode=bc; r.ean=bc; r.barcodeConfirmedV2859=true; }
+          }else{
+            if(active){
+              setBarcodeStep(active,'Non ho letto un barcode valido. Riprova avvicinando le linee nere, oppure premi Salta barcode se non è presente.');
+              try{ setScannerStatus?.('Barcode non letto: resto su questo passaggio, non lo considero completato.', liveScanSpeechEnabled?'Non ho letto il barcode. Riprova o premi salta barcode.':'', true); }catch(_){ }
+            }
+            if(r && typeof r==='object'){
+              r.barcode=''; r.ean=''; r.code=''; r.productCode='';
+              r.barcodeAnalysisV2859={ok:false, hardLocked:true, reason:'no_valid_gtin_detected'};
+              r.needsManual=true; r.needsRetake=true; r.liveFollowupStep='barcode';
+            }
+          }
+        }
+        setTimeout(()=>refreshBarcodePanel('ask-barcode-v2859'),60);
+        return r;
+      };
+      window.__v2859AskBarcodeWrapped=true;
+    }
+  }catch(_){ }
+
+  // Pulsante salta: non finge che il barcode sia stato letto, lo marca come skipped.
+  document.addEventListener('click',e=>{
+    const b=e.target?.closest?.('[data-guided-skip-barcode-v2859],[data-guided-skip-barcode-v2858]');
+    if(!b) return;
+    e.preventDefault(); e.stopPropagation();
+    const el=getActive(); if(!el) return;
+    const r=rOf(el); r.barcodeSkippedV2859=true; r.barcode=''; r.ean=''; el._scanResult=r;
+    el.dataset.barcodeSkipped='1'; el.dataset.barcodeSkippedV2859='1';
+    delete el.dataset.barcodeScanDone;
+    el.dataset.liveFollowupStep='label';
+    try{ setScanVoiceHelper?.(el,'Barcode saltato perché non presente o non leggibile. Ora passa all’etichetta.','live'); }catch(_){ }
+    try{ setScannerStatus?.('Barcode saltato manualmente. Ora inquadra etichetta/nome/formato.', liveScanSpeechEnabled?'Barcode saltato. Ora mostrami l etichetta.':'', true); }catch(_){ }
+    refreshBarcodePanel('barcode-skipped-v2859');
+  },true);
+
+  // Refresh finale UI: stepper e pulsante visibili sempre corretti.
+  try{
+    if(typeof refreshGuidedScannerUx==='function' && !window.__v2859RefreshWrapped){
+      const prev=refreshGuidedScannerUx;
+      refreshGuidedScannerUx=function(reason=''){
+        const out=prev.call(this,reason);
+        try{
+          const panel=$q('#guidedScanPanel'); const el=getActive(); const r=rOf(el); const step=window.guidedCurrentStep(el,r);
+          if(panel){
+            panel.dataset.step=step;
+            const meta=(typeof guidedStepMeta==='function'?guidedStepMeta(step):null) || {idx:step==='barcode'?2:1,total:5,kicker:'STEP',title:'Barcode',desc:''};
+            panel.querySelector('[data-guided-kicker]') && (panel.querySelector('[data-guided-kicker]').textContent=meta.kicker);
+            panel.querySelector('[data-guided-title]') && (panel.querySelector('[data-guided-title]').textContent=meta.title);
+            panel.querySelector('[data-guided-desc]') && (panel.querySelector('[data-guided-desc]').textContent= step==='barcode' ? 'Inquadra il codice a barre. Se non viene letto resta qui: non viene preso per buono da solo.' : meta.desc);
+            panel.querySelector('[data-guided-counter]') && (panel.querySelector('[data-guided-counter]').textContent=meta.idx+'/'+meta.total);
+            const miss=panel.querySelector('[data-guided-missing]');
+            if(miss && step==='barcode') miss.innerHTML='<span>Manca: barcode valido oppure salta barcode manualmente</span>';
+          }
+          updatePanelButtons();
+        }catch(_){ }
+        return out;
+      };
+      window.__v2859RefreshWrapped=true;
+    }
+  }catch(_){ }
+  setInterval(()=>{
+    const el=getActive();
+    if(el && !hasValidBarcode(el,rOf(el)) && !isBarcodeSkipped(el) && String(el.dataset.liveFollowupStep||'')!=='barcode') setBarcodeStep(el,'Serve ancora il barcode: non lo considero completato finché non viene letto o saltato.');
+    updatePanelButtons();
+  },900);
+  try{ window.SPESA_PRONTA_VERSION='v28.59-pro-barcode-hard-lock'; window.SPESA_PRONTA_BUILD=Object.assign({},window.SPESA_PRONTA_BUILD||{}, {version:'V28.59', proMode:true, barcodeHardLock:true, barcodeRequiresValidGtinOrManualSkip:true}); }catch(_){ }
+  try{ if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('v2859-barcode-hard-lock-ready',{barcodeStep:'valid_gtin_or_manual_skip_only', preventsAutoAdvance:true}),1200); }catch(_){ }
+})();
+
+// =============================================================
+// V28.60 PRO Real Visual Memory Match
+// Impronte visive gratuite: foto nuova -> fingerprint -> memoria server -> precompila senza OpenAI.
+// =============================================================
+(function(){
+  function spShort(v,m=160){ return String(v==null?'':v).replace(/\s+/g,' ').trim().slice(0,m); }
+  function categoryUnit(cat=''){ const c=String(cat||'').toLowerCase(); return /water|drink|soft|juice|milk/.test(c)?'bt':'pz'; }
+  async function addCropSignaturesV2860(dataUrl='', f={}){
+    try{
+      if(!dataUrl || typeof loadImageElement!=='function' || typeof objectSignatureFromCanvas!=='function') return f;
+      const img=await loadImageElement(dataUrl);
+      function sigCrop(x,y,w,h){
+        const c=document.createElement('canvas'); c.width=96; c.height=96;
+        const ctx=c.getContext('2d',{willReadFrequently:true});
+        ctx.drawImage(img, Math.max(0,x*img.width), Math.max(0,y*img.height), Math.max(1,w*img.width), Math.max(1,h*img.height), 0,0,96,96);
+        return objectSignatureFromCanvas(c);
+      }
+      // Crop centrale verticale: utile per bottiglie/flaconi lunghi. Label crop: utile per etichetta frontale.
+      f.centerSignature=f.centerSignature || sigCrop(.22,.04,.56,.92);
+      f.labelSignature=f.labelSignature || sigCrop(.18,.28,.64,.46);
+      f.visualFingerprintV2860={signature:f.signature||'', centerSignature:f.centerSignature||'', labelSignature:f.labelSignature||'', colorKey:f.colorKey||'', objectWidth:f.objectWidth, objectHeight:f.objectHeight, bottleLike:!!f.bottleLike, largeBottleLike:!!f.largeBottleLike};
+    }catch(_){ }
+    return f;
+  }
+  try{
+    if(typeof extractLocalVisionFeatures==='function' && !window.__v2860ExtractWrapped){
+      const prev=extractLocalVisionFeatures;
+      extractLocalVisionFeatures=async function(dataUrl){
+        const f=await prev.call(this,dataUrl);
+        return f ? addCropSignaturesV2860(dataUrl,f) : f;
+      };
+      window.__v2860ExtractWrapped=true;
+    }
+  }catch(_){ }
+  async function askServerVisualMemoryV2860(features=null){
+    try{
+      if(!features || typeof fetch!=='function') return null;
+      const endpoint=typeof visionApiBase==='function' ? visionApiBase() : '/api';
+      const controller=new AbortController(); const timer=setTimeout(()=>controller.abort(),1800);
+      const res=await fetch(`${endpoint}/ai/global-products/match`,{
+        method:'POST', signal:controller.signal,
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings?.token||''}`},
+        body:JSON.stringify({householdId:settings?.householdId||'', visualOnly:true, visualFeatures:features, matchMode:'free_visual_memory_v2860'})
+      });
+      clearTimeout(timer);
+      if(!res.ok) return null;
+      const data=await res.json().catch(()=>null); const m=data?.match; if(!m) return null;
+      const vm=m.visualMemoryMatchV2860||{}; const sim=Number(vm.similarity||0); if(sim<.68) return null;
+      const conf=Math.max(.80, Math.min(.96, sim));
+      return {
+        productName:spShort(m.productName||''), brand:spShort(m.brand||''), estimatedSize:spShort(m.format||''), category:m.category||'food', quantity:1, unit:m.unit||categoryUnit(m.category), barcode:(m.barcode||m.barcodes?.[0]||''),
+        confidence:conf, visualFeatures:features, memoryVision:true, serverMemoryVision:true, serverVisualMemoryV2860:true, autonomousVision:true, localFirst:true, cloudVision:false, cloudOffline:false, cloudFallback:false, teacherSkipped:true,
+        bestMatchName:m.productName||'', bestMatchSource:'memoria visiva server gratuita', bestMatchScore:Math.round(sim*100), serverMatchReason:m.matchReason||'free_visual_memory_v2860',
+        shouldAskConfirmation:conf<.93, needsManual:conf<.90,
+        reason:`Memoria visiva server: foto simile a un prodotto già confermato (${Math.round(sim*100)}%). OpenAI non usato.`
+      };
+    }catch(_){ return null; }
+  }
+  try{
+    if(typeof localAutonomyReady==='function' && !window.__v2860LocalReadyWrapped){
+      const prev=localAutonomyReady;
+      localAutonomyReady=function(pred={}){
+        if(pred?.serverVisualMemoryV2860 && pred.productName && Number(pred.confidence||0)>=.78) return true;
+        return prev.call(this,pred);
+      };
+      window.__v2860LocalReadyWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof autonomousVisionGuess==='function' && !window.__v2860AutoVisualWrapped){
+      const prev=autonomousVisionGuess;
+      autonomousVisionGuess=async function(dataUrl=''){
+        let r=await prev.call(this,dataUrl).catch(()=>null);
+        try{ if(r && typeof localAutonomyReady==='function' && localAutonomyReady(r)) return r; }catch(_){ if(r?.productName) return r; }
+        const f=await extractLocalVisionFeatures(dataUrl).catch(()=>null);
+        const server=await askServerVisualMemoryV2860(f).catch(()=>null);
+        if(server){
+          try{ logAiDiagnosticV98?.('v2860-free-visual-memory-hit',{productName:server.productName, brand:server.brand, score:server.bestMatchScore, openai:false}); }catch(_){ }
+          return server;
+        }
+        return r;
+      };
+      window.__v2860AutoVisualWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof buildServerProductMemoryV2840==='function' && !window.__v2860ProductMemoryWrapped){
+      const prev=buildServerProductMemoryV2840;
+      buildServerProductMemoryV2840=function(result={},current={}){
+        const pm=prev.call(this,result,current)||{};
+        pm.visualFeatures=result.visualFeatures||pm.visualFeatures||null;
+        pm.freeVisualMemoryV2860={clientFingerprint:true, policy:'foto confermata salvata come impronta visiva numerica gratuita'};
+        return pm;
+      };
+      window.__v2860ProductMemoryWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    const css=document.createElement('style'); css.id='v2860-free-visual-css';
+    css.textContent=`#scannerResults [data-scan-summary],#scannerResults .scan-summary-box{display:none!important}.server-visual-hit-v2860{display:inline-flex;align-items:center;gap:6px;border-radius:999px;background:#eafaf1;color:#0d6b3d;border:1px solid #bff0d2;padding:7px 10px;font-weight:900}`;
+    document.head.appendChild(css);
+  }catch(_){ }
+  try{ window.SPESA_PRONTA_VERSION='v28.61-pro-deep-visual-memory'; window.SPESA_PRONTA_BUILD=Object.assign({},window.SPESA_PRONTA_BUILD||{}, {version:'V28.60', proMode:true, freeVisualMemory:true, openAiCostPolicy:'visual_memory_before_openai'}); }catch(_){ }
+  try{ if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('v2860-free-visual-memory-ready',{freeVisualMemory:true, serverFingerprintMatch:true, openAiBeforeMemory:false}),1200); }catch(_){ }
+})();
+
+// =============================================================
+// V28.61 PRO Deep Visual Match
+// Migliora il match visivo gratuito: non solo colori, ma ROI prodotto,
+// silhouette, label, hash percettivi, istogrammi colore e proporzioni.
+// =============================================================
+(function(){
+  function spShortV2861(v,m=170){ return String(v==null?'':v).replace(/\s+/g,' ').trim().slice(0,m); }
+  function numV2861(v,d=0){ v=Number(v); return Number.isFinite(v)?v:d; }
+  function hexFromBitsV2861(bits=''){
+    let out='';
+    for(let i=0;i<bits.length;i+=4){ out+=parseInt(bits.slice(i,i+4).padEnd(4,'0'),2).toString(16); }
+    return out;
+  }
+  function makeCanvasV2861(w,h){ const c=document.createElement('canvas'); c.width=Math.max(1,Math.round(w)); c.height=Math.max(1,Math.round(h)); return c; }
+  function drawCropV2861(img, box, w=96, h=96){
+    const c=makeCanvasV2861(w,h); const ctx=c.getContext('2d',{willReadFrequently:true});
+    const x=Math.max(0, Math.min(img.width-2, box.x||0));
+    const y=Math.max(0, Math.min(img.height-2, box.y||0));
+    const bw=Math.max(2, Math.min(img.width-x, box.w||img.width));
+    const bh=Math.max(2, Math.min(img.height-y, box.h||img.height));
+    ctx.drawImage(img,x,y,bw,bh,0,0,w,h);
+    return c;
+  }
+  function getLumArrayV2861(canvas){
+    const ctx=canvas.getContext('2d',{willReadFrequently:true}); const w=canvas.width,h=canvas.height;
+    const d=ctx.getImageData(0,0,w,h).data; const lum=new Array(w*h); const rgb=[];
+    for(let i=0,p=0;i<d.length;i+=4,p++){
+      const r=d[i],g=d[i+1],b=d[i+2]; lum[p]=.2126*r+.7152*g+.0722*b; rgb.push(r,g,b);
+    }
+    return {lum,rgb,w,h,data:d};
+  }
+  function gridSigV2861(canvas, cols=6, rows=8){
+    try{
+      const {lum,w,h}=getLumArrayV2861(canvas); const cells=[];
+      for(let gy=0; gy<rows; gy++) for(let gx=0; gx<cols; gx++){
+        const x0=Math.floor(gx*w/cols), x1=Math.floor((gx+1)*w/cols), y0=Math.floor(gy*h/rows), y1=Math.floor((gy+1)*h/rows);
+        let s=0,c=0;
+        for(let y=y0;y<y1;y+=2) for(let x=x0;x<x1;x+=2){ s+=lum[y*w+x]||0; c++; }
+        cells.push(Math.round((s/Math.max(1,c))/16));
+      }
+      return cells.join('-');
+    }catch(_){ return ''; }
+  }
+  function dHashV2861(canvas, mode='h'){
+    try{
+      const w=mode==='h'?9:8, h=mode==='h'?8:9;
+      const c=makeCanvasV2861(w,h); c.getContext('2d',{willReadFrequently:true}).drawImage(canvas,0,0,w,h);
+      const {lum}=getLumArrayV2861(c); let bits='';
+      if(mode==='h'){
+        for(let y=0;y<8;y++) for(let x=0;x<8;x++) bits += (lum[y*w+x] > lum[y*w+x+1]) ? '1' : '0';
+      }else{
+        for(let y=0;y<8;y++) for(let x=0;x<8;x++) bits += (lum[y*w+x] > lum[(y+1)*w+x]) ? '1' : '0';
+      }
+      return hexFromBitsV2861(bits);
+    }catch(_){ return ''; }
+  }
+  function colorHistV2861(canvas){
+    try{
+      const ctx=canvas.getContext('2d',{willReadFrequently:true}); const w=canvas.width,h=canvas.height;
+      const d=ctx.getImageData(0,0,w,h).data; const hist=new Array(27).fill(0); let total=0;
+      for(let i=0;i<d.length;i+=16){
+        const r=d[i],g=d[i+1],b=d[i+2];
+        const ri=Math.min(2,Math.floor(r/86)), gi=Math.min(2,Math.floor(g/86)), bi=Math.min(2,Math.floor(b/86));
+        hist[ri*9+gi*3+bi]++; total++;
+      }
+      return hist.map(x=>Math.round(x*1000/Math.max(1,total)));
+    }catch(_){ return []; }
+  }
+  function stripeSigV2861(canvas, rows=7){
+    try{
+      const ctx=canvas.getContext('2d',{willReadFrequently:true}); const w=canvas.width,h=canvas.height; const d=ctx.getImageData(0,0,w,h).data; const out=[];
+      for(let gy=0;gy<rows;gy++){
+        const y0=Math.floor(gy*h/rows), y1=Math.floor((gy+1)*h/rows); let r=0,g=0,b=0,l=0,c=0;
+        for(let y=y0;y<y1;y+=2) for(let x=0;x<w;x+=3){ const i=(y*w+x)*4; r+=d[i]; g+=d[i+1]; b+=d[i+2]; l+=.2126*d[i]+.7152*d[i+1]+.0722*d[i+2]; c++; }
+        out.push([Math.round(r/Math.max(1,c)/24),Math.round(g/Math.max(1,c)/24),Math.round(b/Math.max(1,c)/24),Math.round(l/Math.max(1,c)/24)].join('.'));
+      }
+      return out.join('|');
+    }catch(_){ return ''; }
+  }
+  function estimateProductBoxV2861(img){
+    const w=160,h=160; const c=makeCanvasV2861(w,h); const ctx=c.getContext('2d',{willReadFrequently:true}); ctx.drawImage(img,0,0,w,h);
+    const d=ctx.getImageData(0,0,w,h).data; const lum=new Array(w*h);
+    for(let i=0,p=0;i<d.length;i+=4,p++) lum[p]=.2126*d[i]+.7152*d[i+1]+.0722*d[i+2];
+    // Colore medio bordo: approssima sfondo. Funziona meglio quando il prodotto è al centro.
+    let br=0,bg=0,bb=0,bc=0;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      if(x<8||x>w-9||y<8||y>h-9){ const i=(y*w+x)*4; br+=d[i]; bg+=d[i+1]; bb+=d[i+2]; bc++; }
+    }
+    br/=Math.max(1,bc); bg/=Math.max(1,bc); bb/=Math.max(1,bc);
+    let minX=w,minY=h,maxX=0,maxY=0,count=0;
+    for(let y=2;y<h-2;y++){
+      for(let x=2;x<w-2;x++){
+        const i=(y*w+x)*4, r=d[i],g=d[i+1],b=d[i+2], l=lum[y*w+x];
+        const bgDist=(Math.abs(r-br)+Math.abs(g-bg)+Math.abs(b-bb))/3;
+        const edge=Math.abs(l-lum[y*w+x-1])+Math.abs(l-lum[y*w+x+1])+Math.abs(l-lum[(y-1)*w+x])+Math.abs(l-lum[(y+1)*w+x]);
+        const centralBoost=(x>w*.18&&x<w*.82&&y>h*.02&&y<h*.98);
+        const saturated=(Math.max(r,g,b)-Math.min(r,g,b))>35;
+        const keep=centralBoost && (bgDist>28 || edge>54 || saturated);
+        if(keep){ minX=Math.min(minX,x); maxX=Math.max(maxX,x); minY=Math.min(minY,y); maxY=Math.max(maxY,y); count++; }
+      }
+    }
+    if(count<120 || maxX<=minX || maxY<=minY){
+      minX=Math.floor(w*.18); maxX=Math.floor(w*.82); minY=Math.floor(h*.03); maxY=Math.floor(h*.96);
+    }
+    // Espandi e converti alle dimensioni originali.
+    const padX=Math.round((maxX-minX)*.10), padY=Math.round((maxY-minY)*.08);
+    minX=Math.max(0,minX-padX); maxX=Math.min(w-1,maxX+padX); minY=Math.max(0,minY-padY); maxY=Math.min(h-1,maxY+padY);
+    const box={x:minX/w*img.width,y:minY/h*img.height,w:(maxX-minX)/w*img.width,h:(maxY-minY)/h*img.height};
+    const aspect=box.h/Math.max(1,box.w);
+    return {box, aspect:Number(aspect.toFixed(3)), area:Number((box.w*box.h/Math.max(1,img.width*img.height)).toFixed(3)), source:'saliency_border_edge_v2861'};
+  }
+  async function addDeepVisualV2861(dataUrl='', features={}){
+    try{
+      if(!dataUrl || typeof loadImageElement!=='function') return features;
+      const img=await loadImageElement(dataUrl);
+      const est=estimateProductBoxV2861(img); const b=est.box;
+      const obj=drawCropV2861(img,b,128,160);
+      const center=drawCropV2861(img,{x:b.x+b.w*.12,y:b.y+b.h*.05,w:b.w*.76,h:b.h*.90},112,144);
+      const label=drawCropV2861(img,{x:b.x+b.w*.10,y:b.y+b.h*.34,w:b.w*.80,h:b.h*.36},128,80);
+      const upper=drawCropV2861(img,{x:b.x+b.w*.14,y:b.y+b.h*.06,w:b.w*.72,h:b.h*.30},96,64);
+      const lower=drawCropV2861(img,{x:b.x+b.w*.14,y:b.y+b.h*.62,w:b.w*.72,h:b.h*.32},96,64);
+      features.objectBBoxV2861={x:Number((b.x/img.width).toFixed(3)),y:Number((b.y/img.height).toFixed(3)),w:Number((b.w/img.width).toFixed(3)),h:Number((b.h/img.height).toFixed(3)),aspect:est.aspect,area:est.area,source:est.source};
+      features.visualDeepV2861={
+        version:'V28.61_deep_visual_fingerprint',
+        objectHashH:dHashV2861(obj,'h'), objectHashV:dHashV2861(obj,'v'),
+        centerHashH:dHashV2861(center,'h'), centerHashV:dHashV2861(center,'v'),
+        labelHashH:dHashV2861(label,'h'), labelHashV:dHashV2861(label,'v'),
+        upperHashH:dHashV2861(upper,'h'), lowerHashH:dHashV2861(lower,'h'),
+        objectGrid:gridSigV2861(obj,6,8), centerGrid:gridSigV2861(center,5,8), labelGrid:gridSigV2861(label,8,4),
+        objectHist:colorHistV2861(obj), labelHist:colorHistV2861(label),
+        stripeSignature:stripeSigV2861(obj,7), labelStripeSignature:stripeSigV2861(label,4),
+        bbox:features.objectBBoxV2861,
+        oldSignature:features.signature||'', centerSignature:features.centerSignature||'', labelSignature:features.labelSignature||'', colorKey:features.colorKey||''
+      };
+      features.deepVisualMatchV2861=true;
+    }catch(_){ }
+    return features;
+  }
+  try{
+    if(typeof extractLocalVisionFeatures==='function' && !window.__v2861ExtractWrapped){
+      const prev=extractLocalVisionFeatures;
+      extractLocalVisionFeatures=async function(dataUrl){
+        const f=await prev.call(this,dataUrl);
+        return f ? addDeepVisualV2861(dataUrl,f) : f;
+      };
+      window.__v2861ExtractWrapped=true;
+    }
+  }catch(_){ }
+  async function askServerDeepVisualMemoryV2861(features=null){
+    try{
+      if(!features || typeof fetch!=='function') return null;
+      const endpoint=typeof visionApiBase==='function' ? visionApiBase() : '/api';
+      const controller=new AbortController(); const timer=setTimeout(()=>controller.abort(),2200);
+      const res=await fetch(`${endpoint}/ai/global-products/match`,{
+        method:'POST', signal:controller.signal,
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${settings?.token||''}`},
+        body:JSON.stringify({householdId:settings?.householdId||'', visualOnly:true, visualFeatures:features, matchMode:'deep_visual_memory_v2861', requireVisual:true})
+      });
+      clearTimeout(timer);
+      if(!res.ok) return null;
+      const data=await res.json().catch(()=>null); const m=data?.match; if(!m) return null;
+      const vm=m.visualMemoryMatchV2861||m.visualMemoryMatchV2860||{}; const sim=Number(vm.similarity||0); if(sim<.74) return null;
+      const conf=Math.max(.84, Math.min(.97, sim));
+      return {
+        productName:spShortV2861(m.productName||''), brand:spShortV2861(m.brand||''), estimatedSize:spShortV2861(m.format||''), category:m.category||'food', quantity:1, unit:m.unit||(/water|drink|soft|juice|milk/i.test(String(m.category||''))?'bt':'pz'), barcode:(m.barcode||m.barcodes?.[0]||''),
+        confidence:conf, visualFeatures:features, memoryVision:true, serverMemoryVision:true, serverVisualMemoryV2861:true, serverVisualMemoryV2860:!!m.visualMemoryMatchV2860, autonomousVision:true, localFirst:true, cloudVision:false, cloudOffline:false, cloudFallback:false, teacherSkipped:true,
+        bestMatchName:m.productName||'', bestMatchSource:'memoria visiva profonda server gratuita', bestMatchScore:Math.round(sim*100), serverMatchReason:m.matchReason||'deep_visual_memory_v2861',
+        shouldAskConfirmation:conf<.94, needsManual:conf<.90,
+        reason:`Memoria visiva profonda: foto simile a un prodotto già confermato (${Math.round(sim*100)}%). OpenAI non usato.`
+      };
+    }catch(_){ return null; }
+  }
+  try{
+    if(typeof localAutonomyReady==='function' && !window.__v2861LocalReadyWrapped){
+      const prev=localAutonomyReady;
+      localAutonomyReady=function(pred={}){
+        if(pred?.serverVisualMemoryV2861 && pred.productName && Number(pred.confidence||0)>=.82) return true;
+        return prev.call(this,pred);
+      };
+      window.__v2861LocalReadyWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof autonomousVisionGuess==='function' && !window.__v2861AutoWrapped){
+      const prev=autonomousVisionGuess;
+      autonomousVisionGuess=async function(dataUrl=''){
+        const f=await extractLocalVisionFeatures(dataUrl).catch(()=>null);
+        const deep=await askServerDeepVisualMemoryV2861(f).catch(()=>null);
+        if(deep){
+          try{ logAiDiagnosticV98?.('v2861-deep-visual-memory-hit',{productName:deep.productName, brand:deep.brand, score:deep.bestMatchScore, openai:false}); }catch(_){ }
+          return deep;
+        }
+        return prev.call(this,dataUrl).catch(()=>null);
+      };
+      window.__v2861AutoWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof buildServerProductMemoryV2840==='function' && !window.__v2861ProductMemoryWrapped){
+      const prev=buildServerProductMemoryV2840;
+      buildServerProductMemoryV2840=function(result={},current={}){
+        const pm=prev.call(this,result,current)||{};
+        pm.visualFeatures=result.visualFeatures||pm.visualFeatures||null;
+        pm.deepVisualMemoryV2861={clientFingerprint:true, fields:['objectHash','labelHash','bbox','histogram','stripeSignature'], cost:'zero_openai_tokens'};
+        return pm;
+      };
+      window.__v2861ProductMemoryWrapped=true;
+    }
+  }catch(_){ }
+  try{ window.SPESA_PRONTA_VERSION='v28.61-pro-deep-visual-memory'; window.SPESA_PRONTA_BUILD=Object.assign({},window.SPESA_PRONTA_BUILD||{}, {version:'V28.61', proMode:true, deepVisualMemory:true, visualMatchBeforeOpenAI:true}); }catch(_){ }
+  try{ if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('v2861-deep-visual-memory-ready',{deepVisualMemory:true, hashes:['object','label','center'], openai:false}),1200); }catch(_){ }
+})();

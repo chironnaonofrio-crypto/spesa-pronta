@@ -5840,3 +5840,308 @@ try{
   };
   try{ const prevPreflightV2858=preflightSnapshotV98; preflightSnapshotV98=function(){ const s=prevPreflightV2858.call(this); s.version='V28.58'; s.brain=Object.assign({},s.brain||{},{oneConfirmationMemory:true, barcodeStep2:true, smartSummaryHidden:true}); return s; }; }catch(_){ }
 }catch(e){ console.warn('V28.58 server memory patch failed', e && e.message); }
+
+// =============================================================
+// V28.60 PRO Real Visual Memory Match
+// Trasforma la firma foto in un confronto immagini gratuito: nessun token OpenAI.
+// La memoria visiva diventa utilizzabile già dalla seconda scansione se la foto è simile.
+// =============================================================
+(function(){
+  function n(v,d=0){ v=Number(v); return Number.isFinite(v)?v:d; }
+  function short(v,m=180){ return String(v==null?'':v).replace(/[\u0000-\u001f\u007f]+/g,' ').replace(/\s+/g,' ').trim().slice(0,m); }
+  function sigArr(sig=''){ return String(sig||'').split('-').map(x=>Number(x)).filter(x=>Number.isFinite(x)); }
+  function sigDist(a='',b=''){
+    const aa=sigArr(a), bb=sigArr(b); if(!aa.length || !bb.length || aa.length!==bb.length) return 99;
+    let s=0; for(let i=0;i<aa.length;i++) s+=Math.abs(aa[i]-bb[i]); return s/aa.length;
+  }
+  function compactFeature(f={}){
+    if(!f || typeof f!=='object') return null;
+    const out={
+      signature:short(f.signature||'',140), centerSignature:short(f.centerSignature||f.objectCenterSignature||'',140), labelSignature:short(f.labelSignature||'',140),
+      objectWidth:n(f.objectWidth), objectHeight:n(f.objectHeight), objectCoverage:n(f.objectCoverage), edge:n(f.edge), verticality:n(f.verticality,1),
+      bottleLike:!!f.bottleLike, largeBottleLike:!!f.largeBottleLike, colorKey:short(f.colorKey||'',70),
+      center:f.center&&typeof f.center==='object'?{r:n(f.center.r),g:n(f.center.g),b:n(f.center.b),red:n(f.center.red),blue:n(f.center.blue),green:n(f.center.green),white:n(f.center.white),dark:n(f.center.dark),clear:n(f.center.clear),lum:n(f.center.lum)}:null,
+      label:f.label&&typeof f.label==='object'?{r:n(f.label.r),g:n(f.label.g),b:n(f.label.b),red:n(f.label.red),blue:n(f.label.blue),green:n(f.label.green),white:n(f.label.white),dark:n(f.label.dark),clear:n(f.label.clear),lum:n(f.label.lum)}:null,
+      width:n(f.width), height:n(f.height), version:'V28.60_free_visual_fingerprint'
+    };
+    if(!out.signature && !out.centerSignature && !out.colorKey && !out.objectHeight) return null;
+    return out;
+  }
+  function numDiff(a,b,scale=1){ return Math.min(1, Math.abs(n(a)-n(b))/Math.max(.0001,scale)); }
+  function colorDist(a={},b={}){
+    if(!a||!b) return .35;
+    const dr=numDiff(a.r,b.r,255), dg=numDiff(a.g,b.g,255), db=numDiff(a.b,b.b,255);
+    return Math.min(1, (dr+dg+db)/3);
+  }
+  function featureDistance(a={},b={}){
+    a=compactFeature(a)||{}; b=compactFeature(b)||{};
+    let total=0, w=0;
+    const add=(d,wt)=>{ if(Number.isFinite(Number(d))){ total+=Math.min(1,Math.max(0,d))*wt; w+=wt; } };
+    if(a.centerSignature && b.centerSignature) add(Math.min(1,sigDist(a.centerSignature,b.centerSignature)/16), .30);
+    if(a.labelSignature && b.labelSignature) add(Math.min(1,sigDist(a.labelSignature,b.labelSignature)/16), .20);
+    if(a.signature && b.signature) add(Math.min(1,sigDist(a.signature,b.signature)/16), .16);
+    add(numDiff(a.objectWidth,b.objectWidth,.65), .10);
+    add(numDiff(a.objectHeight,b.objectHeight,.75), .13);
+    add(numDiff(a.objectCoverage,b.objectCoverage,.55), .06);
+    add(numDiff(Math.min(80,a.edge),Math.min(80,b.edge),80), .05);
+    add(numDiff(Math.min(4,a.verticality),Math.min(4,b.verticality),4), .04);
+    if(a.colorKey && b.colorKey) add(a.colorKey===b.colorKey?0:.18, .07);
+    if(a.center&&b.center) add(colorDist(a.center,b.center), .08);
+    if(a.label&&b.label) add(colorDist(a.label,b.label), .08);
+    if(!!a.bottleLike!==!!b.bottleLike) add(.32,.06); else add(0,.03);
+    if(!!a.largeBottleLike!==!!b.largeBottleLike) add(.24,.04); else add(0,.02);
+    return w ? Math.min(1,total/w) : 1;
+  }
+  function featureSamples(record={}){
+    const out=[];
+    const push=(f,source='')=>{ const c=compactFeature(f); if(c) out.push({features:c,source}); };
+    (record.objectFolder?.visualFeatureSamples||[]).forEach(s=>push(s.features||s.visualFeatures||s, s.source||'object_folder'));
+    (record.confirmedExamples||[]).forEach(s=>push(s.visualFeatures, 'confirmed_example'));
+    push(record.visualFeatures,'record');
+    push(record.memoryCard?.visualFeatures,'memory_card');
+    // fallback: firma semantica precedente come indizio debole, non basta da sola.
+    const sig=record.visualSignature || record.memoryCard?.visualAppearance?.visualSignature;
+    if(sig) push({signature:sig, colorKey:(record.colors||[]).slice(0,3).join('|')}, 'old_signature_fallback');
+    return out.slice(0,48);
+  }
+  function visualMatch(query={}){
+    try{
+      ensureDbShape();
+      const q=compactFeature(query.visualFeatures||query.visualFingerprint||query.features||{}); if(!q) return null;
+      const products=Object.values(db.assistantBrain?.globalProductMemory?.products||{});
+      const ranked=[];
+      for(const p of products){
+        const confirmations=Number(p.confirmations||0); if(confirmations<1 && p.reliability!=='media' && p.reliability!=='alta') continue;
+        const samples=featureSamples(p); if(!samples.length) continue;
+        let best=null;
+        for(const s of samples){
+          const dist=featureDistance(q,s.features); const sim=1-dist;
+          if(!best || sim>best.similarity) best={similarity:sim, distance:dist, source:s.source};
+        }
+        if(!best) continue;
+        // Soglia prudente: con una sola conferma accettiamo solo foto molto simili.
+        const threshold = confirmations<=1 ? .74 : .68;
+        if(best.similarity < threshold) continue;
+        let score=best.similarity*10 + Math.min(2,confirmations*.35);
+        if(p.reliability==='alta') score+=1.1; else if(p.reliability==='media') score+=.7;
+        ranked.push({score, product:p, match:best, confirmations, sampleCount:samples.length});
+      }
+      ranked.sort((a,b)=>b.score-a.score);
+      const top=ranked[0]; if(!top) return null;
+      const second=ranked[1];
+      const margin=second ? (top.match.similarity-second.match.similarity) : .25;
+      if(top.confirmations<=1 && margin<.015 && top.match.similarity<.84) return null;
+      const compact=compactGlobalProductRecord(top.product);
+      compact.visualMemoryMatchV2860={active:true, similarity:Number(top.match.similarity.toFixed(3)), distance:Number(top.match.distance.toFixed(3)), margin:Number(margin.toFixed(3)), sampleCount:top.sampleCount, source:top.match.source, policy:'confronto gratuito tra impronte immagine salvate; niente OpenAI'};
+      compact.matchReason='free_visual_memory_v2860';
+      compact.teacherBypassEligible=true;
+      compact.reliability=compact.reliability||'media';
+      try{ updateGlobalLearningAudit({type:'v2860-free-visual-memory-match', productName:compact.productName, brand:compact.brand, similarity:compact.visualMemoryMatchV2860.similarity, confirmations:top.confirmations, sampleCount:top.sampleCount}); }catch(_){}
+      return {score:top.score, product:compact};
+    }catch(e){ try{ updateGlobalLearningAudit({type:'v2860-visual-match-error', reason:String(e?.message||e).slice(0,160)}); }catch(_){} return null; }
+  }
+
+  try{
+    if(typeof upsertGlobalProductMemory==='function' && !global.__v2860UpsertVisualWrapped){
+      const prev=upsertGlobalProductMemory;
+      upsertGlobalProductMemory=function(confirmed={}){
+        const compact=prev.call(this,confirmed);
+        try{
+          ensureDbShape();
+          const g=db.assistantBrain.globalProductMemory||{products:{}};
+          const key=compact?.key || (confirmed.barcode?`ean:${confirmed.barcode}`:'');
+          const rec=(key&&g.products?.[key]) || Object.values(g.products||{}).find(r=>normalizeVisionText(r.productName||'')===normalizeVisionText(compact?.productName||confirmed.productName||'') && normalizeVisionText(r.brand||'')===normalizeVisionText(compact?.brand||confirmed.brand||''));
+          if(rec){
+            rec.objectFolder=rec.objectFolder||{photos:[],visualSignatures:[]};
+            const c=compactFeature(confirmed.visualFeatures || confirmed.productMemory?.visualFeatures || {});
+            if(c){
+              rec.objectFolder.visualFeatureSamples=Array.isArray(rec.objectFolder.visualFeatureSamples)?rec.objectFolder.visualFeatureSamples:[];
+              const duplicate=rec.objectFolder.visualFeatureSamples.some(s=>featureDistance(c,s.features||s)<.035);
+              if(!duplicate) rec.objectFolder.visualFeatureSamples.unshift({features:c, at:Date.now(), source:'user_confirmed_front_v2860', productName:confirmed.productName||rec.productName||'', brand:confirmed.brand||rec.brand||''});
+              rec.objectFolder.visualFeatureSamples=rec.objectFolder.visualFeatureSamples.slice(0,36);
+              rec.visualFeatures=c;
+              rec.freeVisualMemoryV2860={active:true, samples:rec.objectFolder.visualFeatureSamples.length, updatedAt:Date.now(), policy:'foto confermate trasformate in impronte numeriche gratuite'};
+              rec.learningQuality=Object.assign({},rec.learningQuality||{}, {freeVisualRecognition:true, visualSamples:rec.objectFolder.visualFeatureSamples.length, enoughForLocalRecognition:true});
+              updateGlobalLearningAudit({type:'v2860-visual-fingerprint-saved', productName:rec.productName, brand:rec.brand, samples:rec.objectFolder.visualFeatureSamples.length});
+            }
+          }
+        }catch(e){ try{ updateGlobalLearningAudit({type:'v2860-visual-fingerprint-save-error', reason:String(e?.message||e).slice(0,160)}); }catch(_){} }
+        return compact;
+      };
+      global.__v2860UpsertVisualWrapped=true;
+    }
+  }catch(_){ }
+
+  try{
+    if(typeof matchGlobalProductMemory==='function' && !global.__v2860MatchVisualWrapped){
+      const prev=matchGlobalProductMemory;
+      matchGlobalProductMemory=function(query={}){
+        const base=prev.call(this,query);
+        if(base?.product) return base;
+        const vm=visualMatch(query||{});
+        return vm || null;
+      };
+      global.__v2860MatchVisualWrapped=true;
+    }
+  }catch(_){ }
+
+  try{ const prev=preflightSnapshotV98; if(typeof prev==='function' && !global.__v2860PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this); s.version='V28.60'; s.brain=Object.assign({},s.brain||{},{version:'V28.61', freeVisualMemory:'active', visualFingerprintMatch:'server-side numeric image fingerprints, zero OpenAI tokens'}); return s; }; global.__v2860PreflightWrapped=true; } }catch(_){ }
+  console.log('[Spesa Pronta] V28.60 PRO Real Visual Memory Match active');
+})();
+
+// =============================================================
+// V28.61 PRO Deep Visual Memory Match
+// Match gratuito più profondo: ROI oggetto + label + hash percettivi + istogrammi.
+// =============================================================
+(function(){
+  function n(v,d=0){ v=Number(v); return Number.isFinite(v)?v:d; }
+  function clean(v,m=180){ return String(v==null?'':v).replace(/[\u0000-\u001f\u007f]+/g,' ').replace(/\s+/g,' ').trim().slice(0,m); }
+  function arrNums(a){ return Array.isArray(a)?a.map(x=>Number(x)).filter(x=>Number.isFinite(x)):[]; }
+  function sigArr(sig=''){ return String(sig||'').split('-').map(x=>Number(x)).filter(x=>Number.isFinite(x)); }
+  function sigDistance(a='',b=''){
+    const aa=sigArr(a), bb=sigArr(b); if(!aa.length || !bb.length || aa.length!==bb.length) return null;
+    let s=0; for(let i=0;i<aa.length;i++) s+=Math.abs(aa[i]-bb[i]); return Math.min(1,(s/aa.length)/16);
+  }
+  function bitCount4(x){ x&=15; return [0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4][x]||0; }
+  function hammingHex(a='',b=''){
+    a=String(a||''); b=String(b||''); if(!a||!b||a.length!==b.length) return null;
+    let diff=0,total=a.length*4;
+    for(let i=0;i<a.length;i++){ const x=parseInt(a[i],16), y=parseInt(b[i],16); if(!Number.isFinite(x)||!Number.isFinite(y)) return null; diff+=bitCount4(x^y); }
+    return diff/Math.max(1,total);
+  }
+  function histDist(a=[],b=[]){
+    a=arrNums(a); b=arrNums(b); if(!a.length||!b.length||a.length!==b.length) return null;
+    let s=0; for(let i=0;i<a.length;i++) s+=Math.abs(a[i]-b[i]); return Math.min(1,s/2000);
+  }
+  function stripeDist(a='',b=''){
+    const aa=String(a||'').split('|').filter(Boolean), bb=String(b||'').split('|').filter(Boolean); if(!aa.length||aa.length!==bb.length) return null;
+    let s=0,c=0;
+    for(let i=0;i<aa.length;i++){
+      const x=aa[i].split('.').map(Number), y=bb[i].split('.').map(Number); if(x.length!==y.length) continue;
+      for(let j=0;j<x.length;j++){ if(Number.isFinite(x[j])&&Number.isFinite(y[j])){ s+=Math.abs(x[j]-y[j]); c++; } }
+    }
+    return c?Math.min(1,(s/c)/10):null;
+  }
+  function bboxDist(a={},b={}){
+    if(!a||!b) return null;
+    const keys=['w','h','aspect','area']; let s=0,c=0;
+    keys.forEach(k=>{ if(Number.isFinite(Number(a[k]))&&Number.isFinite(Number(b[k]))){ const scale=k==='aspect'?4:1; s+=Math.min(1,Math.abs(Number(a[k])-Number(b[k]))/scale); c++; } });
+    return c?s/c:null;
+  }
+  function deepOf(f={}){ return f?.visualDeepV2861 || f?.deepVisualV2861 || f?.features?.visualDeepV2861 || null; }
+  function compactV2861(f={}){
+    if(!f||typeof f!=='object') return null;
+    const d=deepOf(f)||{};
+    const bbox=f.objectBBoxV2861 || d.bbox || {};
+    const out={
+      signature:clean(f.signature||d.oldSignature||'',160), centerSignature:clean(f.centerSignature||d.centerSignature||'',160), labelSignature:clean(f.labelSignature||d.labelSignature||'',160), colorKey:clean(f.colorKey||d.colorKey||'',90),
+      objectWidth:n(f.objectWidth), objectHeight:n(f.objectHeight), objectCoverage:n(f.objectCoverage), edge:n(f.edge), verticality:n(f.verticality,1), bottleLike:!!f.bottleLike, largeBottleLike:!!f.largeBottleLike,
+      visualDeepV2861:{
+        version:'V28.61_deep_visual_fingerprint',
+        objectHashH:clean(d.objectHashH||'',32), objectHashV:clean(d.objectHashV||'',32), centerHashH:clean(d.centerHashH||'',32), centerHashV:clean(d.centerHashV||'',32), labelHashH:clean(d.labelHashH||'',32), labelHashV:clean(d.labelHashV||'',32), upperHashH:clean(d.upperHashH||'',32), lowerHashH:clean(d.lowerHashH||'',32),
+        objectGrid:clean(d.objectGrid||'',260), centerGrid:clean(d.centerGrid||'',260), labelGrid:clean(d.labelGrid||'',220),
+        objectHist:arrNums(d.objectHist||[]).slice(0,27), labelHist:arrNums(d.labelHist||[]).slice(0,27), stripeSignature:clean(d.stripeSignature||'',140), labelStripeSignature:clean(d.labelStripeSignature||'',100),
+        bbox:{w:n(bbox.w),h:n(bbox.h),aspect:n(bbox.aspect),area:n(bbox.area)}
+      },
+      version:'V28.61_deep_visual_memory'
+    };
+    const hasDeep=Object.values(out.visualDeepV2861).some(v=>Array.isArray(v)?v.length:!!v);
+    if(!out.signature && !out.centerSignature && !out.labelSignature && !out.colorKey && !hasDeep) return null;
+    return out;
+  }
+  function legacyDist(a={},b={}){
+    let total=0,w=0; const add=(d,wt)=>{ if(d!==null && d!==undefined && Number.isFinite(Number(d))){ total+=Math.min(1,Math.max(0,Number(d)))*wt; w+=wt; } };
+    add(sigDistance(a.centerSignature,b.centerSignature),.22); add(sigDistance(a.labelSignature,b.labelSignature),.18); add(sigDistance(a.signature,b.signature),.12);
+    ['objectWidth','objectHeight','objectCoverage','verticality'].forEach(k=>{ if(Number.isFinite(Number(a[k]))&&Number.isFinite(Number(b[k]))) add(Math.min(1,Math.abs(Number(a[k])-Number(b[k]))/(k==='verticality'?4:1)),.06); });
+    if(a.colorKey&&b.colorKey) add(a.colorKey===b.colorKey?0:.2,.05);
+    if(!!a.bottleLike!==!!b.bottleLike) add(.35,.04); else add(0,.025);
+    return w?total/w:1;
+  }
+  function deepDistance(a={},b={}){
+    a=compactV2861(a)||{}; b=compactV2861(b)||{}; const da=a.visualDeepV2861||{}, db=b.visualDeepV2861||{};
+    let total=0,w=0; const add=(d,wt)=>{ if(d!==null && d!==undefined && Number.isFinite(Number(d))){ total+=Math.min(1,Math.max(0,Number(d)))*wt; w+=wt; } };
+    add(hammingHex(da.labelHashH,db.labelHashH),.18); add(hammingHex(da.labelHashV,db.labelHashV),.12);
+    add(hammingHex(da.objectHashH,db.objectHashH),.12); add(hammingHex(da.objectHashV,db.objectHashV),.10);
+    add(hammingHex(da.centerHashH,db.centerHashH),.08); add(hammingHex(da.centerHashV,db.centerHashV),.06);
+    add(sigDistance(da.labelGrid,db.labelGrid),.13); add(sigDistance(da.objectGrid,db.objectGrid),.10); add(sigDistance(da.centerGrid,db.centerGrid),.06);
+    add(histDist(da.labelHist,db.labelHist),.08); add(histDist(da.objectHist,db.objectHist),.06);
+    add(stripeDist(da.stripeSignature,db.stripeSignature),.05); add(stripeDist(da.labelStripeSignature,db.labelStripeSignature),.05);
+    add(bboxDist(da.bbox,db.bbox),.09);
+    add(legacyDist(a,b),.18);
+    return w?Math.min(1,total/w):legacyDist(a,b);
+  }
+  function featureSamplesV2861(record={}){
+    const out=[]; const push=(f,source='')=>{ const c=compactV2861(f); if(c) out.push({features:c,source}); };
+    (record.objectFolder?.visualFeatureSamples||[]).forEach(s=>push(s.features||s.visualFeatures||s, s.source||'object_folder'));
+    (record.confirmedExamples||[]).forEach(s=>push(s.visualFeatures, 'confirmed_example'));
+    push(record.visualFeatures,'record'); push(record.memoryCard?.visualFeatures,'memory_card');
+    return out.slice(0,64);
+  }
+  function visualMatchV2861(query={}){
+    try{
+      ensureDbShape(); const q=compactV2861(query.visualFeatures||query.visualFingerprint||query.features||{}); if(!q) return null;
+      const products=Object.values(db.assistantBrain?.globalProductMemory?.products||{}); const ranked=[];
+      for(const p of products){
+        const confirmations=Number(p.confirmations||0); if(confirmations<1 && p.reliability!=='media' && p.reliability!=='alta') continue;
+        const samples=featureSamplesV2861(p); if(!samples.length) continue;
+        let best=null;
+        for(const s of samples){ const dist=deepDistance(q,s.features); const sim=1-dist; if(!best || sim>best.similarity) best={similarity:sim,distance:dist,source:s.source}; }
+        if(!best) continue;
+        // Soglie PRO: abbastanza permissive per stesso prodotto/frontale, ma richiedono somiglianza reale.
+        const threshold=confirmations<=1 ? .76 : .70;
+        if(best.similarity<threshold) continue;
+        let score=best.similarity*10 + Math.min(2.5,confirmations*.42);
+        if(p.reliability==='alta') score+=1.25; else if(p.reliability==='media') score+=.85;
+        if(p.ownerOverrides?.locked) score+=.35;
+        ranked.push({score,product:p,match:best,confirmations,sampleCount:samples.length});
+      }
+      ranked.sort((a,b)=>b.score-a.score); const top=ranked[0]; if(!top) return null;
+      const second=ranked[1]; const margin=second ? (top.match.similarity-second.match.similarity) : .30;
+      if(top.confirmations<=1 && margin<.012 && top.match.similarity<.86) return null;
+      const compact=compactGlobalProductRecord(top.product);
+      compact.visualMemoryMatchV2861={active:true, similarity:Number(top.match.similarity.toFixed(3)), distance:Number(top.match.distance.toFixed(3)), margin:Number(margin.toFixed(3)), sampleCount:top.sampleCount, source:top.match.source, engine:'deep_hash_bbox_label_hist_v2861', policy:'match gratuito: ROI prodotto + etichetta + silhouette + colore; zero OpenAI'};
+      compact.matchReason='deep_visual_memory_v2861'; compact.teacherBypassEligible=true; compact.reliability=compact.reliability||'media';
+      try{ updateGlobalLearningAudit({type:'v2861-deep-visual-memory-match', productName:compact.productName, brand:compact.brand, similarity:compact.visualMemoryMatchV2861.similarity, confirmations:top.confirmations, sampleCount:top.sampleCount}); }catch(_){ }
+      return {score:top.score, product:compact};
+    }catch(e){ try{ updateGlobalLearningAudit({type:'v2861-visual-match-error', reason:String(e?.message||e).slice(0,180)}); }catch(_){} return null; }
+  }
+  try{
+    if(typeof upsertGlobalProductMemory==='function' && !global.__v2861UpsertVisualWrapped){
+      const prev=upsertGlobalProductMemory;
+      upsertGlobalProductMemory=function(confirmed={}){
+        const compact=prev.call(this,confirmed);
+        try{
+          ensureDbShape(); const g=db.assistantBrain.globalProductMemory||{products:{}};
+          const key=compact?.key || (confirmed.barcode?`ean:${confirmed.barcode}`:'');
+          const rec=(key&&g.products?.[key]) || Object.values(g.products||{}).find(r=>normalizeVisionText(r.productName||'')===normalizeVisionText(compact?.productName||confirmed.productName||'') && normalizeVisionText(r.brand||'')===normalizeVisionText(compact?.brand||confirmed.brand||''));
+          const c=compactV2861(confirmed.visualFeatures || confirmed.productMemory?.visualFeatures || {});
+          if(rec && c){
+            rec.objectFolder=rec.objectFolder||{photos:[],visualSignatures:[],visualFeatureSamples:[]};
+            rec.objectFolder.visualFeatureSamples=Array.isArray(rec.objectFolder.visualFeatureSamples)?rec.objectFolder.visualFeatureSamples:[];
+            const duplicate=rec.objectFolder.visualFeatureSamples.some(s=>deepDistance(c,s.features||s)<.028);
+            if(!duplicate) rec.objectFolder.visualFeatureSamples.unshift({features:c, at:Date.now(), source:'user_confirmed_deep_visual_v2861', productName:confirmed.productName||rec.productName||'', brand:confirmed.brand||rec.brand||''});
+            rec.objectFolder.visualFeatureSamples=rec.objectFolder.visualFeatureSamples.slice(0,54);
+            rec.visualFeatures=c; rec.deepVisualMemoryV2861={active:true,samples:rec.objectFolder.visualFeatureSamples.length,updatedAt:Date.now(),engine:'deep_hash_bbox_label_hist',cost:'zero_openai_tokens'};
+            rec.learningQuality=Object.assign({},rec.learningQuality||{}, {deepVisualRecognition:true, visualSamples:rec.objectFolder.visualFeatureSamples.length, enoughForLocalRecognition:true});
+            updateGlobalLearningAudit({type:'v2861-deep-visual-fingerprint-saved', productName:rec.productName, brand:rec.brand, samples:rec.objectFolder.visualFeatureSamples.length});
+          }
+        }catch(e){ try{ updateGlobalLearningAudit({type:'v2861-deep-visual-save-error', reason:String(e?.message||e).slice(0,180)}); }catch(_){} }
+        return compact;
+      };
+      global.__v2861UpsertVisualWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof matchGlobalProductMemory==='function' && !global.__v2861MatchVisualWrapped){
+      const prev=matchGlobalProductMemory;
+      matchGlobalProductMemory=function(query={}){
+        if(query?.visualOnly || /v2861|deep_visual/i.test(String(query?.matchMode||''))){ const deep=visualMatchV2861(query||{}); if(deep) return deep; }
+        const base=prev.call(this,query); if(base?.product) return base;
+        return visualMatchV2861(query||{}) || null;
+      };
+      global.__v2861MatchVisualWrapped=true;
+    }
+  }catch(_){ }
+  try{ const prev=preflightSnapshotV98; if(typeof prev==='function' && !global.__v2861PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this); s.version='V28.61'; s.brain=Object.assign({},s.brain||{},{version:'V28.61', deepVisualMemory:'active', visualEngine:'ROI + label hash + histogram + silhouette', openAiTokens:'zero for memory match'}); return s; }; global.__v2861PreflightWrapped=true; } }catch(_){ }
+  console.log('[Spesa Pronta] V28.61 PRO Deep Visual Memory Match active');
+})();
