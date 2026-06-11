@@ -206,7 +206,7 @@
           <h1>Cervello Server</h1>
           <p class="subtitle">Memoria prodotti · foto reali · valori titolare · ricerca precisa</p>
         </div>
-        <span class="build" id="buildBadge">V30.2</span>
+        <span class="build" id="buildBadge">V30.3</span>
       </div>
     </header>
 
@@ -373,10 +373,10 @@
     const q=official.quality||{};
     const candidatesHtml=refs.length?`<div class="v30RefGrid">${refs.slice(0,8).map(r=>`<div class="v30RefCard"><img src="${esc(srcOf(r)||fallback)}" data-fallback-src="${esc(fallback)}" alt="reference"><b>${esc(r.productName||r.title||'Reference')}</b><small>${esc(r.brand||'')} ${r.source?'· '+esc(r.source):''}</small><small>score ${esc(r.score||'—')}</small><button class="ghost mini" data-v30-use-ref="${esc(r.imageUrl||'')}">Usa come render</button></div>`).join('')}</div>`:'<div class="empty">Nessuna reference salvata. Premi “Cerca render online” o incolla l’URL immagine trovata su Google Immagini.</div>';
     const slot=(title,src,miss)=>`<div class="v30Slot"><div><b>${esc(title)}</b>${src?`<img src="${esc(src)}" alt="${esc(title)}">`:`<span>${esc(miss)}</span>`}</div></div>`;
-    return `<div class="section"><h3>🧊 Render AI · V30.2 Google CSE Force Build</h3>
-      <div class="v30Actions"><button class="primary" id="btnV30SearchRender">Cerca render online</button><button class="ghost" id="btnV30OpenOfficial">Apri render grande</button><button class="ghost" data-open-photos="1">Apri tab Foto</button><button class="ghost" id="btnV30CopySources">Copia fonti render</button><button class="ghost" id="btnV30TestGoogle">Test Google API</button><button class="ghost" id="btnV302ForceMarker">Build V30.2</button></div>
+    return `<div class="section"><h3>🧊 Render AI · V30.3 Google Block Safe</h3>
+      <div class="v30Actions"><button class="primary" id="btnV30SearchRender">Cerca render online</button><button class="ghost" id="btnV30OpenOfficial">Apri render grande</button><button class="ghost" data-open-photos="1">Apri tab Foto</button><button class="ghost" id="btnV30CopySources">Copia fonti render</button><button class="ghost" id="btnV30TestGoogle">Test Google API</button><button class="ghost" id="btnV302ForceMarker">Build V30.3</button></div>
       <div class="v30Import"><input id="v30ImportUrl" placeholder="Incolla URL immagine prodotto da Google/sito"><button class="primary" id="btnV30ImportUrl">Importa URL</button></div>
-      <div class="v30Info">V30.2 FORCE NEW BUILD: Google CSE collegato con diagnosi. Build ID V30.2-FORCE-NEW-ZIP-3020-1781211503. Il server legge GOOGLE_API_KEY + GOOGLE_CSE_ID/GOOGLE_CX, prova più query e mostra errori chiari. Se vedi questa scritta, il nuovo ZIP è stato estratto davvero.</div>
+      <div class="v30Info">V30.3: Google CSE 403 gestito. Se Google JSON API è bloccata dal progetto, il server non finge più errore generico: continua con Open Facts e Importa URL. Corretto anche bug Sharp “left/top” che impediva di pulire candidate Open Facts.</div>
       <div class="v30Grid">
         <div class="v30Card"><h4><span>Render ufficiale prodotto</span><small id="v30OfficialStatus">${esc(q.level||'da generare')}</small></h4><div class="v30Stage"><img class="v30Img" id="v30OfficialRenderImg" src="${esc(officialSrc)}" data-fallback-src="${esc(fallback)}" alt="Render ufficiale"></div><div class="v30Facts" id="v30OfficialFacts"><span class="${officialSrc!==fallback?'ok':'warn'}">${esc(q.message||'premi Cerca render online o Importa URL')}</span>${q.score?`<span>score ${esc(q.score)}</span>`:''}<span>${esc(official.mode||official.renderMode||'reference_cleaned')}</span></div></div>
         <div class="v30Card"><h4><span>Reference reali trovate</span><small id="v30ReferenceStatus">${refs.length?refs.length+' fonti':'da cercare'}</small></h4><div id="v30ReferenceList">${candidatesHtml}</div><div class="v30Facts"><span>Open Facts automatico</span><span>URL Google manuale</span><span>zero token OpenAI</span></div></div>
@@ -407,9 +407,9 @@
           $('notice').className='notice ok'; $('notice').innerHTML='<span>🧊</span><div><b>Render ufficiale V30 creato.</b><span> Salvato nel cervello server senza OpenAI.</span></div>';
           return;
         }
-        const msg=r.data?.message||r.data?.error||'ricerca fallita';
+        const msg=r.data?.message||r.data?.googleTest?.message||r.data?.error||'ricerca fallita';
         const cfg=r.data?.configured?`api ${r.data.configured.apiKey?'ok':'NO'} · cx ${r.data.configured.cx?'ok':'NO'}`:'';
-        const g=r.data?.googleTest?`Google: ${r.data.googleTest.error||'ok'} · risultati ${r.data.googleTest.count||0}`:'';
+        const g=r.data?.googleTest?`Google: ${r.data.googleTest.error||'ok'} · risultati ${r.data.googleTest.count||0}${r.data.googleTest.blocked?' · API Google bloccata':''}`:'';
         if(status) status.textContent='diagnosi';
         if(facts) facts.innerHTML=`<span class="warn">${esc(msg)}</span>${cfg?`<span>${esc(cfg)}</span>`:''}${g?`<span>${esc(g)}</span>`:''}`;
         logErr('v30-generate-official-failed',{url,status:r.status,body:r.data});
@@ -429,7 +429,7 @@
       const r=await fetchJson(`/api/ai/google-cse-test?q=${encodeURIComponent(q)}`,{cache:'no-store'});
       const data=r.data||{};
       if(status) status.textContent=data.ok?'Google ok':'Google errore';
-      if(facts) facts.innerHTML=`<span class="${data.ok?'ok':'warn'}">${data.ok?'Google CSE risponde':'Google CSE non risponde'}</span><span>api ${data.configured?.apiKey?'ok':'NO'} · cx ${data.configured?.cx?'ok':'NO'}</span><span>risultati ${esc(data.count||0)} / total ${esc(data.totalResults||0)}</span>${data.error?`<span>${esc(data.error)}</span>`:''}${data.message?`<span>${esc(data.message)}</span>`:''}`;
+      if(facts) facts.innerHTML=`<span class="${data.ok?'ok':'warn'}">${data.ok?'Google CSE risponde':(data.googleApiBlocked?'Google JSON API bloccata dal progetto':'Google CSE non risponde')}</span><span>api ${data.configured?.apiKey?'ok':'NO'} · cx ${data.configured?.cx?'ok':'NO'}</span><span>risultati ${esc(data.count||0)} / total ${esc(data.totalResults||0)}</span>${data.error?`<span>${esc(data.error)}</span>`:''}${data.message?`<span>${esc(data.message)}</span>`:''}`;
       const items=arr(data.items,8);
       if(refStatus) refStatus.textContent=items.length?items.length+' test':'test';
       if(refBox&&items.length){ refBox.innerHTML=`<div class="v30RefGrid">${items.map(it=>`<div class="v30RefCard"><img src="${esc(it.link||'')}" alt="test"><b>${esc(it.title||'Risultato Google')}</b><small>${esc(it.displayLink||'')}</small><button class="ghost mini" data-v30-use-ref="${esc(it.link||'')}">Usa come render</button></div>`).join('')}</div>`; v30BindReferenceButtons(); }
@@ -485,7 +485,7 @@
     d.querySelector('#btnV30OpenOfficial')?.addEventListener('click',()=>{const src=(d.querySelector('#v30OfficialRenderImg')?.src)||(currentProduct()?.fields?.objectFolder?.officialRenderV3000?.officialDataUrl)||(currentProduct()?.fields?.objectFolder?.officialRenderV3000?.studioDataUrl)||'';const w=window.open('about:blank','_blank');if(w){w.document.write('<title>Render ufficiale V30</title><body style="margin:0;background:#f4f8ff;display:grid;place-items:center;min-height:100vh"><img style="max-width:96vw;max-height:96vh;object-fit:contain;border-radius:22px" src="'+String(src).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"></body>');}});
     d.querySelector('#btnV30CopySources')?.addEventListener('click',()=>copyText(JSON.stringify(currentProduct()?.fields?.objectFolder?.referenceImagesV3000||currentProduct()?.fields?.objectFolder?.referenceCandidatesV3000||[],null,2),'Fonti render copiate ✅'));
     d.querySelector('#btnV30TestGoogle')?.addEventListener('click',v30TestGoogleApi);
-    d.querySelector('#btnV302ForceMarker')?.addEventListener('click',()=>alert('V30.2 attiva ✅ Build ID: V30.2-FORCE-NEW-ZIP-3020-1781211503')); 
+    d.querySelector('#btnV302ForceMarker')?.addEventListener('click',()=>alert('V30.3 attiva ✅ Google 403 gestito + bug Sharp left/top corretto')); 
     if(state.tab==='render'){ v30BindReferenceButtons(); }
     d.querySelector('#btnRenderTransparent')?.addEventListener('click',()=>refreshVirtualRender('transparent'));
     d.querySelector('#btnRenderWhite')?.addEventListener('click',()=>refreshVirtualRender('white'));

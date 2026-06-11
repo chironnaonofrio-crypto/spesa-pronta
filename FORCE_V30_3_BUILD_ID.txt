@@ -1,0 +1,2 @@
+V30.3-GOOGLE-BLOCK-SAFE-3030-1781215200
+Google CSE 403 gestito + Sharp left/top fix + OpenFacts/Import URL fallback

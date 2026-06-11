@@ -9168,3 +9168,117 @@ try{ v3000GoogleCandidates=v3010GoogleCandidates; v3000FindReferenceCandidates=v
 
 // V30.2 FORCE NEW ZIP marker
 (function(){ try{ global.__SPESA_PRONTA_BUILD_ID='V30.2-FORCE-NEW-ZIP-3020-1781211503'; console.log('[Spesa Pronta] V30.2-FORCE-NEW-ZIP-3020-1781211503 active'); }catch(_){} })();
+
+
+// =============================================================
+// V30.3 GOOGLE BLOCK SAFE RENDER
+// - Corregge errore Sharp "Expected both left and top to be set"
+// - Riconosce 403 Google Custom Search JSON API chiusa/non accessibile
+// - Continua con Open Facts / URL manuale senza far sembrare rotto il render
+// =============================================================
+function v3030Xml(s=''){ return String(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function v3030DataUrl(buf,mime='image/png'){ return `data:${mime};base64,${Buffer.from(buf).toString('base64')}`; }
+async function v3030BuildOfficialRenderFromDataUrl(dataUrl='',rec={},candidate={}){
+  const sharp=await v2864Sharp();
+  const buf=v2864DataUrlBuffer(dataUrl);
+  if(!sharp||!buf) return null;
+  const sourceBuf=await sharp(buf,{failOn:'none'}).rotate().resize({width:1100,height:1100,fit:'inside',withoutEnlargement:true}).png().toBuffer();
+  let png=sourceBuf;
+  try{
+    const img=sharp(sourceBuf,{failOn:'none'}).ensureAlpha();
+    const {data,info}=await img.raw().toBuffer({resolveWithObject:true});
+    const clean=Buffer.from(v3000CleanAlpha(data,info.width,info.height));
+    png=await sharp(clean,{raw:{width:info.width,height:info.height,channels:4}})
+      .trim({background:{r:0,g:0,b:0,alpha:0},threshold:8})
+      .resize({height:1000,fit:'inside',withoutEnlargement:true})
+      .png({compressionLevel:8})
+      .toBuffer();
+  }catch(_){
+    png=await sharp(sourceBuf,{failOn:'none'}).resize({height:1000,fit:'inside',withoutEnlargement:true}).png({compressionLevel:8}).toBuffer();
+  }
+  const white=await sharp(png,{failOn:'none'}).flatten({background:'#ffffff'}).jpeg({quality:92,mozjpeg:true}).toBuffer();
+  const id=v3000Id(rec);
+  const brand=v3030Xml(id.brand||'');
+  const name=v3030Xml(id.name||'Prodotto');
+  const format=v3030Xml(id.format||id.category||'');
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="1380" viewBox="0 0 1100 1380"><defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#f2f8ff"/></linearGradient></defs><rect width="1100" height="1380" rx="48" fill="url(#bg)"/><text x="550" y="88" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="34" font-weight="1000" fill="#10233f">Render ufficiale prodotto</text><text x="550" y="126" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="21" font-weight="900" fill="#60748e">reference reale pulita dal server · V30.3</text><rect x="104" y="1130" width="892" height="122" rx="30" fill="#f7fbff" stroke="#dce9f7"/><text x="550" y="1180" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="34" font-weight="1000" fill="#10233f">${brand}${brand?' · ':''}${name}</text><text x="550" y="1220" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="900" fill="#60748e">${format}</text></svg>`;
+  const prod=await sharp(png,{failOn:'none'}).resize({width:760,height:780,fit:'inside',withoutEnlargement:true}).png().toBuffer();
+  // Sharp richiede left + top insieme. Mai usare gravity+top.
+  const meta=await sharp(prod).metadata().catch(()=>({width:760,height:780}));
+  const left=Math.max(0,Math.round((1100-Number(meta.width||760))/2));
+  const studio=await sharp(Buffer.from(svg)).composite([{input:prod,left,top:160}]).png({compressionLevel:8}).toBuffer();
+  return {transparentDataUrl:v3030DataUrl(png,'image/png'),whiteDataUrl:v3030DataUrl(white,'image/jpeg'),studioDataUrl:v3030DataUrl(studio,'image/png'),sourceLabel:candidate.sourceLabel||candidate.source||'reference',sourceUrl:candidate.imageUrl||'',pageUrl:candidate.pageUrl||'',license:candidate.license||'check_source',candidateScore:candidate.score||0,mode:'reference_cleaned_v303'};
+}
+try{ v3000BuildOfficialRenderFromDataUrl=v3030BuildOfficialRenderFromDataUrl; }catch(_){ }
+
+const __v3030PrevGoogleSearchQuery = (typeof v3010GoogleSearchQuery==='function') ? v3010GoogleSearchQuery : null;
+async function v3030GoogleSearchQuery(q='',opts={}){
+  if(!__v3030PrevGoogleSearchQuery) return {ok:false,error:'google_cse_function_missing',items:[]};
+  const res=await __v3030PrevGoogleSearchQuery(q,opts);
+  const msg=String(res?.message||res?.googleError?.message||'');
+  if(res && !res.ok && (res.status===403 || /does not have the access to Custom Search JSON API|access to Custom Search JSON API|Custom Search JSON API/i.test(msg))){
+    res.error='google_json_api_closed_or_not_available';
+    res.message='Google ha risposto 403: questo progetto non ha accesso alla Custom Search JSON API. La chiave e il CX sono presenti, ma Google non concede la JSON API a questo progetto/account. Usa Open Facts automatico, Importa URL immagine da Google, oppure una API alternativa tipo SerpAPI/Brave.';
+    res.googleApiBlocked=true;
+  }
+  return res;
+}
+try{ v3010GoogleSearchQuery=v3030GoogleSearchQuery; }catch(_){ }
+
+const __v3030PrevGoogleTest = (typeof v3010GoogleCseTest==='function') ? v3010GoogleCseTest : null;
+async function v3030GoogleCseTest(q='Dexal Candeggina Delicata Maxi'){
+  const env=v3010GoogleEnv();
+  const res=await v3030GoogleSearchQuery(q,{num:5,timeoutMs:9000});
+  return {ok:!!res.ok,version:'V30.3',configured:{apiKey:!!env.apiKey,cx:!!env.cx,country:env.country,language:env.language},query:q,totalResults:res.totalResults||'0',count:Array.isArray(res.items)?res.items.length:0,error:res.error||null,message:res.message||null,googleApiBlocked:!!res.googleApiBlocked,items:(res.items||[]).slice(0,5).map(it=>({title:it.title||'',link:it.link||'',displayLink:it.displayLink||'',contextLink:it.image?.contextLink||''}))};
+}
+try{ v3010GoogleCseTest=v3030GoogleCseTest; }catch(_){ }
+
+async function v3030SearchAndBuildOfficialRender(key='',opts={}){
+  ensureDbShape();
+  const rec=db.assistantBrain?.globalProductMemory?.products?.[key];
+  if(!rec) return {ok:false,version:'V30.3',error:'product_not_found'};
+  const cached=rec.objectFolder?.officialRenderV3000||rec.officialRenderV3000;
+  if(cached&&cached.transparentDataUrl&&!opts.force) return {ok:true,version:'V30.3',mode:'cached_official_render',officialRender:cached,candidates:rec.objectFolder?.referenceCandidatesV3000||[],debug:{cached:true}};
+  const candidates=await v3010FindReferenceCandidates(rec,opts);
+  const env=v3010GoogleEnv();
+  let official=null,used=null,lastError=null;
+  for(const c of candidates){
+    try{
+      const src=c.imageDataUrl||c.displayUrl||await v3000RemoteDataUrl(c.imageUrl,14000);
+      if(!src){ lastError={candidate:c.imageUrl||'',error:'image_download_failed'}; continue; }
+      c.displayUrl=src; c.imageDataUrl=src;
+      official=await v3030BuildOfficialRenderFromDataUrl(src,rec,c);
+      used=c;
+      if(official) break;
+    }catch(e){
+      lastError={candidate:c.imageUrl||'',error:String(e?.message||e).slice(0,180)};
+      try{ updateGlobalLearningAudit({type:'v3030-candidate-render-failed',key,error:lastError.error,source:c.sourceLabel||c.source||''}); }catch(_){ }
+    }
+  }
+  if(!official){
+    const testQuery=v3010QueryVariants(rec)[0]||v3000Query(rec);
+    const googleTest=await v3030GoogleSearchQuery(testQuery,{num:3,timeoutMs:9000});
+    const blocked=!!googleTest.googleApiBlocked;
+    return {ok:false,version:'V30.3',error:blocked?'google_json_api_closed_or_not_available':'reference_render_not_found',message:blocked?'Google Custom Search JSON API è bloccata per questo progetto/account. Non è un errore del sito: usa Importa URL immagine da Google oppure aggiungi SERPAPI_KEY/BRAVE_SEARCH_API_KEY. Open Facts resta attivo.':(candidates.length?'Ho trovato candidate ma non sono riuscito a scaricare/pulire l’immagine. Ora il bug Sharp left/top è corretto: riprova o usa Importa URL diretto .jpg/.png/.webp.':'Nessuna reference trovata. Usa Importa URL immagine da Google/sito prodotto.'),configured:{googleCse:env.configured,apiKey:!!env.apiKey,cx:!!env.cx},googleTest:{ok:googleTest.ok,error:googleTest.error,message:googleTest.message,totalResults:googleTest.totalResults,count:(googleTest.items||[]).length,query:testQuery,blocked},lastError,candidates:candidates.slice(0,8)};
+  }
+  official.usedCandidate=used?{imageUrl:used.imageUrl,title:used.title,sourceLabel:used.sourceLabel,score:used.score}:null;
+  official.qualityScore=Math.max(60,Math.min(98,(used?.score||0)+36));
+  official.quality=Object.assign({},official.quality||{},{level:'official_reference_render_v303',score:official.qualityScore,message:'Render creato da reference reale/Open Facts/URL e pulito dal server. Bug Sharp left/top corretto.'});
+  v3000SaveOfficialRender(rec,official,candidates);
+  try{ updateGlobalLearningAudit({type:'v3030-official-render-created',key,productName:rec.productName||'',brand:rec.brand||'',source:official.sourceLabel,score:official.qualityScore}); }catch(_){ }
+  return {ok:true,version:'V30.3',mode:'reference_cleaned_official_render',officialRender:official,candidates:rec.objectFolder?.referenceCandidatesV3000||[],debug:{googleCse:env.configured,used:official.usedCandidate}};
+}
+try{ v3000SearchAndBuildOfficialRender=v3030SearchAndBuildOfficialRender; }catch(_){ }
+(function(){
+  try{
+    const prev=publicServerBrainV2840;
+    if(typeof prev==='function'&&!global.__v3030BrainWrapped){
+      publicServerBrainV2840=function(opts={}){ const out=prev.call(this,opts)||{}; try{ const env=v3010GoogleEnv(); out.version='V30.3 GOOGLE BLOCK SAFE RENDER'; out.reasoningBusV3030={active:true,googleCse:{configured:env.configured,apiKey:!!env.apiKey,cx:!!env.cx},policy:'Google 403 gestito, OpenFacts/URL manuale attivi, bug Sharp left/top corretto'}; }catch(_){} return out; };
+      global.__v3030BrainWrapped=true;
+    }
+  }catch(_){ }
+  console.log('[Spesa Pronta] V30.3 Google Block Safe Render active');
+})();
+
+// V30.3 FORCE NEW ZIP marker
+(function(){ try{ global.__SPESA_PRONTA_BUILD_ID='V30.3-GOOGLE-BLOCK-SAFE-3030-1781215200'; console.log('[Spesa Pronta] V30.3-GOOGLE-BLOCK-SAFE-3030-1781215200 active'); }catch(_){} })();
