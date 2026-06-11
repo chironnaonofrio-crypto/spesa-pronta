@@ -421,7 +421,7 @@ async function fetchOpenFactsByBarcode(source, code){
 function recordUserCorrectionLearning(confirmed={}){
   ensureDbShape();
   const corrections=confirmed.userCorrections||{};
-  const keys=Object.keys(corrections).filter(k=>corrections[k] && corrections[k].edited);
+  const keys=Object.keys(corrections).filter(k=>{ const c=corrections[k]; if(!c || !c.edited) return false; return normalizeText(c.from||'') !== normalizeText(c.to||''); });
   if(!keys.length) return;
   const entry={at:Date.now(), productName:confirmed.productName||'', brand:confirmed.brand||'', size:confirmed.size||'', category:confirmed.category||'', corrections:{}};
   for(const k of keys){ entry.corrections[k]=corrections[k]; }
@@ -7531,4 +7531,343 @@ function v2868RenderBrainProduct(key='', opts={}){
   }catch(_){ }
   try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2868PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this); s.version='V28.68'; s.brain=Object.assign({},s.brain||{},{version:'V28.68',realisticVirtualRender:'active',humanPixelUnderstanding:'shape+content+label+palette',renderTwin:'active in server brain',ocrSpaceRouter:'V28.67+ enhanced remains active'}); return s; }; global.__v2868PreflightWrapped=true; } }catch(_){ }
   console.log('[Spesa Pronta] V28.68 PRO Realistic Product Render + Human Pixel Understanding active');
+})();
+
+
+// V28.69 PRO Clean Diagnostics Console + True Error Separation
+const V2869_VERSION = 'V28.69';
+function v2869CleanText(v=''){
+  return String(v==null?'':v).replace(/[\u0000-\u001f\u007f]+/g,' ').replace(/\s+/g,' ').trim();
+}
+function v2869NormValue(v=''){
+  try{ return normalizeText(v2869CleanText(v)).replace(/\s+/g,' ').trim(); }
+  catch(_){ return v2869CleanText(v).toLowerCase().replace(/\s+/g,' ').trim(); }
+}
+function v2869CorrectionChanged(info={}){
+  if(!info || !info.edited) return false;
+  return v2869NormValue(info.from||'') !== v2869NormValue(info.to||'');
+}
+function v2869CleanCorrectionEntry(entry={}){
+  const clean=Object.assign({}, entry||{}, {corrections:{}});
+  for(const [k,info] of Object.entries(entry?.corrections||{})){
+    if(v2869CorrectionChanged(info)) clean.corrections[k]=info;
+  }
+  return Object.keys(clean.corrections||{}).length ? clean : null;
+}
+function v2869IsRealServerError(event={}){
+  const type=v2869CleanText(event.type||'').toLowerCase();
+  const reason=v2869CleanText(event.reason||event.message||event.error||'').toLowerCase();
+  const blob=(type+' '+reason).trim();
+  if(!blob) return false;
+  if(type==='user-correction') return false;
+  if(/correction|confirmed|learned|saved|useful|updated|merged|deleted|match$|matched|recognition|photo-updated/.test(type)) return false;
+  if(/blocked|rejected|reject|guard|conflict/.test(type)) return false;
+  return /(error|failed|failure|exception|timeout|invalid|unauthorized|not_authorized|server_not_reachable|payload_invalid|sync_fail|fetch-failed|fetch-error)/i.test(blob);
+}
+function v2869IsGuardEvent(event={}){
+  const type=v2869CleanText(event.type||'').toLowerCase();
+  const reason=v2869CleanText(event.reason||'').toLowerCase();
+  return /blocked|rejected|reject|guard|conflict/.test(type+' '+reason) && !v2869IsRealServerError(event);
+}
+function v2869DecorateBrainConsole(out={}){
+  ensureDbShape();
+  const audit=Array.isArray(db.assistantBrain.learningAudit)?db.assistantBrain.learningAudit:[];
+  const corrections=(db.assistantBrain.errorLearning?.corrections||[]).map(v2869CleanCorrectionEntry).filter(Boolean).slice(0,220);
+  const realErrors=audit.filter(v2869IsRealServerError).slice(0,160);
+  const guardEvents=audit.filter(v2869IsGuardEvent).slice(0,120);
+  const learningEvents=audit.filter(e=>!v2869IsRealServerError(e)).slice(0,160);
+  out.version='V28.69 PRO Clean Diagnostics Console';
+  out.errors=realErrors;
+  out.serverErrors=realErrors;
+  out.corrections=corrections;
+  out.learningCorrections=corrections;
+  out.guardEvents=guardEvents;
+  out.learningEvents=learningEvents;
+  out.diagnosticCountsV2869={
+    realErrors:realErrors.length,
+    corrections:corrections.length,
+    guardEvents:guardEvents.length,
+    learningEvents:learningEvents.length,
+    note:'Le correzioni utente e le guardie anti-falso positivo non sono più contate come errori.'
+  };
+  out.consolePolicyV2869={
+    realErrors:'Solo fallimenti veri: error, failed, timeout, invalid, unauthorized, sync fail.',
+    corrections:'Modifiche utente/titolare che insegnano al cervello; non sono errori.',
+    guardEvents:'Blocchi corretti del cervello quando evita match o categorie pericolose; non sono errori.'
+  };
+  return out;
+}
+try{
+  if(typeof publicServerBrainV2840==='function' && !global.__v2869BrainConsoleWrapped){
+    const prevPublicServerBrainV2840 = publicServerBrainV2840;
+    publicServerBrainV2840 = function(opts={}){
+      const out = prevPublicServerBrainV2840.call(this, opts||{}) || {};
+      return v2869DecorateBrainConsole(out);
+    };
+    global.__v2869BrainConsoleWrapped=true;
+  }
+}catch(_){ }
+try{
+  if(typeof recordUserCorrectionLearning==='function' && !global.__v2869CorrectionLearningWrapped){
+    const prevRecordUserCorrectionLearning = recordUserCorrectionLearning;
+    recordUserCorrectionLearning = function(confirmed={}){
+      const corrections=confirmed.userCorrections||{};
+      const filtered={};
+      for(const [k,info] of Object.entries(corrections||{})){
+        if(v2869CorrectionChanged(info)) filtered[k]=info;
+      }
+      if(!Object.keys(filtered).length) return;
+      return prevRecordUserCorrectionLearning.call(this, Object.assign({}, confirmed, {userCorrections:filtered}));
+    };
+    global.__v2869CorrectionLearningWrapped=true;
+  }
+}catch(_){ }
+try{
+  const prevPreflightV2869 = (typeof preflightSnapshotV98==='function') ? preflightSnapshotV98 : null;
+  if(prevPreflightV2869 && !global.__v2869PreflightWrapped){
+    preflightSnapshotV98=function(){
+      const s=prevPreflightV2869.call(this)||{};
+      s.version='V28.69';
+      s.brain=Object.assign({},s.brain||{},{version:'V28.69',cleanDiagnosticsConsole:'active',correctionsAreLearningNotErrors:true});
+      return s;
+    };
+    global.__v2869PreflightWrapped=true;
+  }
+}catch(_){ }
+console.log('[Spesa Pronta] V28.69 PRO Clean Diagnostics Console active');
+
+// =============================================================
+// V28.70 PRO MASTER Human Visual Twin
+// Obiettivo: rendere il gemello virtuale molto piu' vicino a cio' che
+// un umano vede: silhouette precisa, proporzioni, tappo, etichetta,
+// colori, contenuto e indizi visivi derivati dalle foto reali salvate.
+// =============================================================
+const V2870_VERSION = 'V28.70';
+
+const v2870PrevRenderSpec = (typeof v2868RenderSpec==='function') ? v2868RenderSpec : null;
+const v2870PrevBuildHumanReasoning = (typeof v2868BuildHumanReasoning==='function') ? v2868BuildHumanReasoning : null;
+function v2870Safe(v='', max=220){
+  try{ return String(v==null?'':v).replace(/[\u0000-\u001f\u007f]+/g,' ').replace(/\s+/g,' ').trim().slice(0,max); }
+  catch(_){ return ''; }
+}
+function v2870Norm(v=''){
+  return v2870Safe(v,400).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[’'`]/g,' ').replace(/[^a-z0-9]+/g,' ').trim();
+}
+function v2870Xml(v='', max=260){
+  return v2870Safe(v,max).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function v2870Arr(v, n=80){
+  const out=[]; const push=x=>{ if(x==null) return; if(Array.isArray(x)) return x.forEach(push); if(typeof x==='object') return; String(x).split(/\n|\s*[;,]\s*/).forEach(y=>{ const c=v2870Safe(y,180); if(c) out.push(c); }); };
+  push(v); return [...new Set(out)].slice(0,n);
+}
+function v2870First(...vals){ for(const v of vals){ const s=v2870Safe(v,120); if(s) return s; } return ''; }
+function v2870IsLight(hex=''){
+  const h=String(hex||'').replace('#',''); if(!/^[0-9a-f]{6}$/i.test(h)) return false;
+  const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);
+  return (r*299+g*587+b*114)/1000 > 170;
+}
+function v2870TextColor(hex=''){ return v2870IsLight(hex)?'#08203e':'#ffffff'; }
+function v2870MaybeColor(word='', fallback='#e5e7eb'){
+  try{ return typeof v2868Color==='function' ? v2868Color(word,fallback) : fallback; }
+  catch(_){ return fallback; }
+}
+function v2870Evidence(record={}, card={}){
+  try{ if(typeof v2868Evidence==='function') return v2868Evidence(record,card); }catch(_){ }
+  return [record.productName,record.brand,record.format,record.category,record.packageType,record.visualSignature,card?.identity?.productName,card?.identity?.brand].filter(Boolean).join(' ');
+}
+function v2870ColorList(record={}, card={}){
+  const photos = record.objectFolder?.photos || [];
+  const raw = [
+    card?.visualAppearance?.colors, record.colors, record.memoryCard?.visualAppearance?.colors,
+    record.objectFolder?.representativePhoto?.colors,
+    ...photos.map(p=>p.colors), ...photos.map(p=>p.palette), record.visualFeatures?.colors,
+    record.freeVisualMemoryV2860?.sample?.colors, record.deepVisualMemoryV2861?.sample?.colors
+  ];
+  const colors=[];
+  raw.forEach(x=>v2870Arr(x,20).forEach(y=>colors.push(y)));
+  return [...new Set(colors)].slice(0,18);
+}
+function v2870Family(ev='', baseFamily='', shape=''){
+  const n=v2870Norm(ev+' '+baseFamily+' '+shape);
+  if(/dexal|candeggina|detersivo|detergente|laundry|cleaning|bucato|flacone|detergent/.test(n)) return 'detergent_jug_master';
+  if(/cola|lemon taste|soft drinks|bibita cola|blues/.test(n)) return 'cola_bottle_master';
+  if(/sant anna|santanna|acqua minerale|acqua naturale|water bottle/.test(n)) return 'water_bottle_master';
+  if(/pesto|salsa|sugo|condiment|barattolo|vaso|jar/.test(n)) return 'jar_master';
+  if(/scatola|box|cartone|pasta|riso|cereali/.test(n)) return 'box_master';
+  if(/busta|sacchetto|pouch|bag/.test(n)) return 'pouch_master';
+  if(/bottle|bottiglia|liquido|bevanda|drink/.test(n)) return 'bottle_master';
+  return 'package_master';
+}
+function v2870Palette(spec={}, record={}, card={}, family=''){
+  const ev=v2870Evidence(record,card);
+  const colors=v2870ColorList(record,card);
+  let body=spec.bodyColor||'#f8fafc', body2=spec.secondaryBodyColor||'#dbeafe', label=spec.labelColor||'#1d4ed8', label2=spec.labelAccentColor||'#facc15', label3='#ffffff', cap=spec.capColor||'#facc15', content=spec.content||'non visibile', contentColor=spec.contentColor||'#161616', contentOpacity=spec.contentOpacity||'.7';
+  if(colors.length){
+    body=v2870MaybeColor(colors[0],body); label=v2870MaybeColor(colors[1]||colors[0],label); label2=v2870MaybeColor(colors[2]||colors[1]||'',label2); cap=v2870MaybeColor(colors[3]||colors[2]||colors[1]||'',cap);
+  }
+  const n=v2870Norm(ev+' '+colors.join(' '));
+  if(family==='cola_bottle_master'){
+    body='#e9f4ff'; body2='#bcd7ef'; label='#123a86'; label2='#f4ca16'; label3='#fff4a3'; cap='#f2c51a'; content='liquido scuro'; contentColor='#130f0c'; contentOpacity='.92';
+    if(/blu scuro|navy/.test(n)) label='#0f347d';
+  } else if(family==='water_bottle_master'){
+    body='#edf8ff'; body2='#bee6ff'; label='#42cddd'; label2='#ef4444'; label3='#ffffff'; cap='#9ddcff'; content='liquido chiaro'; contentColor='#a7e7ff'; contentOpacity='.24';
+  } else if(family==='detergent_jug_master'){
+    body='#21c7bd'; body2='#73efe6'; label='#f4a7ad'; label2='#f8fafc'; label3='#ef4444'; cap='#2563eb'; content='non visibile'; contentColor='#ffffff'; contentOpacity='0';
+    if(/turchese|verde acqua|teal/.test(n)) body='#20c6bc';
+  } else if(family==='jar_master'){
+    body='#f8fafc'; body2='#ecfccb'; label='#16a34a'; label2='#fde68a'; label3='#ffffff'; cap='#14532d'; content='cremoso/solido'; contentColor='#4d7c0f'; contentOpacity='.55';
+  }
+  return {colors,body,body2,label,label2,label3,cap,content,contentColor,contentOpacity};
+}
+function v2870LabelModel(spec={}, record={}, card={}){
+  const name=v2870First(card?.identity?.productName,record.productName,spec.name,'Prodotto');
+  const brand=v2870First(card?.identity?.brand,record.brand,spec.brand,'');
+  const fmt=v2870First(card?.identity?.format,record.format,spec.format,'');
+  const family=spec.family||'';
+  let main=brand||name.split(/\s+/)[0]||'Prodotto', hero=name, subtitle='', micro='';
+  if(family==='cola_bottle_master'){
+    main=brand || (/blues/i.test(name)?'Blues':'');
+    hero='Cola'; subtitle=/lemon/i.test(name)?'Lemon Taste':v2870Safe(name.replace(/cola/ig,'').replace(/[-–]/g,' '),32)||'Bibita cola'; micro='gusto limone';
+  } else if(family==='water_bottle_master'){
+    main=brand || (/sant/i.test(name)?"Sant'Anna":''); hero=/acqua/i.test(name)?'Acqua':'Acqua'; subtitle=/naturale/i.test(name)?'Naturale':'Acqua minerale'; micro=brand||"Sant'Anna";
+  } else if(family==='detergent_jug_master'){
+    main=brand||'Dexal'; hero=v2870Safe(name.replace(new RegExp('^'+(main||'Dexal').replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\s*','i'),'').replace(/maxi/ig,'').trim(),44)||'Candeggina delicata'; subtitle=/maxi/i.test(name)?'MAXI':'pulizia casa'; micro=/color/i.test(v2870Evidence(record,card))?'colori sicuri':'';
+  } else {
+    hero=name; subtitle=brand; micro='';
+  }
+  return {brand:v2870Safe(main,28), hero:v2870Safe(hero,46), subtitle:v2870Safe(subtitle,38), micro:v2870Safe(micro,32), format:v2870Safe(fmt,22)};
+}
+function v2870RenderSpec(card={}, record={}){
+  const prev=v2870PrevRenderSpec ? v2870PrevRenderSpec(card,record) : {};
+  const ev=v2870Evidence(record,card);
+  const family=v2870Family(ev, prev.family, prev.shape);
+  const palette=v2870Palette(prev,record,card,family);
+  const sample=(typeof v2868BestVisualSample==='function') ? v2868BestVisualSample(record) : {};
+  const photoCount=Number(record.objectFolder?.photos?.length||card?.objectFolder?.photoCount||prev.photoCount||0);
+  const hasRealPhoto=!!(record.objectFolder?.representativePhoto?.dataUrl||record.objectFolder?.representativePhoto?.externalUrl||card?.objectFolder?.hasRealProfilePhoto||prev.hasRealPhoto);
+  const label=v2870LabelModel(Object.assign({},prev,{family}),record,card);
+  const facts=[];
+  if(family.includes('bottle')) facts.push('silhouette: bottiglia verticale con spalle/collo');
+  if(family==='detergent_jug_master') facts.push('silhouette: flacone/tanica con manico laterale');
+  if(palette.content) facts.push('contenuto visibile: '+palette.content);
+  if(hasRealPhoto) facts.push('render guidato da foto reale salvata');
+  if(photoCount) facts.push(photoCount+' foto reali/campioni nel cervello');
+  if(palette.colors.length) facts.push('palette appresa: '+palette.colors.slice(0,6).join(', '));
+  const aspect = Number(prev.aspect||sample.aspect||0) || (family==='detergent_jug_master'?1.58:(family.includes('bottle')?3.20:1.7));
+  return Object.assign({},prev,{version:V2870_VERSION,engine:'pro_master_human_visual_twin_v2870',family,shape:family.replace(/_master$/,''),bodyColor:palette.body,secondaryBodyColor:palette.body2,labelColor:palette.label,labelAccentColor:palette.label2,labelThirdColor:palette.label3,capColor:palette.cap,content:palette.content,contentColor:palette.contentColor,contentOpacity:palette.contentOpacity,labelModel:label,name:v2870First(card?.identity?.productName,record.productName,prev.name),brand:v2870First(card?.identity?.brand,record.brand,prev.brand),format:v2870First(card?.identity?.format,record.format,prev.format),category:v2870First(card?.classification?.category,record.category,prev.category),aspect,photoCount,hasRealPhoto,colors:palette.colors,visualFacts:facts,renderQuality:{level:hasRealPhoto&&photoCount>=3?'pro-master':hasRealPhoto?'alta':'stimata',photoAware:hasRealPhoto,visualSamples:Number(record.objectFolder?.visualFeatureSamples?.length||prev.renderQuality?.visualSamples||0),pixelAspect:sample.aspect||prev.renderQuality?.pixelAspect||null,objectCoverage:sample.coverage||prev.renderQuality?.objectCoverage||null,humanLike:'silhouette + label + content + color layers'}});
+}
+function v2870SVGDefs(spec={}){
+  return `<defs>
+    <filter id="v2870Shadow" x="-30%" y="-30%" width="170%" height="170%"><feDropShadow dx="0" dy="28" stdDeviation="24" flood-color="#0f172a" flood-opacity=".26"/></filter>
+    <filter id="v2870Soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="1.4"/></filter>
+    <linearGradient id="v2870Glass" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#ffffff" stop-opacity=".88"/><stop offset=".36" stop-color="${spec.bodyColor}" stop-opacity=".55"/><stop offset=".70" stop-color="${spec.secondaryBodyColor}" stop-opacity=".35"/><stop offset="1" stop-color="#d7e6f5" stop-opacity=".88"/></linearGradient>
+    <linearGradient id="v2870Cap" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#fff6a6"/><stop offset=".52" stop-color="${spec.capColor}"/><stop offset="1" stop-color="#b88600"/></linearGradient>
+    <linearGradient id="v2870Jug" x1="0" x2="1" y1="0" y2="1"><stop stop-color="${spec.secondaryBodyColor}"/><stop offset=".44" stop-color="${spec.bodyColor}"/><stop offset="1" stop-color="#069e98"/></linearGradient>
+    <linearGradient id="v2870Label" x1="0" x2="1"><stop stop-color="${spec.labelColor}"/><stop offset=".55" stop-color="${spec.labelColor}"/><stop offset="1" stop-color="${spec.labelAccentColor}"/></linearGradient>
+    <radialGradient id="v2870Gloss" cx="30%" cy="18%" r="70%"><stop stop-color="#ffffff" stop-opacity=".66"/><stop offset=".45" stop-color="#ffffff" stop-opacity=".10"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>
+  </defs>`;
+}
+function v2870Swatches(spec={}){
+  return [spec.bodyColor,spec.labelColor,spec.labelAccentColor,spec.labelThirdColor,spec.capColor,spec.contentColor].filter(Boolean).slice(0,6).map((c,i)=>`<circle cx="${80+i*38}" cy="92" r="13" fill="${c}" stroke="#fff" stroke-width="4"/><circle cx="${80+i*38}" cy="92" r="15" fill="none" stroke="#0f2745" stroke-opacity=".08"/>`).join('');
+}
+function v2870MasterBottleSvg(spec={}){
+  const l=spec.labelModel||{}; const family=spec.family||''; const cola=family==='cola_bottle_master'; const water=family==='water_bottle_master';
+  const labelFill = cola?'#123a86':(water?spec.labelColor:spec.labelColor);
+  const band = spec.labelAccentColor||'#facc15';
+  const textColor = cola?'#ffffff':v2870TextColor(labelFill);
+  const waterRidges = water ? `<g opacity=".42" stroke="#6aa7cc" stroke-width="5" fill="none"><path d="M270 278 Q450 246 630 278"/><path d="M248 360 Q450 324 652 360"/><path d="M240 690 Q450 728 660 690"/><path d="M253 798 Q450 835 647 798"/></g>` : '';
+  const bubbles = cola ? `<g opacity=".28" fill="#fff8c7">${[315,372,515,590,640].map((x,i)=>`<circle cx="${x}" cy="${330+i*74}" r="${4+(i%3)*2}"/>`).join('')}</g>` : '';
+  const lemon = cola ? `<g transform="translate(690 564)"><circle r="40" fill="#facc15"/><circle r="28" fill="none" stroke="#fff8b5" stroke-width="4" opacity=".65"/><path d="M-22 0 H22 M0 -22 V22" stroke="#eab308" stroke-width="3" opacity=".55"/><path d="M18 -20 L52 -42" stroke="#123a86" stroke-width="7" stroke-linecap="round"/></g>` : '';
+  const colaLabelText = cola ? `<text x="450" y="610" text-anchor="middle" font-family="Georgia,serif" font-size="132" font-style="italic" font-weight="900" fill="#fff" stroke="#061d52" stroke-width="3">Cola</text><text x="450" y="672" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="30" font-weight="1000" fill="#071b3b">${v2870Xml(l.subtitle||'LEMON TASTE')}</text><text x="450" y="708" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="18" font-weight="900" fill="#071b3b" opacity=".78">${v2870Xml(l.micro||'')}</text>` : `<text x="450" y="555" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="58" font-weight="1000" fill="${textColor}">${v2870Xml(l.brand||l.hero)}</text><text x="450" y="612" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="42" font-weight="950" fill="${textColor}" opacity=".96">${v2870Xml(l.hero)}</text><text x="450" y="666" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="30" font-weight="900" fill="${textColor}" opacity=".86">${v2870Xml(l.subtitle)}</text>`;
+  const brandCapsule = cola ? `<rect x="382" y="496" width="136" height="46" rx="23" fill="#e9f4ff" opacity=".96"/><text x="450" y="526" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="29" font-weight="1000" fill="#24539d">${v2870Xml(l.brand||'Blues')}</text>` : '';
+  return `<g filter="url(#v2870Shadow)">
+    <ellipse cx="450" cy="1102" rx="165" ry="32" fill="#0f172a" opacity=".14"/>
+    <rect x="392" y="74" width="116" height="102" rx="24" fill="url(#v2870Cap)"/><g opacity=".30" stroke="#6f5600" stroke-width="4">${[408,427,446,465,484,502].map(x=>`<path d="M${x} 88 L${x} 162"/>`).join('')}</g>
+    <path d="M366 156 Q371 234 325 304 Q270 388 266 505 L266 922 Q266 1024 346 1060 Q392 1080 450 1080 Q508 1080 554 1060 Q634 1024 634 922 L634 505 Q630 388 575 304 Q529 234 534 156 Z" fill="url(#v2870Glass)" stroke="#7faac6" stroke-opacity=".48" stroke-width="10"/>
+    <clipPath id="v2870BottleClip"><path d="M366 156 Q371 234 325 304 Q270 388 266 505 L266 922 Q266 1024 346 1060 Q392 1080 450 1080 Q508 1080 554 1060 Q634 1024 634 922 L634 505 Q630 388 575 304 Q529 234 534 156 Z"/></clipPath>
+    <g clip-path="url(#v2870BottleClip)"><rect x="250" y="${water?475:330}" width="400" height="740" fill="${spec.contentColor}" opacity="${spec.contentOpacity||'.8'}"/><path d="M250 ${water?488:345} Q450 ${water?452:300} 650 ${water?488:345}" fill="none" stroke="#fff" stroke-opacity=".38" stroke-width="16"/>${bubbles}<rect x="260" y="160" width="390" height="920" fill="url(#v2870Gloss)" opacity=".58"/></g>
+    ${waterRidges}
+    <path d="M355 172 Q450 205 545 172" fill="none" stroke="#fff" stroke-opacity=".72" stroke-width="13"/><path d="M330 298 Q370 248 390 170" fill="none" stroke="#fff" stroke-opacity=".44" stroke-width="11" stroke-linecap="round"/>
+    <g><path d="M282 505 Q450 458 618 505 L618 748 Q450 808 282 748 Z" fill="${labelFill}"/><path d="M282 505 Q450 458 618 505 L618 570 Q450 522 282 570 Z" fill="${band}"/><path d="M282 688 Q450 735 618 688 L618 748 Q450 808 282 748 Z" fill="${band}"/><path d="M292 518 Q450 475 608 518" fill="none" stroke="#fff" stroke-opacity=".48" stroke-width="8"/>${brandCapsule}${colaLabelText}${lemon}</g>
+    <text x="450" y="830" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="29" font-weight="1000" fill="#10233f" opacity=".90">${v2870Xml(l.format)}</text>
+  </g>`;
+}
+function v2870MasterJugSvg(spec={}){
+  const l=spec.labelModel||{};
+  return `<g filter="url(#v2870Shadow)">
+    <ellipse cx="450" cy="1104" rx="220" ry="34" fill="#0f172a" opacity=".14"/>
+    <rect x="374" y="76" width="152" height="88" rx="24" fill="url(#v2870Cap)"/><g opacity=".28" stroke="#08204a" stroke-width="4">${[392,414,436,458,480,502].map(x=>`<path d="M${x} 88 L${x} 150"/>`).join('')}</g>
+    <path fill-rule="evenodd" d="M284 156 Q294 104 354 104 L570 122 Q650 132 668 242 L712 910 Q724 1032 606 1070 L278 1070 Q162 1038 178 912 L224 334 Q235 212 284 156 Z M564 236 Q666 244 672 356 Q677 474 579 524 Q532 548 504 510 Q597 462 596 366 Q595 282 548 278 Z" fill="url(#v2870Jug)" stroke="#08766f" stroke-opacity=".32" stroke-width="11"/>
+    <path d="M564 236 Q666 244 672 356 Q677 474 579 524 Q532 548 504 510 Q597 462 596 366 Q595 282 548 278 Z" fill="#f7fbff" opacity=".92"/>
+    <path d="M246 250 Q320 205 440 210" stroke="#fff" stroke-opacity=".55" stroke-width="18" fill="none" stroke-linecap="round"/>
+    <path d="M230 505 L636 478 L607 744 Q461 812 228 762 Z" fill="${spec.labelColor}"/>
+    <path d="M230 505 L636 478 L600 575 Q455 618 228 600 Z" fill="${spec.labelAccentColor}" opacity=".92"/>
+    <path d="M522 480 L636 478 L610 742 L548 766 Q580 635 522 480 Z" fill="${spec.labelThirdColor||'#ef4444'}" opacity=".96"/>
+    <rect x="278" y="518" width="310" height="80" rx="24" fill="#fff" opacity=".88" transform="rotate(-3 433 558)"/>
+    <text x="450" y="575" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="60" font-weight="1000" fill="#b4232c" stroke="#fff" stroke-width="1.2">${v2870Xml(l.brand||'Dexal')}</text>
+    <text x="450" y="650" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="34" font-weight="1000" fill="#071b3b">${v2870Xml(l.hero)}</text>
+    <text x="450" y="693" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="30" font-weight="1000" fill="#071b3b">${v2870Xml(l.subtitle)}</text>
+    <text x="450" y="760" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="36" font-weight="1000" fill="#071b3b">${v2870Xml(l.format)}</text>
+    <path d="M240 925 Q440 1002 662 922" fill="none" stroke="#08766f" stroke-opacity=".22" stroke-width="13"/>
+  </g>`;
+}
+function v2870GenericMasterSvg(spec={}){
+  const l=spec.labelModel||{};
+  return `<g filter="url(#v2870Shadow)"><ellipse cx="450" cy="1010" rx="165" ry="30" fill="#0f172a" opacity=".12"/><rect x="260" y="220" width="380" height="650" rx="56" fill="${spec.bodyColor}" stroke="#0f3760" stroke-opacity=".18" stroke-width="10"/><rect x="300" y="415" width="300" height="220" rx="32" fill="url(#v2870Label)"/><text x="450" y="500" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="54" font-weight="1000" fill="${v2870TextColor(spec.labelColor)}">${v2870Xml(l.brand||'Prodotto')}</text><text x="450" y="565" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="32" font-weight="950" fill="${v2870TextColor(spec.labelColor)}">${v2870Xml(l.hero)}</text><text x="450" y="626" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="27" font-weight="900" fill="${v2870TextColor(spec.labelColor)}">${v2870Xml(l.format)}</text></g>`;
+}
+function v2870VirtualSvg(spec={}, opts={}){
+  const bg=String(opts.background||'transparent').toLowerCase();
+  const bgRect=bg==='white'?`<rect width="900" height="1200" rx="54" fill="#ffffff"/>`:`<rect width="900" height="1200" rx="54" fill="rgba(255,255,255,0)"/>`;
+  const title=`<text x="450" y="74" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="31" font-weight="1000" fill="#0f2745">Render V28.70 · gemello visivo PRO MASTER</text>`;
+  const sw=v2870Swatches(spec);
+  let obj='';
+  if(spec.family==='detergent_jug_master') obj=v2870MasterJugSvg(spec);
+  else if(/bottle_master/.test(spec.family)||spec.shape==='bottle') obj=v2870MasterBottleSvg(spec);
+  else obj=v2870GenericMasterSvg(spec);
+  const facts=(spec.visualFacts||[]).slice(0,3).map((x,i)=>`<text x="450" y="${1145+i*22}" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="16" font-weight="850" fill="#64748b">${v2870Xml(x,120)}</text>`).join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200">${bgRect}${v2870SVGDefs(spec)}<rect x="36" y="30" width="828" height="1128" rx="58" fill="#f8fbff" opacity="${bg==='white'?'.52':'.80'}"/>${sw}${title}${obj}<text x="450" y="1118" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="19" font-weight="1000" fill="#0f2745">${v2870Xml(spec.shape)} · qualità ${v2870Xml(spec.renderQuality?.level||'stimata')}</text>${facts}</svg>`;
+}
+function v2870GenerateVirtualRender(card={}, record={}, opts={}){
+  const spec=v2870RenderSpec(card,record);
+  const svg=v2870VirtualSvg(spec,opts||{});
+  return {version:V2870_VERSION,background:String(opts.background||'transparent'),spec,svgDataUri:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg),svg,upgrade:'PRO MASTER: silhouette piu umana, etichetta stratificata, contenuto visibile, dettagli tappo/manico e layout mobile-safe'};
+}
+function v2870BuildHumanReasoning(card={}, record={}, confirmed={}){
+  const prev=v2870PrevBuildHumanReasoning ? v2870PrevBuildHumanReasoning(card,record,confirmed) : {};
+  const spec=v2870RenderSpec(card,record);
+  const proof=v2870Arr([prev.identityEvidence,spec.visualFacts,record.detectedText,record.visibleEvidence,record.evidenceTokens],70);
+  const rules=v2870Arr([prev.decisionRules,[
+    'il server prima costruisce un gemello visivo: silhouette, contenuto, colori, tappo, etichetta',
+    'il render PRO MASTER serve a verificare se il cervello ha davvero interpretato il prodotto',
+    'se il gemello e sbagliato, valori titolare e foto corretta aggiornano subito la memoria ufficiale'
+  ]],30);
+  return Object.assign({},prev,{version:V2870_VERSION,renderUnderstanding:{family:spec.family,shape:spec.shape,content:spec.content,colors:[spec.bodyColor,spec.labelColor,spec.labelAccentColor,spec.labelThirdColor,spec.capColor],quality:spec.renderQuality,visualFacts:spec.visualFacts},identityEvidence:proof,decisionRules:rules,engines:Object.assign({},prev.engines||{},{render:'V28.70 PRO MASTER virtual twin: silhouette/content/label/color layers',pixelJudge:'V28.70 human visual twin uses learned photo facts + owner values'})});
+}
+function v2870RenderBrainProduct(key='', opts={}){
+  ensureDbShape(); const g=db.assistantBrain.globalProductMemory||{products:{}}; const rec=g.products[String(key||'').trim()];
+  if(!rec) return {ok:false,error:'product_not_found'};
+  try{ v2842EnsureObjectFolder(rec); v2842ApplyOwnerOverrides(rec); v2840AttachMemoryCard(rec,{}); }catch(_){ }
+  const card=rec.memoryCard||v2840BuildMemoryCard(rec,{}); const render=v2870GenerateVirtualRender(card,rec,opts||{}); const reasoning=v2870BuildHumanReasoning(card,rec,{});
+  try{ rec.virtualRenderV2870=render; rec.humanReasoningV2870=reasoning; rec.virtualRenderV2868=render; rec.humanReasoningV2868=reasoning; rec.virtualRenderV2867=render; rec.humanReasoningV2867=reasoning; if(rec.memoryCard){ rec.memoryCard.virtualRenderV2870=render; rec.memoryCard.humanReasoningV2870=reasoning; rec.memoryCard.virtualRenderV2868=render; rec.memoryCard.humanReasoningV2868=reasoning; rec.memoryCard.virtualRenderV2867=render; rec.memoryCard.humanReasoningV2867=reasoning; } }catch(_){ }
+  return {ok:true,version:V2870_VERSION,key:rec.key||key,title:rec.productName||card.identity?.productName||'Prodotto',render,reasoning,fields:v2840PublicProductBrainDetail(rec).fields};
+}
+(function(){
+  try{ v2867RenderSpec=v2870RenderSpec; v2867VirtualSvg=v2870VirtualSvg; v2867GenerateVirtualRender=v2870GenerateVirtualRender; v2867BuildHumanReasoning=v2870BuildHumanReasoning; v2867RenderBrainProduct=v2870RenderBrainProduct; }catch(_){ }
+  try{ v2868RenderSpec=v2870RenderSpec; v2868VirtualSvg=v2870VirtualSvg; v2868GenerateVirtualRender=v2870GenerateVirtualRender; v2868BuildHumanReasoning=v2870BuildHumanReasoning; v2868RenderBrainProduct=v2870RenderBrainProduct; }catch(_){ }
+  try{
+    if(typeof v2840BuildMemoryCard==='function' && !global.__v2870CardWrapped){
+      const prev=v2840BuildMemoryCard;
+      v2840BuildMemoryCard=function(record={}, confirmed={}){ const card=prev.call(this,record,confirmed)||{}; try{ card.humanReasoningV2870=v2870BuildHumanReasoning(card,record,confirmed); card.virtualRenderV2870=v2870GenerateVirtualRender(card,record,{background:'transparent'}); card.humanReasoningV2868=card.humanReasoningV2870; card.virtualRenderV2868=card.virtualRenderV2870; card.humanReasoningV2867=card.humanReasoningV2870; card.virtualRenderV2867=card.virtualRenderV2870; }catch(_){} return card; };
+      global.__v2870CardWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof publicServerBrainV2840==='function' && !global.__v2870ServerBrainWrapped){
+      const prev=publicServerBrainV2840;
+      publicServerBrainV2840=function(opts={}){ try{ Object.values(db.assistantBrain?.globalProductMemory?.products||{}).forEach(r=>{ v2842EnsureObjectFolder(r); const card=v2840AttachMemoryCard(r,{}); if(card){ r.humanReasoningV2870=v2870BuildHumanReasoning(card,r,{}); r.virtualRenderV2870=v2870GenerateVirtualRender(card,r,{background:'transparent'}); r.humanReasoningV2868=r.humanReasoningV2870; r.virtualRenderV2868=r.virtualRenderV2870; r.humanReasoningV2867=r.humanReasoningV2870; r.virtualRenderV2867=r.virtualRenderV2870; } }); }catch(_){} const out=prev.call(this,opts||{}); out.version='V28.70 PRO MASTER Human Visual Twin'; out.reasoningBusV2870={active:true,policy:'gemello virtuale PRO MASTER = silhouette + contenuto + colori + etichetta + prove foto reali',renderEngine:'V28.70 mobile-safe realistic SVG twin',humanUnderstanding:'il render deve far capire al titolare cosa il server crede di vedere'}; return out; };
+      global.__v2870ServerBrainWrapped=true;
+    }
+  }catch(_){ }
+  try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2870PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this)||{}; s.version='V28.70'; s.brain=Object.assign({},s.brain||{},{version:'V28.70',proMasterVisualTwin:'active',mobileSafeRender:'active',humanLikeRender:'silhouette+content+label+colors'}); return s; }; global.__v2870PreflightWrapped=true; } }catch(_){ }
+  console.log('[Spesa Pronta] V28.70 PRO MASTER Human Visual Twin active');
 })();
