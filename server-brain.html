@@ -44,7 +44,7 @@
     @media(max-width:980px){.renderHero{grid-template-columns:1fr}.virtualRender{max-height:60vh;max-width:520px;margin:0 auto}.renderSpec{max-width:100%}}
     @media(max-width:420px){.virtualRender{max-height:52vh;border-radius:20px}.renderActions{grid-template-columns:1fr}.section h3{font-size:.96rem}}
   
-    /* V28.78 PRO Real Photo Twin Viewer: real <img> first, SVG only fallback, zero blank on mobile */
+    /* V28.79 PRO Real Photo Twin Viewer: real <img> first, SVG only fallback, zero blank on mobile */
     .renderHero{display:block!important;max-width:min(100%,820px)!important;margin:0 auto!important;overflow:visible!important}
     .realRenderGrid{display:grid;grid-template-columns:1fr;gap:14px;width:100%;max-width:760px;margin:0 auto}
     .renderStage{background:linear-gradient(180deg,#fbfdff,#eef6ff);border:1px solid #d9e8fb;border-radius:26px;padding:12px;box-shadow:0 14px 36px rgba(10,43,86,.08);overflow:hidden}
@@ -59,7 +59,7 @@
     @media(max-width:520px){.detailBody{padding:10px}.section{padding:10px;border-radius:19px}.renderStage{padding:8px;border-radius:20px}.realPixelTwin{max-height:54vh}.virtualRenderFrame svg{max-height:40vh}.realPhotoViewport{min-height:220px;max-height:50vh;border-radius:18px}.realPhotoImg{max-height:48vh;border-radius:14px}.renderActions{grid-template-columns:1fr}.renderStageHead{font-size:.92rem}.renderStageHead small{display:none}}
 
   
-    /* V28.78 SAFE REAL PHOTO TWIN: never blank, profile photo first, mobile compact */
+    /* V28.79 SAFE REAL PHOTO TWIN: never blank, profile photo first, mobile compact */
     .realPhotoViewport.safeTwin{min-height:clamp(230px,58vw,440px)!important;max-height:58vh!important;background:linear-gradient(180deg,#ffffff,#f2f8ff)!important}
     .safeTwinImg{display:block!important;width:100%!important;height:100%!important;max-width:100%!important;max-height:56vh!important;object-fit:contain!important;border-radius:18px!important;background:#fff!important}
     .safePhotoStatus{display:flex;gap:7px;flex-wrap:wrap;justify-content:center;margin-top:8px}
@@ -68,7 +68,7 @@
     @media(max-width:520px){.realPhotoViewport.safeTwin{min-height:300px!important;max-height:54vh!important}.safeTwinImg{max-height:52vh!important}.realRenderGrid{gap:10px!important}.renderStage{padding:9px!important}.renderSpec{font-size:.92rem}.renderSpec .kv{grid-template-columns:1fr!important}}
 
   
-    /* V28.78 HARD RENDER: render visibile sempre, anche se foto/SVG falliscono */
+    /* V28.79 HARD RENDER: render visibile sempre, anche se foto/SVG falliscono */
     .hardTwinStage{background:linear-gradient(180deg,#ffffff,#f2f8ff);border:1px solid #d9e8fb;border-radius:24px;padding:10px;box-shadow:0 14px 36px rgba(10,43,86,.08);display:grid;gap:8px}
     .hardTwinSvg{display:block;width:100%;max-width:420px;height:auto;max-height:46vh;margin:0 auto;border-radius:20px;background:#fff}
     .hardTwinNote{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
@@ -76,7 +76,7 @@
     @media(max-width:520px){.hardTwinSvg{max-height:40vh;max-width:100%}.hardTwinStage{border-radius:18px;padding:8px}}
 
 
-    /* V28.78 mobile-first render stack */
+    /* V28.79 mobile-first render stack */
     .renderHero,.realRenderGrid{display:block!important;max-width:100%!important;width:100%!important;overflow:visible!important}
     .renderSpec{margin-top:12px!important;max-width:100%!important}
     .renderActions{display:grid!important;grid-template-columns:1fr!important;gap:8px!important}
@@ -91,7 +91,7 @@
     @media(max-width:680px){.detailBody{padding:10px!important}.section{padding:10px!important}.renderCardLite{padding:8px!important;border-radius:16px!important}.hardTwinRaster,.mobileRenderImg{max-width:100%!important;max-height:46vh!important}}
 
 
-    /* V28.78 PURE HTML/CSS TWIN: no SVG, no img dependency, visible on every mobile browser */
+    /* V28.79 PURE HTML/CSS TWIN: no SVG, no img dependency, visible on every mobile browser */
     .cssTwinCard{background:linear-gradient(180deg,#ffffff,#f3f9ff);border:1px solid #d9e8fb;border-radius:20px;padding:10px;box-shadow:0 10px 24px rgba(10,43,86,.07);display:grid;gap:10px}
     .cssTwinCard h4{margin:0;font-size:.96rem;color:#10233f;display:flex;align-items:center;justify-content:space-between;gap:8px}
     .cssTwinCard small{color:#60748e;font-weight:900}
@@ -119,7 +119,7 @@
     @media(max-width:520px){.cssTwinStage{min-height:330px;padding:8px}.cssTwin{width:min(72vw,218px);height:318px}.cssBody{width:168px;height:274px}.cssLabel{top:138px;height:94px}.cssBottle .cssLabel{top:130px;height:90px}.cssBottle .cssName{font-size:35px}.cssJug .cssHandle{right:18px;top:51px;width:70px;height:105px}.renderTopActions{grid-template-columns:1fr}.cssCap{width:66px;height:38px}}
 
 
-    /* V28.78 SURGICAL RENDER TAB: use same photo pipeline as card/photo tab */
+    /* V28.79 SURGICAL RENDER TAB: use same photo pipeline as card/photo tab */
     .render78Stack{display:grid;grid-template-columns:1fr;gap:12px;width:100%;max-width:100%;overflow:visible}
     .render78Actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:8px 0 10px}
     .render78Actions button{width:100%;min-height:46px}
@@ -142,6 +142,22 @@
     .render78Data .kv{grid-template-columns:140px 1fr}
     @media(max-width:680px){.render78Actions{grid-template-columns:1fr}.render78Grid{grid-template-columns:1fr}.render78Stage,.render78MiniTwin{min-height:210px}.render78Img{max-width:100%;max-height:38vh}.render78Data .kv{grid-template-columns:1fr}.render78Shape{width:min(72vw,196px);height:275px}.render78Label{top:116px}}
 
+
+    /* V28.79 Real Pixel Render: foto reale/crop server come render principale */
+    .render79Hero{display:grid;grid-template-columns:1fr;gap:12px;width:100%;max-width:100%;overflow:visible}
+    .render79Grid{display:grid;grid-template-columns:1.05fr .95fr;gap:12px;align-items:start}
+    .render79Card{background:linear-gradient(180deg,#fbfdff,#eef6ff);border:1px solid #d9e8fb;border-radius:22px;padding:10px;box-shadow:0 12px 28px rgba(10,43,86,.07);min-width:0}
+    .render79Card h4{margin:0 0 9px;font-size:1rem;color:#10233f;display:flex;align-items:center;justify-content:space-between;gap:8px;line-height:1.15}.render79Card h4 small{color:#60748e;font-weight:900;font-size:.74rem}
+    .render79Stage{display:grid;place-items:center;min-height:290px;border-radius:18px;background:linear-gradient(180deg,#fff,#f2f8ff);border:1px solid #d9e8fb;padding:8px;overflow:hidden;position:relative}
+    .render79Img{display:block;width:100%;max-width:380px;height:auto;max-height:54vh;object-fit:contain;border-radius:16px;background:#fff;border:1px solid #d9e8fb;box-shadow:0 14px 30px rgba(10,43,86,.10)}
+    .render79Main .render79Img{max-width:430px;max-height:58vh}
+    .render79Loading{position:absolute;inset:auto 12px 12px;display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:999px;padding:7px 10px;background:rgba(6,27,50,.82);color:#fff;font-weight:1000;font-size:.74rem;backdrop-filter:blur(10px)}
+    .render79Facts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.render79Facts span{border:1px solid #d9e8fb;background:#f6fbff;border-radius:999px;padding:6px 9px;font-size:.72rem;font-weight:1000;color:#16427d}.render79Facts span.ok{background:#edfff6;border-color:#baf2d5;color:#0b7e48}.render79Facts span.warn{background:#fff8e7;border-color:#f3d89c;color:#845900}
+    .render79Actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:8px 0 10px}.render79Actions button{width:100%;min-height:46px}.render79Info{padding:10px 12px;border-radius:16px;background:#f7fbff;border:1px solid #dce9f7;color:#37506d;font-weight:900;line-height:1.35}
+    .render79MiniTwin{display:grid;place-items:center;min-height:230px;border-radius:18px;background:#fff;border:1px solid #d9e8fb;padding:10px;overflow:hidden}.render79Shape{position:relative;width:min(72vw,210px);height:300px;border-radius:46px 46px 34px 34px;background:linear-gradient(105deg,rgba(255,255,255,.45) 0 13%,var(--body,#dff4ff) 14% 100%);border:6px solid rgba(16,35,63,.22);box-shadow:0 16px 28px rgba(12,45,94,.14)}.render79Shape:before{content:"";position:absolute;left:50%;top:-39px;transform:translateX(-50%);width:70px;height:40px;border-radius:14px 14px 8px 8px;background:var(--cap,#2563d8)}.render79Label{position:absolute;left:12px;right:12px;top:128px;min-height:94px;border-radius:20px;background:linear-gradient(180deg,var(--label2,#fff) 0 32%,var(--label,#1d8ce3) 33% 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:7px;overflow:hidden}.render79Brand{font-size:20px;font-weight:1000;color:#fff;text-shadow:0 2px 3px rgba(0,0,0,.28);max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.render79Name{font-size:24px;font-weight:1000;color:#071b32;margin-top:5px;line-height:1.05;max-width:100%;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.render79Format{font-size:15px;font-weight:1000;color:#071b32;margin-top:5px}
+    .render79Data .kv{grid-template-columns:140px 1fr}
+    @media(max-width:680px){.render79Actions{grid-template-columns:1fr}.render79Grid{grid-template-columns:1fr}.render79Stage,.render79MiniTwin{min-height:220px}.render79Img,.render79Main .render79Img{max-width:100%;max-height:48vh}.render79Data .kv{grid-template-columns:1fr}.render79Shape{width:min(72vw,196px);height:275px}.render79Label{top:116px}}
+
 </style>
 </head>
 <body>
@@ -153,7 +169,7 @@
           <h1>Cervello Server</h1>
           <p class="subtitle">Memoria prodotti · foto reali · valori titolare · ricerca precisa</p>
         </div>
-        <span class="build" id="buildBadge">V28.78</span>
+        <span class="build" id="buildBadge">V28.79</span>
       </div>
     </header>
 
@@ -336,19 +352,48 @@
     const label2=isDet?'#fff':(/cola|lemon/.test(text)?'#f7c71e':'#fff');
     const cap=isDet?'#2563d8':(/cola|lemon|giallo|yellow/.test(text)?'#f3c515':'#2d6cdf');
     const displayName=/cola/i.test(name)?'Cola':(name||'Prodotto');
+    const openSrc=real.src||fallback;
     const boxes=[['Foto usata',real.kind],['Nome',name],['Marca',brand],['Formato',fmt],['Categoria',cat],['Foto in cartella',folder.photoCount??photos.length??0],['Render server',vr.version||'—']];
     const evidence=pills(reason.identityEvidence||[],'Nessuna prova identità salvata');
-    const openSrc=real.src||fallback;
-    return `<div class="section"><h3>🧊 Render AI · SAFE PHOTO STACK V28.78</h3>
-      <div class="render78Actions"><button class="primary" id="btnRegenerateRender">Rigenera render</button><button class="ghost" id="btnOpenRenderImage">Apri grande</button><button class="ghost" data-open-photos="1">Apri tab Foto</button></div>
-      <div class="render78Info">Questo tab ora usa prima la stessa foto che già funziona nella scheda articolo/FOTO. Il render non deve più andare fuori schermo: foto reale, gemello interpretato e pulsanti sono impilati in modo mobile-safe.</div>
-      <div class="render78Stack"><div class="render78Grid">
-        <div class="render78Card"><h4><span>Foto reale articolo</span><small>${esc(real.kind)}</small></h4><div class="render78Stage"><img class="render78Img realPhotoImg" src="${esc(openSrc)}" data-fallback-src="${esc(fallback)}" alt="Foto reale articolo" loading="eager" decoding="async"></div><div class="render78Facts"><span>stessa catena della scheda prodotto</span><span>${esc(real.kind)}</span>${spec.shape||spec.family?`<span>${esc(spec.shape||spec.family)}</span>`:''}</div></div>
-        <div class="render78Card"><h4><span>Gemello interpretato</span><small>dati + forma</small></h4><div class="render78MiniTwin"><div class="render78Shape" style="--body:${body};--label:${label};--label2:${label2};--cap:${cap}"><div class="render78Label"><div class="render78Brand">${esc(brand||'Marca')}</div><div class="render78Name">${esc(displayName)}</div><div class="render78Format">${esc(fmt)}</div></div></div></div><div class="render78Facts"><span>${isDet?'flacone / pulizia':'bottiglia / prodotto'}</span><span>${isDark?'contenuto scuro':isWater?'contenuto chiaro':'contenuto stimato'}</span><span>${esc(cat||'categoria')}</span></div></div>
-      </div><div class="render78Data section"><h3>📌 Dati rapidi render</h3><div class="kv">${boxes.map(x=>row(x[0],x[1])).join('')}</div><div class="renderActions"><button class="ghost" id="btnRenderTransparent">Sfondo trasparente</button><button class="ghost" id="btnRenderWhite">Sfondo bianco</button><button class="ghost" id="btnCopyRenderSvg">Copia SVG</button></div></div><div class="section"><h3>🧠 Prove identità</h3>${evidence}</div></div></div>`;
+    return `<div class="section"><h3>🧊 Render AI · REAL PIXEL PIPELINE V28.79</h3>
+      <div class="render79Actions"><button class="primary" id="btnRealPixelRender">Rigenera render reale</button><button class="ghost" id="btnOpenRenderImage">Apri grande</button><button class="ghost" data-open-photos="1">Apri tab Foto</button></div>
+      <div class="render79Info">Il render principale ora nasce dalla foto vera: il server prova a ritagliare il prodotto dai pixel con Sharp e crea una preview realistica su sfondo bianco/trasparente. Se lo scontorno non è sicuro, mostra comunque la foto master reale.</div>
+      <div class="render79Hero"><div class="render79Grid">
+        <div class="render79Card render79Main"><h4><span>Render reale da pixel</span><small id="realPixelRenderStatus">caricamento</small></h4><div class="render79Stage"><img class="render79Img realPhotoImg" id="realPixelRenderImg" src="${esc(openSrc)}" data-fallback-src="${esc(fallback)}" alt="Render reale da pixel" loading="eager" decoding="async"><span class="render79Loading" id="realPixelRenderLoading">genero dal server…</span></div><div class="render79Facts" id="realPixelRenderFacts"><span class="warn">fallback foto reale</span><span>${esc(real.kind)}</span></div></div>
+        <div class="render79Card"><h4><span>Foto master originale</span><small>${esc(real.kind)}</small></h4><div class="render79Stage"><img class="render79Img realPhotoImg" src="${esc(openSrc)}" data-fallback-src="${esc(fallback)}" alt="Foto master originale" loading="eager" decoding="async"></div><div class="render79Facts"><span>stessa catena della scheda prodotto</span><span>${esc(real.kind)}</span>${spec.shape||spec.family?`<span>${esc(spec.shape||spec.family)}</span>`:''}</div></div>
+        <div class="render79Card"><h4><span>Gemello interpretato</span><small>secondario</small></h4><div class="render79MiniTwin"><div class="render79Shape" style="--body:${body};--label:${label};--label2:${label2};--cap:${cap}"><div class="render79Label"><div class="render79Brand">${esc(brand||'Marca')}</div><div class="render79Name">${esc(displayName)}</div><div class="render79Format">${esc(fmt)}</div></div></div></div><div class="render79Facts"><span>${isDet?'flacone / pulizia':'bottiglia / prodotto'}</span><span>${isDark?'contenuto scuro':isWater?'contenuto chiaro':'contenuto stimato'}</span><span>${esc(cat||'categoria')}</span></div></div>
+      </div><div class="render79Data section"><h3>📌 Dati rapidi render</h3><div class="kv">${boxes.map(x=>row(x[0],x[1])).join('')}</div><div class="renderActions"><button class="ghost" id="btnRenderTransparent">Sfondo trasparente</button><button class="ghost" id="btnRenderWhite">Sfondo bianco</button><button class="ghost" id="btnCopyRenderSvg">Copia SVG</button></div></div><div class="section"><h3>🧠 Prove identità</h3>${evidence}</div></div></div>`;
   }
 
 
+
+  async function loadRealPixelRender(){
+    const p=currentProduct(); const s=getSettings();
+    const img=$('realPixelRenderImg'), status=$('realPixelRenderStatus'), loading=$('realPixelRenderLoading'), facts=$('realPixelRenderFacts');
+    if(!p||!img||img.dataset.loaded==='1') return;
+    img.dataset.loaded='1';
+    try{
+      const ownerToken=getOwnerToken();
+      const endpoints=[`${apiBase()}/ai/server-brain/photo-render?householdId=${encodeURIComponent(s.householdId)}&key=${encodeURIComponent(p.key)}&mode=white`, `/api/ai/server-brain/photo-render?householdId=${encodeURIComponent(s.householdId)}&key=${encodeURIComponent(p.key)}&mode=white`];
+      for(const url of endpoints){
+        const headers={Authorization:'Bearer '+s.token}; if(ownerToken) headers['X-Owner-Token']=ownerToken;
+        const r=await fetchJson(url,{headers,cache:'no-store'});
+        if(r.ok && r.data?.ok){
+          const rr=r.data.render||{}; const src=rr.whiteDataUrl||rr.transparentDataUrl||rr.masterDataUrl||rr.masterUrl||'';
+          if(src) img.src=src;
+          if(status) status.textContent=rr.quality?.level||r.data.mode||'ok';
+          if(loading) loading.style.display='none';
+          if(facts) facts.innerHTML=`<span class="ok">${esc(rr.quality?.message||'render reale generato')}</span><span>score ${esc(rr.quality?.score||'—')}</span><span>${esc(r.data.mode||'real_pixel')}</span>`;
+          p.fields.realPixelRenderV2879=r.data;
+          return;
+        }
+        logErr('real-pixel-render-failed',{url,status:r.status,body:r.data});
+      }
+    }catch(e){ logErr('real-pixel-render-error',{error:e.message||String(e)}); }
+    if(status) status.textContent='fallback foto';
+    if(loading) loading.style.display='none';
+    if(facts) facts.innerHTML='<span class="warn">render server non disponibile: uso foto reale master</span>';
+  }
 
   function renderJson(f){return `<div class="section"><h3>🧬 JSON completo scheda</h3><div class="json">${esc(redact(JSON.stringify(f,null,2)))}</div></div>`}
   function renderDetail(){const p=currentProduct();const d=$('detail');if(!p){d.innerHTML='<div class="detailBody"><div class="empty">Nessun dettaglio disponibile.</div></div>';return;}const f=p.fields||{};const src=profileSrc(p.profilePhoto);d.innerHTML=`<div class="detailTop"><img class="photo" src="${esc(src)}" alt=""><div><h2>${esc(p.title||'Prodotto')}</h2><p class="detailMeta">${esc(p.brand||'—')} · ${esc(p.format||'—')} · ${esc(p.category||'—')}</p><div class="chips"><span class="chip ${chipClass(p.reliability)}">Affidabilità ${esc(p.reliability||'bassa')}</span><span class="chip ${chipClass(p.completeness?.percent)}">Completo ${p.completeness?.percent||0}%</span>${f.ownerOverrides?.enabled?'<span class="chip lock">Valori titolare</span>':''}${f.objectFolder?.hasRealProfilePhoto?'<span class="chip ok">Foto reale</span>':'<span class="chip warn">Foto profilo da migliorare</span>'}</div><div class="actions" style="margin-top:10px"><button class="ghost mini" data-open-photos="1">📸 Cambia foto articolo</button></div></div></div><div class="tabs"><button class="tab ${state.tab==='overview'?'active':''}" data-tab="overview">Panoramica</button><button class="tab ${state.tab==='edit'?'active':''}" data-tab="edit">Modifica</button><button class="tab ${state.tab==='photos'?'active':''}" data-tab="photos">Foto</button><button class="tab ${state.tab==='render'?'active':''}" data-tab="render">Render AI</button><button class="tab ${state.tab==='data'?'active':''}" data-tab="data">Dati</button><button class="tab ${state.tab==='sources'?'active':''}" data-tab="sources">Fonti API</button><button class="tab ${state.tab==='json'?'active':''}" data-tab="json">JSON</button></div><div class="detailBody" id="detailBody"></div>`;
@@ -371,6 +416,8 @@
     d.querySelector('#btnCopyProductJson')?.addEventListener('click',()=>copyText(JSON.stringify(f,null,2),'JSON articolo copiato ✅'));
     d.querySelector('#btnDeleteBrainProduct')?.addEventListener('click',deleteBrainProduct);
     d.querySelector('#btnRegenerateRender')?.addEventListener('click',()=>refreshVirtualRender('transparent',{retry:true}));
+    d.querySelector('#btnRealPixelRender')?.addEventListener('click',()=>{const img=$('realPixelRenderImg'); if(img) img.dataset.loaded=''; loadRealPixelRender();});
+    if(state.tab==='render') setTimeout(loadRealPixelRender,70);
     d.querySelector('#btnRenderTransparent')?.addEventListener('click',()=>refreshVirtualRender('transparent'));
     d.querySelector('#btnRenderWhite')?.addEventListener('click',()=>refreshVirtualRender('white'));
     d.querySelector('#btnOpenRenderImage')?.addEventListener('click',()=>{const r=f.virtualRenderV2872||f.virtualRenderV2871||f.virtualRenderV2870||f.virtualRenderV2868||f.virtualRenderV2867||{}; const img=d.querySelector('.realPhotoImg'); const src=(img&&img.src)||r.svgDataUri||''; const w=window.open('about:blank','_blank'); if(w){w.document.write('<title>Render AI</title><body style="margin:0;background:#f4f8ff;display:grid;place-items:center;min-height:100vh"><img style="max-width:96vw;max-height:96vh;object-fit:contain;border-radius:22px" src="'+String(src).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"></body>');} });

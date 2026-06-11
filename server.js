@@ -3677,6 +3677,18 @@ const server = http.createServer(async (req,res)=>{
       return send(res,200,result);
     }
 
+    if((req.method === 'GET' || req.method === 'POST') && (pathName === '/api/ai/server-brain/photo-render' || pathName === '/ai/server-brain/photo-render')) {
+      const householdId=String(body.householdId||url.searchParams.get('householdId')||'').trim();
+      const bearer=(req.headers.authorization||'').replace(/^Bearer\s+/,'').trim();
+      const h=(householdId && db.households[householdId] && db.households[householdId].token===bearer) ? db.households[householdId] : null;
+      if(!h) return send(res,401,{ok:false,error:'unauthorized_household',message:'Accesso negato: serve account cloud valido'});
+      const key=String(body.key||url.searchParams.get('key')||'').trim();
+      const mode=String(body.mode||url.searchParams.get('mode')||'white').trim();
+      const result=await v2879GenerateRealPixelRender(key, {mode});
+      if(!result.ok) return send(res, result.error==='product_not_found'?404:200, result);
+      return send(res,200,result);
+    }
+
     if((req.method === 'GET' || req.method === 'POST') && (pathName === '/api/ai/server-brain/render' || pathName === '/ai/server-brain/render')) {
       const householdId=String(body.householdId||url.searchParams.get('householdId')||'').trim();
       const bearer=(req.headers.authorization||'').replace(/^Bearer\s+/,'').trim();
@@ -8274,3 +8286,140 @@ function v2871RenderBrainProduct(key='', opts={}){
 })();
 
 console.log('[Spesa Pronta] V28.78 Render Tab Surgical Fix active');
+
+
+// =============================================================
+// V28.79 PRO REAL PIXEL RENDER
+// Render realistico principale = foto reale del prodotto, ritagliata e pulita
+// lato server con sharp quando la foto è un data:image salvato nel cervello.
+// =============================================================
+function v2879PickRenderPhoto(record={}){
+  const f=record.objectFolder||{};
+  const photos=Array.isArray(f.photos)?f.photos:[];
+  const candidates=[];
+  const add=(obj,kind='',score=0)=>{
+    if(!obj) return;
+    const source=typeof obj==='string'?{dataUrl:obj}:obj;
+    const dataUrl=source.dataUrl||source.thumbDataUrl||source.fullDataUrl||source.originalDataUrl||'';
+    const externalUrl=source.externalUrl||source.imageUrl||source.url||'';
+    if(!dataUrl && !externalUrl) return;
+    candidates.push({dataUrl,externalUrl,kind:kind||source.kind||source.type||'photo',score:Number(score||source.score||0),id:source.id||'',source:source.source||''});
+  };
+  add(f.representativePhoto,'representative',300);
+  add(record.ownerProfilePhoto,'owner_profile',280);
+  add(record.profilePhoto,'profile',250);
+  photos.filter(p=>String(p.id||'')===String(f.representativePhotoId||'')).forEach(p=>add(p,p.kind||'representative_id',260));
+  photos.filter(p=>/owner|profile|front|product/i.test(String(p.kind||p.type||''))).forEach((p,i)=>add(p,p.kind||'front',230-i));
+  photos.forEach((p,i)=>add(p,p.kind||'photo',170-i));
+  const seen=new Set();
+  return candidates.filter(c=>{const k=(c.dataUrl||c.externalUrl||'').slice(0,180); if(!k||seen.has(k)) return false; seen.add(k); return true;}).sort((a,b)=>Number(!!b.dataUrl)-Number(!!a.dataUrl)||b.score-a.score)[0]||null;
+}
+function v2879DataUrlFromBuffer(buf,mime='image/png'){
+  return `data:${mime};base64,${Buffer.from(buf).toString('base64')}`;
+}
+function v2879Clamp(n,min,max){ return Math.max(min,Math.min(max,n)); }
+function v2879Dist(r,g,b,br,bg,bb){ const dr=r-br,dg=g-bg,db=b-bb; return Math.sqrt(dr*dr+dg*dg+db*db); }
+function v2879EstimateBg(data,w,h){
+  let r=0,g=0,b=0,n=0; const band=Math.max(3,Math.round(Math.min(w,h)*.045));
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    if(x>band && x<w-band && y>band && y<h-band) continue;
+    const i=(y*w+x)*4; const a=data[i+3]; if(a<20) continue;
+    r+=data[i]; g+=data[i+1]; b+=data[i+2]; n++;
+  }
+  if(!n) return {r:245,g:248,b:252,lum:248};
+  r/=n; g/=n; b/=n; return {r,g,b,lum:v2864Lum(r,g,b)};
+}
+function v2879BuildMask(data,w,h){
+  const bg=v2879EstimateBg(data,w,h);
+  const mask=new Uint8Array(w*h);
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    const i=(y*w+x)*4; const a=data[i+3]; if(a<20) continue;
+    const r=data[i],g=data[i+1],b=data[i+2];
+    const lum=v2864Lum(r,g,b), sat=v2864Sat(r,g,b), dist=v2879Dist(r,g,b,bg.r,bg.g,bg.b);
+    const cx=(x+.5)/w-.5, cy=(y+.5)/h-.5; const center=1-Math.min(1,Math.sqrt(cx*cx*1.35+cy*cy*.9)*2);
+    const score=dist + sat*85 + Math.abs(lum-bg.lum)*.22 + center*18;
+    if((score>62 && center>.03) || (sat>.34 && dist>34) || (lum<82 && dist>28 && center>.08)) mask[y*w+x]=1;
+  }
+  return {mask,bg};
+}
+function v2879BestComponent(mask,w,h){
+  const seen=new Uint8Array(w*h); let best=null; const dirs=[1,-1,w,-w];
+  for(let i=0;i<mask.length;i++){
+    if(!mask[i]||seen[i]) continue;
+    let stack=[i], area=0, minX=w,minY=h,maxX=0,maxY=0, sx=0, sy=0; seen[i]=1;
+    while(stack.length){
+      const p=stack.pop(); const x=p%w, y=Math.floor(p/w); area++; sx+=x; sy+=y; if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;
+      for(const d of dirs){ const q=p+d; if(q<0||q>=mask.length||seen[q]||!mask[q]) continue; if((d===1&&q%w===0)||(d===-1&&p%w===0)) continue; seen[q]=1; stack.push(q); }
+    }
+    if(area<80) continue;
+    const cx=sx/area/w, cy=sy/area/h; const central=1-Math.min(1,Math.sqrt((cx-.5)*(cx-.5)*1.8+(cy-.5)*(cy-.5)*1.25)*2);
+    const bh=maxY-minY+1,bw=maxX-minX+1; const tall=bh/Math.max(1,bw); const score=area*(.7+central*1.4)*(1+Math.min(1.2,tall*.18));
+    if(!best||score>best.score) best={area,minX,minY,maxX,maxY,score,central,tall};
+  }
+  if(!best) return null;
+  const padX=Math.round((best.maxX-best.minX+1)*.12), padY=Math.round((best.maxY-best.minY+1)*.10);
+  best.minX=v2879Clamp(best.minX-padX,0,w-1); best.maxX=v2879Clamp(best.maxX+padX,0,w-1);
+  best.minY=v2879Clamp(best.minY-padY,0,h-1); best.maxY=v2879Clamp(best.maxY+padY,0,h-1);
+  return best;
+}
+function v2879MakeCroppedBuffers(data,w,h,mask,box){
+  const x0=box.minX,y0=box.minY,cw=box.maxX-box.minX+1,ch=box.maxY-box.minY+1;
+  const crop=new Uint8Array(cw*ch*4); const alpha=new Uint8Array(cw*ch);
+  for(let y=0;y<ch;y++) for(let x=0;x<cw;x++){
+    const si=((y0+y)*w+(x0+x))*4, di=(y*cw+x)*4, mi=(y0+y)*w+(x0+x);
+    crop[di]=data[si]; crop[di+1]=data[si+1]; crop[di+2]=data[si+2]; crop[di+3]=data[si+3];
+    alpha[y*cw+x]=mask[mi]?255:0;
+  }
+  // light dilation so thin label/bottle edges don't disappear
+  const dil=new Uint8Array(alpha);
+  for(let y=1;y<ch-1;y++) for(let x=1;x<cw-1;x++){
+    const idx=y*cw+x; if(alpha[idx]) continue;
+    let n=0; for(let yy=-1;yy<=1;yy++) for(let xx=-1;xx<=1;xx++) if(alpha[(y+yy)*cw+(x+xx)]) n++;
+    if(n>=3) dil[idx]=220;
+  }
+  let coverage=0;
+  for(let i=0;i<cw*ch;i++){ if(dil[i]) coverage++; const di=i*4; crop[di+3]=dil[i]; }
+  return {rgba:Buffer.from(crop),cw,ch,coverage:coverage/Math.max(1,cw*ch)};
+}
+async function v2879GenerateRealPixelRender(key='', opts={}){
+  try{
+    ensureDbShape();
+    const rec=db.assistantBrain?.globalProductMemory?.products?.[key];
+    if(!rec) return {ok:false,error:'product_not_found'};
+    const photo=v2879PickRenderPhoto(rec);
+    if(!photo) return {ok:false,error:'no_real_photo',message:'Nessuna foto reale disponibile per generare il render'};
+    const rawUrl=photo.dataUrl||'';
+    if(!rawUrl){
+      return {ok:true,version:'V28.79',mode:'external_photo_passthrough',source:photo,render:{masterUrl:photo.externalUrl||'',whiteDataUrl:photo.externalUrl||'',transparentDataUrl:'',quality:{level:'external_reference',score:45,message:'Immagine esterna mostrata senza scontorno server'}}};
+    }
+    const sharp=await v2864Sharp(); const buf=v2864DataUrlBuffer(rawUrl);
+    if(!sharp||!buf) return {ok:false,error:!sharp?'sharp_not_available':'invalid_data_url'};
+    const img=sharp(buf,{failOn:'none'}).rotate().resize({width:720,height:720,fit:'inside',withoutEnlargement:true}).ensureAlpha();
+    const {data,info}=await img.raw().toBuffer({resolveWithObject:true});
+    const w=info.width,h=info.height;
+    const {mask,bg}=v2879BuildMask(data,w,h); const comp=v2879BestComponent(mask,w,h);
+    const masterBuf=await sharp(buf,{failOn:'none'}).rotate().resize({width:900,height:900,fit:'inside',withoutEnlargement:true}).jpeg({quality:86,mozjpeg:true}).toBuffer();
+    if(!comp){
+      return {ok:true,version:'V28.79',mode:'master_photo_fallback',source:photo,render:{masterDataUrl:v2879DataUrlFromBuffer(masterBuf,'image/jpeg'),whiteDataUrl:v2879DataUrlFromBuffer(masterBuf,'image/jpeg'),transparentDataUrl:'',quality:{level:'foto_master',score:58,message:'Scontorno non sicuro: mostro foto reale master'}}};
+    }
+    const cropped=v2879MakeCroppedBuffers(data,w,h,mask,comp);
+    let pngBuf=await sharp(cropped.rgba,{raw:{width:cropped.cw,height:cropped.ch,channels:4}}).resize({height:760,fit:'inside',withoutEnlargement:true}).png({compressionLevel:8}).toBuffer();
+    let whiteBuf=await sharp(cropped.rgba,{raw:{width:cropped.cw,height:cropped.ch,channels:4}}).resize({height:760,fit:'inside',withoutEnlargement:true}).flatten({background:'#ffffff'}).jpeg({quality:88,mozjpeg:true}).toBuffer();
+    const qualityScore=Math.round(v2879Clamp(60+Math.min(25,comp.central*22)+Math.min(15,cropped.coverage*30),55,96));
+    rec.realPixelRenderV2879={at:Date.now(),photoId:photo.id||'',kind:photo.kind||'',bbox:{x:comp.minX,y:comp.minY,w:comp.maxX-comp.minX+1,h:comp.maxY-comp.minY+1,sourceW:w,sourceH:h},qualityScore,coverage:Number(cropped.coverage.toFixed(3)),engine:'sharp_foreground_component_crop_v2879'};
+    return {ok:true,version:'V28.79',mode:'real_pixel_crop',source:{id:photo.id||'',kind:photo.kind||'',score:photo.score||0},render:{masterDataUrl:v2879DataUrlFromBuffer(masterBuf,'image/jpeg'),whiteDataUrl:v2879DataUrlFromBuffer(whiteBuf,'image/jpeg'),transparentDataUrl:v2879DataUrlFromBuffer(pngBuf,'image/png'),bbox:rec.realPixelRenderV2879.bbox,quality:{level:qualityScore>=82?'real_pixel_pro':'real_pixel_basic',score:qualityScore,coverage:Number(cropped.coverage.toFixed(3)),message:'Render generato dai pixel reali della foto master'}}};
+  }catch(e){ return {ok:false,error:'real_pixel_render_failed',message:String(e?.message||e).slice(0,220)}; }
+}
+
+(function(){
+  const V2879_VERSION='V28.79';
+  try{
+    const prev=publicServerBrainV2840;
+    if(typeof prev==='function' && !global.__v2879ServerBrainWrapped){
+      publicServerBrainV2840=function(opts={}){ const out=prev.call(this,opts||{})||{}; try{ out.version='V28.79 PRO Real Pixel Render Pipeline'; out.reasoningBusV2879={active:true,policy:'render principale = foto reale/crop pixel, gemello semantico solo secondario',endpoint:'/api/ai/server-brain/photo-render'}; }catch(_){} return out; };
+      global.__v2879ServerBrainWrapped=true;
+    }
+  }catch(_){ }
+  try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2879PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this)||{}; s.version=V2879_VERSION; s.brain=Object.assign({},s.brain||{},{version:V2879_VERSION,realPixelRender:'active'}); return s; }; global.__v2879PreflightWrapped=true; } }catch(_){ }
+  console.log('[Spesa Pronta] V28.79 PRO Real Pixel Render Pipeline active');
+})();
