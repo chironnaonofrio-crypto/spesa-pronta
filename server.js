@@ -3689,6 +3689,18 @@ const server = http.createServer(async (req,res)=>{
       return send(res,200,result);
     }
 
+    if((req.method === 'GET' || req.method === 'POST') && (pathName === '/api/ai/server-brain/reference-image' || pathName === '/ai/server-brain/reference-image')) {
+      const householdId=String(body.householdId||url.searchParams.get('householdId')||'').trim();
+      const bearer=(req.headers.authorization||'').replace(/^Bearer\s+/,'').trim();
+      const h=(householdId && db.households[householdId] && db.households[householdId].token===bearer) ? db.households[householdId] : null;
+      if(!h) return send(res,401,{ok:false,error:'unauthorized_household',message:'Accesso negato: serve account cloud valido'});
+      const key=String(body.key||url.searchParams.get('key')||'').trim();
+      const result=await v2880FindOnlineReferenceImage(key);
+      if(!result.ok) return send(res,200,result);
+      await saveDb().catch(()=>{});
+      return send(res,200,result);
+    }
+
     if((req.method === 'GET' || req.method === 'POST') && (pathName === '/api/ai/server-brain/render' || pathName === '/ai/server-brain/render')) {
       const householdId=String(body.householdId||url.searchParams.get('householdId')||'').trim();
       const bearer=(req.headers.authorization||'').replace(/^Bearer\s+/,'').trim();
@@ -8416,10 +8428,172 @@ async function v2879GenerateRealPixelRender(key='', opts={}){
   try{
     const prev=publicServerBrainV2840;
     if(typeof prev==='function' && !global.__v2879ServerBrainWrapped){
-      publicServerBrainV2840=function(opts={}){ const out=prev.call(this,opts||{})||{}; try{ out.version='V28.79 PRO Real Pixel Render Pipeline'; out.reasoningBusV2879={active:true,policy:'render principale = foto reale/crop pixel, gemello semantico solo secondario',endpoint:'/api/ai/server-brain/photo-render'}; }catch(_){} return out; };
+      publicServerBrainV2840=function(opts={}){ const out=prev.call(this,opts||{})||{}; try{ out.version='V28.80 PRO Real Twin Render AI'; out.reasoningBusV2879={active:true,policy:'render principale = foto reale/crop pixel, gemello semantico solo secondario',endpoint:'/api/ai/server-brain/photo-render'}; }catch(_){} return out; };
       global.__v2879ServerBrainWrapped=true;
     }
   }catch(_){ }
   try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2879PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this)||{}; s.version=V2879_VERSION; s.brain=Object.assign({},s.brain||{},{version:V2879_VERSION,realPixelRender:'active'}); return s; }; global.__v2879PreflightWrapped=true; } }catch(_){ }
-  console.log('[Spesa Pronta] V28.79 PRO Real Pixel Render Pipeline active');
+  console.log('[Spesa Pronta] V28.80 PRO Real Twin Render AI active');
+})();
+
+
+// =============================================================
+// V28.80 PRO Real Twin Render AI
+// Migliora: render semantico fotorealistico, reference online/API,
+// rigenera render reale con cache-buster e crop pixel più prudente.
+// =============================================================
+function v2880List(...xs){ return v2840List(...xs).filter(Boolean); }
+function v2880FirstImageFromRecord(rec={}){
+  const refs=[];
+  function push(obj, source='memory'){
+    if(!obj) return;
+    if(typeof obj==='string') refs.push({imageUrl:obj,source});
+    else if(typeof obj==='object'){
+      const u=obj.imageUrl||obj.image_front_url||obj.image_url||obj.externalUrl||obj.url||obj.src||'';
+      if(u) refs.push({imageUrl:String(u),source:obj.source||obj.sourceLabel||source,productName:obj.productName||obj.product_name||'',brand:obj.brand||obj.brands||''});
+    }
+  }
+  v2880List(rec.externalLearning?.referenceImages, rec.externalLearning?.references, rec.externalReferenceImages, rec.externalReferences).flat().forEach(x=>push(x,'memory_reference'));
+  v2880List(rec.imageUrl,rec.productImageUrl,rec.externalKnowledge?.imageUrl,rec.memoryCard?.profilePhoto?.imageUrl).forEach(x=>push(x,'record_image'));
+  return refs.find(x=>/^https?:\/\//i.test(x.imageUrl||''))||null;
+}
+async function v2880FetchJson(url, timeoutMs=6500){
+  const ctrl=new AbortController(); const t=setTimeout(()=>ctrl.abort(), timeoutMs);
+  try{
+    const r=await fetch(url,{headers:{'user-agent':'Spesa-Pronta/28.80 product reference lookup'},signal:ctrl.signal});
+    if(!r.ok) return null;
+    return await r.json();
+  }catch(_){ return null; } finally { clearTimeout(t); }
+}
+function v2880MainBarcode(rec={}){
+  return String(rec.barcode||rec.ean||rec.code||(Array.isArray(rec.barcodes)&&rec.barcodes[0])||rec.memoryCard?.barcode||'').replace(/\D/g,'').trim();
+}
+async function v2880FindOnlineReferenceImage(key=''){
+  ensureDbShape();
+  const rec=db.assistantBrain?.globalProductMemory?.products?.[key];
+  if(!rec) return {ok:false,error:'product_not_found'};
+  const cached=v2880FirstImageFromRecord(rec);
+  if(cached) return {ok:true,version:'V28.80',mode:'cached_reference',reference:cached};
+  const barcode=v2880MainBarcode(rec);
+  const name=String(rec.productName||rec.memoryCard?.identity?.productName||'').trim();
+  const brand=String(rec.brand||rec.memoryCard?.identity?.brand||'').trim();
+  const candidates=[];
+  const addRef=(ref={})=>{
+    const imageUrl=ref.image_front_url||ref.image_url||ref.imageUrl||ref.image||'';
+    if(!/^https?:\/\//i.test(String(imageUrl||''))) return;
+    candidates.push({
+      imageUrl:String(imageUrl),
+      productName:ref.product_name||ref.productName||name,
+      brand:ref.brands||ref.brand||brand,
+      code:ref.code||barcode,
+      source:ref.source||'Open Facts'
+    });
+  };
+  if(barcode){
+    const urls=[
+      `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json`,
+      `https://world.openproductsfacts.org/api/v0/product/${encodeURIComponent(barcode)}.json`,
+      `https://world.openbeautyfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json`,
+      `https://world.openpetfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json`
+    ];
+    for(const u of urls){
+      const j=await v2880FetchJson(u);
+      if(j && (j.product||j.status===1)){ addRef(Object.assign({},j.product||{},{source:u.includes('openproducts')?'Open Products Facts':u.includes('openbeauty')?'Open Beauty Facts':u.includes('openpet')?'Open Pet Food Facts':'Open Food Facts'})); if(candidates.length) break; }
+    }
+  }
+  if(!candidates.length && (name||brand)){
+    const terms=encodeURIComponent([brand,name].filter(Boolean).join(' '));
+    const urls=[
+      `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${terms}&search_simple=1&action=process&json=1&page_size=5`,
+      `https://world.openproductsfacts.org/cgi/search.pl?search_terms=${terms}&search_simple=1&action=process&json=1&page_size=5`
+    ];
+    for(const u of urls){
+      const j=await v2880FetchJson(u);
+      const arr=Array.isArray(j?.products)?j.products:[];
+      for(const p of arr) addRef(Object.assign({},p,{source:u.includes('openproducts')?'Open Products Facts search':'Open Food Facts search'}));
+      if(candidates.length) break;
+    }
+  }
+  if(!candidates.length) return {ok:false,version:'V28.80',error:'reference_not_found',message:'Nessuna immagine reference online/API trovata'};
+  const ref=candidates[0];
+  rec.externalLearning=rec.externalLearning||{};
+  rec.externalLearning.referenceImages=Array.isArray(rec.externalLearning.referenceImages)?rec.externalLearning.referenceImages:[];
+  rec.externalLearning.referenceImages.unshift(Object.assign({at:Date.now(),learnedBy:'v2880_reference_lookup'},ref));
+  rec.externalLearning.referenceImages=rec.externalLearning.referenceImages.slice(0,20);
+  rec.updatedAt=Date.now();
+  updateGlobalLearningAudit({type:'v2880-online-reference-found',key,productName:rec.productName||'',brand:rec.brand||'',source:ref.source||'',imageUrl:ref.imageUrl||''});
+  return {ok:true,version:'V28.80',mode:'online_reference',reference:ref};
+}
+function v2880ProductAwareBox(data,w,h,rec={}){
+  const txt=String([rec.productName,rec.brand,rec.category,rec.format,rec.memoryCard?.identity?.productName,rec.memoryCard?.identity?.brand].filter(Boolean).join(' ')).toLowerCase();
+  const isBottle=/cola|acqua|water|drink|bevanda|soft|bottle|bt|1[,\\.]?5|1,5|1\\.5/.test(txt);
+  const isJug=/dexal|candegg|deters|laundry|clean|flacone|jug|4 l|4l/.test(txt);
+  let mask,bg;
+  try{ const out=v2879BuildMask(data,w,h); mask=out.mask; bg=out.bg; }catch(_){ mask=new Uint8Array(w*h); }
+  // product-aware central saliency: prefer the real object column and reduce floor/background noise
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    const i=(y*w+x)*4, r=data[i],g=data[i+1],b=data[i+2],a=data[i+3]; if(a<20) continue;
+    const lum=v2864Lum(r,g,b), sat=v2864Sat(r,g,b);
+    const nx=(x+.5)/w, ny=(y+.5)/h;
+    const cx=Math.abs(nx-.5), cy=Math.abs(ny-.52);
+    const central=Math.max(0,1-(cx*2.2+cy*.55));
+    const dark = lum<92 && central>.12;
+    const colorful = sat>.28 && central>.10;
+    const turquoise = (g>120 && b>110 && r<90 && central>.08);
+    const yellowBlue = ((r>170&&g>130&&b<80)||(b>90&&r<80&&g<130)) && central>.05;
+    const detergent = isJug && (turquoise || colorful);
+    const bottle = isBottle && (dark || yellowBlue || colorful);
+    if(detergent || bottle || (central>.42 && (dark||colorful))) mask[y*w+x]=1;
+  }
+  let comp=v2879BestComponent(mask,w,h);
+  if(!comp){
+    // very safe center crop fallback
+    const bw=Math.round(w*(isJug?.55:.42)), bh=Math.round(h*.86);
+    const minX=Math.max(0,Math.round(w*.5-bw/2)), maxX=Math.min(w-1,minX+bw);
+    const minY=Math.max(0,Math.round(h*.08)), maxY=Math.min(h-1,minY+bh);
+    comp={minX,minY,maxX,maxY,area:bw*bh,central:1,tall:bh/Math.max(1,bw),score:1};
+  }
+  return {mask,box:comp,bg};
+}
+async function v2880GenerateRealPixelRender(key='', opts={}){
+  try{
+    ensureDbShape();
+    const rec=db.assistantBrain?.globalProductMemory?.products?.[key];
+    if(!rec) return {ok:false,error:'product_not_found'};
+    const photo=v2879PickRenderPhoto(rec);
+    if(!photo) return {ok:false,error:'no_real_photo',message:'Nessuna foto reale disponibile per generare il render'};
+    const rawUrl=photo.dataUrl||'';
+    if(!rawUrl){
+      const ref=photo.externalUrl||photo.imageUrl||'';
+      return {ok:true,version:'V28.80',mode:'external_photo_passthrough',source:photo,render:{masterUrl:ref,whiteDataUrl:ref,transparentDataUrl:'',quality:{level:'external_reference',score:52,message:'Immagine esterna/reference usata come render reale'}}};
+    }
+    const sharp=await v2864Sharp(); const buf=v2864DataUrlBuffer(rawUrl);
+    if(!sharp||!buf) return {ok:false,error:!sharp?'sharp_not_available':'invalid_data_url'};
+    const img=sharp(buf,{failOn:'none'}).rotate().resize({width:780,height:780,fit:'inside',withoutEnlargement:true}).ensureAlpha();
+    const {data,info}=await img.raw().toBuffer({resolveWithObject:true});
+    const w=info.width,h=info.height;
+    const {mask,box}=v2880ProductAwareBox(data,w,h,rec);
+    const masterBuf=await sharp(buf,{failOn:'none'}).rotate().resize({width:960,height:960,fit:'inside',withoutEnlargement:true}).jpeg({quality:88,mozjpeg:true}).toBuffer();
+    const cropped=v2879MakeCroppedBuffers(data,w,h,mask,box);
+    const density=Number(cropped.coverage||0);
+    const pngBuf=await sharp(cropped.rgba,{raw:{width:cropped.cw,height:cropped.ch,channels:4}}).resize({height:820,fit:'inside',withoutEnlargement:true}).png({compressionLevel:8}).toBuffer();
+    const whiteBuf=await sharp(cropped.rgba,{raw:{width:cropped.cw,height:cropped.ch,channels:4}}).resize({height:820,fit:'inside',withoutEnlargement:true}).flatten({background:'#ffffff'}).jpeg({quality:90,mozjpeg:true}).toBuffer();
+    const qualityScore=Math.round(v2879Clamp(68+Math.min(16,box.central*16)+Math.min(12,density*30),62,97));
+    rec.realPixelRenderV2880={at:Date.now(),photoId:photo.id||'',kind:photo.kind||'',bbox:{x:box.minX,y:box.minY,w:box.maxX-box.minX+1,h:box.maxY-box.minY+1,sourceW:w,sourceH:h},qualityScore,coverage:Number(density.toFixed(3)),engine:'sharp_product_aware_saliency_crop_v2880'};
+    return {ok:true,version:'V28.80',mode:'real_pixel_product_aware_crop',source:{id:photo.id||'',kind:photo.kind||'',score:photo.score||0},render:{masterDataUrl:v2879DataUrlFromBuffer(masterBuf,'image/jpeg'),whiteDataUrl:v2879DataUrlFromBuffer(whiteBuf,'image/jpeg'),transparentDataUrl:v2879DataUrlFromBuffer(pngBuf,'image/png'),bbox:rec.realPixelRenderV2880.bbox,quality:{level:qualityScore>=84?'real_pixel_pro':'real_pixel_improved',score:qualityScore,coverage:Number(density.toFixed(3)),message:'Render migliorato: crop product-aware dai pixel reali + foto master come fallback'}}};
+  }catch(e){ return {ok:false,error:'real_pixel_render_failed_v2880',message:String(e?.message||e).slice(0,220)}; }
+}
+try{ v2879GenerateRealPixelRender=v2880GenerateRealPixelRender; }catch(_){}
+
+(function(){
+  const V2880_VERSION='V28.80';
+  try{
+    const prev=publicServerBrainV2840;
+    if(typeof prev==='function' && !global.__v2880ServerBrainWrapped){
+      publicServerBrainV2840=function(opts={}){ const out=prev.call(this,opts||{})||{}; try{ out.version='V28.80 PRO Real Twin Render AI'; out.reasoningBusV2880={active:true,policy:'gemello semantico fotorealistico = foto reale texture + crop pixel + reference online/API',endpoint:'/api/ai/server-brain/photo-render + /reference-image'}; }catch(_){} return out; };
+      global.__v2880ServerBrainWrapped=true;
+    }
+  }catch(_){ }
+  try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2880PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this)||{}; s.version=V2880_VERSION; s.brain=Object.assign({},s.brain||{},{version:V2880_VERSION,realTwinRender:'active',onlineReference:'active'}); return s; }; global.__v2880PreflightWrapped=true; } }catch(_){ }
+  console.log('[Spesa Pronta] V28.80 PRO Real Twin Render AI active');
 })();
