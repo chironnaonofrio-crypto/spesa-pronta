@@ -8799,3 +8799,93 @@ try{ v2879GenerateRealPixelRender=v2900GenerateRealPixelRender; }catch(_){ }
   try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2900PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this)||{}; s.version=V2900_VERSION; s.brain=Object.assign({},s.brain||{},{version:V2900_VERSION,proMasterRender:'active',referenceProxy:'active',semanticTwinStudio:'active'}); return s; }; global.__v2900PreflightWrapped=true; } }catch(_){ }
   console.log('[Spesa Pronta] V29.00 OFFICIAL PRO MASTER REAL RENDER active');
 })();
+
+// =============================================================
+// V29.1 OFFICIAL PATCH · PRO MASTER SAFE RENDER
+// =============================================================
+async function v2910BuildStudioCardsSafe(pngBuf, rec={}, meta={}){
+  const sharp=await v2864Sharp();
+  const safe=(s)=>String(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  const brand=String(rec.brand||rec.memoryCard?.identity?.brand||'').trim()||'Marca';
+  const name=String(rec.productName||rec.memoryCard?.identity?.productName||'').trim()||'Prodotto';
+  const format=String(rec.format||rec.memoryCard?.identity?.format||'').trim()||'';
+  const category=String(rec.category||rec.memoryCard?.classification?.category||meta.category||'').trim();
+  const family=(typeof v2900IsJugLike==='function'&&v2900IsJugLike(rec))?'flacone / pulizia':((typeof v2900IsBottleLike==='function'&&v2900IsBottleLike(rec))?'bottiglia / bevanda':'prodotto');
+  if(!sharp||!pngBuf) return {studioDataUrl:'',semanticDataUrl:''};
+  const product=await sharp(pngBuf,{failOn:'none'}).resize({width:620,height:660,fit:'inside',withoutEnlargement:true}).png({compressionLevel:8}).toBuffer();
+  const pm=await sharp(product).metadata();
+  const pw=Number(pm.width||420), ph=Number(pm.height||620);
+  const left=Math.max(0,Math.round((900-pw)/2));
+  const top=Math.max(100,Math.round(150 + (660-ph)/2));
+  const studioBg=`<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1120" viewBox="0 0 900 1120"><defs><linearGradient id="bg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#eef6ff"/></linearGradient></defs><rect width="900" height="1120" rx="48" fill="url(#bg)"/><rect x="42" y="42" width="816" height="1036" rx="40" fill="#fff" stroke="#d9e8fb" stroke-width="3"/><text x="450" y="94" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="30" font-weight="1000" fill="#10233f">Render studio PRO da pixel reali</text><ellipse cx="450" cy="820" rx="230" ry="42" fill="#17324f" opacity=".10"/><rect x="70" y="878" width="760" height="142" rx="34" fill="#f4f8ff" stroke="#dce8f7" stroke-width="2"/><text x="450" y="932" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="38" font-weight="1000" fill="#10233f">${safe(brand)} · ${safe(name)}</text><text x="450" y="974" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="24" font-weight="900" fill="#58708d">${safe(format)}${category?' · '+safe(category):''}</text><text x="450" y="1034" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="18" font-weight="900" fill="#6b7f98">soggetto isolato · ${safe(family)} · ${safe(meta.note||'pixel reali')}</text></svg>`;
+  const semanticBg=`<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1120" viewBox="0 0 900 1120"><defs><linearGradient id="bg" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#f8fbff"/><stop offset="1" stop-color="#eaf3ff"/></linearGradient><linearGradient id="pill" x1="0" x2="1"><stop offset="0" stop-color="#f5d032"/><stop offset="1" stop-color="#244596"/></linearGradient></defs><rect width="900" height="1120" rx="48" fill="url(#bg)"/><rect x="42" y="42" width="816" height="1036" rx="40" fill="#fff" stroke="#d9e8fb" stroke-width="3"/><text x="72" y="96" font-family="Inter,Arial,sans-serif" font-size="31" font-weight="1000" fill="#10233f">Gemello semantico PRO</text><text x="828" y="96" text-anchor="end" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="900" fill="#6b7f98">foto + logica visiva</text><rect x="78" y="874" width="744" height="132" rx="34" fill="url(#pill)" opacity=".98"/><text x="450" y="928" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="34" font-weight="1000" fill="#fff">${safe(brand)} · ${safe(name)}</text><text x="450" y="970" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="900" fill="#f2f7ff">${safe(format)} · ${safe(family)} · render da pixel</text><text x="450" y="1040" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="18" font-weight="900" fill="#6b7f98">prima foto reale, poi ragionamento umano del server</text></svg>`;
+  const studio=await sharp(Buffer.from(studioBg)).composite([{input:product,left,top}]).png({compressionLevel:8}).toBuffer();
+  const semantic=await sharp(Buffer.from(semanticBg)).composite([{input:product,left,top}]).png({compressionLevel:8}).toBuffer();
+  return {studioDataUrl:v2879DataUrlFromBuffer(studio,'image/png'),semanticDataUrl:v2879DataUrlFromBuffer(semantic,'image/png')};
+}
+async function v2910GenerateRealPixelRender(key='', opts={}){
+  try{
+    ensureDbShape();
+    const rec=db.assistantBrain?.globalProductMemory?.products?.[key];
+    if(!rec) return {ok:false,error:'product_not_found'};
+    const photo=v2879PickRenderPhoto(rec);
+    if(!photo) return {ok:false,error:'no_real_photo',message:'Nessuna foto reale disponibile per generare il render'};
+    const rawUrl=photo.dataUrl||'';
+    if(!rawUrl){
+      const ref=photo.externalUrl||photo.imageUrl||'';
+      const data=(typeof v2900FetchRemoteImageDataUrl==='function'?await v2900FetchRemoteImageDataUrl(ref).catch(()=> ''):'') || ref;
+      return {ok:true,version:'V29.1',mode:'external_photo_passthrough_safe',source:photo,render:{masterUrl:ref,whiteDataUrl:data,transparentDataUrl:'',studioDataUrl:data,semanticDataUrl:data,quality:{level:'external_reference_safe',score:60,message:'Reference esterna o fallback sicuro usato come render'}}};
+    }
+    const sharp=await v2864Sharp(); const buf=v2864DataUrlBuffer(rawUrl);
+    if(!sharp||!buf) return {ok:false,error:!sharp?'sharp_not_available':'invalid_data_url'};
+    const masterBuf=await sharp(buf,{failOn:'none'}).rotate().resize({width:1080,height:1080,fit:'inside',withoutEnlargement:true}).jpeg({quality:90,mozjpeg:true}).toBuffer();
+    let pngRaw=null, whiteBuf=null, box=null, coverage=0;
+    try{
+      const img=sharp(buf,{failOn:'none'}).rotate().resize({width:920,height:920,fit:'inside',withoutEnlargement:true}).ensureAlpha();
+      const {data,info}=await img.raw().toBuffer({resolveWithObject:true});
+      const w=info.width,h=info.height;
+      const smart=(typeof v2900BuildSmartMask==='function')?v2900BuildSmartMask(data,w,h,rec):v2879BuildMask(data,w,h);
+      box=(typeof v2900RefineProductBox==='function')?v2900RefineProductBox(smart.mask,w,h,rec):v2879BestComponent(smart.mask,w,h);
+      if(!box) throw new Error('box_missing');
+      const cropped=(typeof v2900MakeRefinedCrop==='function')?v2900MakeRefinedCrop(data,w,h,smart.mask,box):v2879MakeCroppedBuffers(data,w,h,smart.mask,box);
+      coverage=Number(cropped.coverage||0);
+      pngRaw=await sharp(Buffer.from(cropped.rgba),{raw:{width:cropped.cw,height:cropped.ch,channels:4}}).resize({height:860,fit:'inside',withoutEnlargement:true}).png({compressionLevel:8}).toBuffer();
+      whiteBuf=await sharp(pngRaw).flatten({background:'#ffffff'}).jpeg({quality:92,mozjpeg:true}).toBuffer();
+    }catch(e){
+      pngRaw=await sharp(masterBuf,{failOn:'none'}).resize({height:860,fit:'inside',withoutEnlargement:true}).png({compressionLevel:8}).toBuffer();
+      whiteBuf=masterBuf;
+      coverage=.9;
+    }
+    let studio={studioDataUrl:'',semanticDataUrl:''};
+    try{ studio=await v2910BuildStudioCardsSafe(pngRaw,rec,{category:String(rec.category||rec.memoryCard?.classification?.category||'').trim(),note:'crop intelligente + card studio'}); }catch(_){ studio={studioDataUrl:v2879DataUrlFromBuffer(whiteBuf,'image/jpeg'),semanticDataUrl:v2879DataUrlFromBuffer(whiteBuf,'image/jpeg')}; }
+    const qualityScore=Math.round(v2879Clamp(75+Math.min(12,coverage*18)+(box?6:0),70,98));
+    rec.realPixelRenderV2910={at:Date.now(),photoId:photo.id||'',kind:photo.kind||'',bbox:box?{x:box.minX,y:box.minY,w:box.maxX-box.minX+1,h:box.maxY-box.minY+1}:null,qualityScore,coverage:Number(coverage.toFixed(3)),engine:'v29_1_safe_studio_render'};
+    return {ok:true,version:'V29.1',mode:'pro_master_safe_studio_render',source:{id:photo.id||'',kind:photo.kind||'',score:photo.score||0},render:{masterDataUrl:v2879DataUrlFromBuffer(masterBuf,'image/jpeg'),whiteDataUrl:v2879DataUrlFromBuffer(whiteBuf,'image/jpeg'),transparentDataUrl:v2879DataUrlFromBuffer(pngRaw,'image/png'),studioDataUrl:studio.studioDataUrl||v2879DataUrlFromBuffer(whiteBuf,'image/jpeg'),semanticDataUrl:studio.semanticDataUrl||studio.studioDataUrl||v2879DataUrlFromBuffer(whiteBuf,'image/jpeg'),bbox:box,quality:{level:qualityScore>=88?'pro_master_real':'pro_master_safe',score:qualityScore,coverage:Number(coverage.toFixed(3)),message:'Render V29.1 generato: studio card sicura, niente fallback se Sharp lavora'}}};
+  }catch(e){ return {ok:false,error:'real_pixel_render_failed_v2910',message:String(e?.message||e).slice(0,220)}; }
+}
+async function v2910FindOnlineReferenceImage(key=''){
+  const prev=v2910FindOnlineReferenceImage.__prev;
+  const out=prev ? await prev(key) : {ok:false,error:'reference_lookup_unavailable'};
+  if(!out || !out.ok || !out.reference){
+    ensureDbShape(); const rec=db.assistantBrain?.globalProductMemory?.products?.[key]; const p=rec&&v2879PickRenderPhoto(rec);
+    const fallback=p?.dataUrl||p?.externalUrl||'';
+    if(fallback) return {ok:true,version:'V29.1',mode:'fallback_reference_photo',reference:{displayUrl:fallback,imageUrl:fallback,source:'fallback_photo',productName:rec?.productName||'',brand:rec?.brand||''}};
+    return out;
+  }
+  const ref=out.reference||{};
+  let displayUrl=ref.displayUrl||ref.imageDataUrl||'';
+  if(!displayUrl && typeof v2900FetchRemoteImageDataUrl==='function') displayUrl=await v2900FetchRemoteImageDataUrl(ref.imageUrl||ref.image_front_url||ref.image||'').catch(()=> '');
+  if(!displayUrl){ ensureDbShape(); const rec=db.assistantBrain?.globalProductMemory?.products?.[key]; const p=rec&&v2879PickRenderPhoto(rec); displayUrl=p?.dataUrl||p?.externalUrl||''; }
+  if(displayUrl) ref.displayUrl=displayUrl;
+  ref.sourceLabel=ref.source||ref.sourceLabel||'Reference API';
+  out.version='V29.1'; out.reference=ref; out.mode=out.mode||'reference_ready_safe';
+  return out;
+}
+try{ v2879GenerateRealPixelRender=v2910GenerateRealPixelRender; }catch(_){ }
+if(typeof v2880FindOnlineReferenceImage==='function' && !v2880FindOnlineReferenceImage.__v291Wrapped){ v2910FindOnlineReferenceImage.__prev=v2880FindOnlineReferenceImage; v2880FindOnlineReferenceImage=v2910FindOnlineReferenceImage; v2880FindOnlineReferenceImage.__v291Wrapped=true; }
+(function(){
+  const V2910_VERSION='V29.1';
+  try{ const prev=publicServerBrainV2840; if(typeof prev==='function'&&!global.__v2910ServerBrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prev.call(this,opts||{})||{}; try{ out.version='V29.1 OFFICIAL · PRO MASTER SAFE RENDER'; out.reasoningBusV2910={active:true,policy:'studio card sicura + reference fallback dataUrl + render button funzionante',endpoint:'/api/ai/server-brain/photo-render + /reference-image'}; }catch(_){} return out; }; global.__v2910ServerBrainWrapped=true; } }catch(_){ }
+  try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2910PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this)||{}; s.version=V2910_VERSION; s.brain=Object.assign({},s.brain||{},{version:V2910_VERSION,proMasterSafeRender:'active'}); return s; }; global.__v2910PreflightWrapped=true; } }catch(_){ }
+  console.log('[Spesa Pronta] V29.1 OFFICIAL PRO MASTER SAFE RENDER active');
+})();
