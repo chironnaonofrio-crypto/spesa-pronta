@@ -187,6 +187,10 @@
     .render80Data .kv{grid-template-columns:140px 1fr}
     @media(max-width:680px){.render80Actions{grid-template-columns:1fr}.render80Stage,.semanticPhotoTwin{min-height:220px}.render80Img,.semanticPhotoTwin img{max-width:100%;max-height:46vh}.render80Data .kv{grid-template-columns:1fr}.render80Card{border-radius:18px;padding:9px}.render80Info{font-size:.9rem}}
 
+
+    /* V29.3 emergency UI overrides */
+    .semanticOverlay{display:none!important}
+    .render80Info{background:linear-gradient(180deg,#eefbf4,#f7fbff)!important;border-color:#bfead2!important}
 </style>
 </head>
 <body>
@@ -198,7 +202,7 @@
           <h1>Cervello Server</h1>
           <p class="subtitle">Memoria prodotti · foto reali · valori titolare · ricerca precisa</p>
         </div>
-        <span class="build" id="buildBadge">V29.2</span>
+        <span class="build" id="buildBadge">V29.3</span>
       </div>
     </header>
 
@@ -391,9 +395,9 @@
     ];
     const evidence=pills(reason.identityEvidence||[],'Nessuna prova identità salvata');
     const synthNote=isDet?'flacone/pulizia':(isDark?'bottiglia + contenuto scuro':isWater?'acqua/bottiglia chiara':'prodotto da confermare');
-    return `<div class="section"><h3>🧊 Render AI · V29.2 PRO 360 INTELLIGENTE</h3>
+    return `<div class="section"><h3>🧊 Render AI · V29.3 PRO MASTER SAFE</h3>
       <div class="render80Actions"><button class="primary" id="btnRealPixelRender">Rigenera render PRO</button><button class="ghost" id="btnOnlineReference">Cerca reference online/API</button><button class="ghost" id="btnOpenRenderImage">Apri grande</button><button class="ghost" data-open-photos="1">Apri tab Foto</button></div>
-      <div class="render80Info">V29.2: il server pulisce il soggetto usando una sola componente principale, rileva la zona etichetta dai pixel, crea un render 360° stimato e cerca solo reference online reali. Se mancano foto lato/retro il 360 resta stimato e te lo segnala.</div>
+      <div class="render80Info">V29.3: render server sempre disponibile. Il server genera sempre una card studio, un crop etichetta OCR-ready e un 360 stimato anche quando lo scontorno non è perfetto. Se vuoi 360 reale, aggiungi foto lato/retro o usa reference online reali.</div>
       <div class="render80Stack">
         <div class="render80Card"><h4><span>Render studio da pixel</span><small id="realPixelRenderStatus">pronto</small></h4><div class="render80Stage"><img class="render80Img realPhotoImg" id="realPixelRenderImg" src="${esc(openSrc)}" data-fallback-src="${esc(fallback)}" alt="Render studio da pixel" loading="eager" decoding="async"><span class="render80Loading" id="realPixelRenderLoading" style="display:none">genero…</span></div><div class="render80Facts" id="realPixelRenderFacts"><span class="warn">foto reale pronta</span><span>${esc(real.kind)}</span></div></div>
         <div class="render80Card"><h4><span>Gemello semantico fotorealistico</span><small id="semanticTwinStatus">foto + ragionamento</small></h4><div class="semanticPhotoTwin"><img class="realPhotoImg" id="semanticTwinImg" src="${esc(openSrc)}" data-fallback-src="${esc(fallback)}" alt="Gemello semantico fotorealistico" loading="eager" decoding="async"><div class="semanticOverlay"></div></div><div class="render80Facts" id="semanticTwinFacts"><span>${esc(synthNote)}</span><span>texture reale</span><span>${esc(cat||'categoria')}</span></div><div class="semanticMini"><div class="semanticMiniTitle">Bozza semantica secondaria</div><div class="semanticMiniShape" style="--label:${label};--label2:${label2}">${esc(brand||'Marca')} · ${esc(name||'Prodotto')} · ${esc(fmt||'')}</div></div></div>
@@ -454,7 +458,7 @@
     }catch(e){ logErr('real-pixel-render-error',{error:e.message||String(e)}); }
     if(status) status.textContent='fallback foto';
     if(loading) loading.style.display='none';
-    if(facts) facts.innerHTML='<span class="warn">render server non disponibile: uso foto reale master</span>';
+    if(facts) facts.innerHTML='<span class="warn">render server non disponibile: apro fallback sicuro, ma V29.3 deve restituire sempre ok</span>'; if(status) status.textContent='fallback sicuro';
   }
 
   async function loadOnlineReference(force=false){
