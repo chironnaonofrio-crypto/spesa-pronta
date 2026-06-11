@@ -8082,3 +8082,59 @@ function v2871RenderBrainProduct(key='', opts={}){
   try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2871PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this)||{}; s.version='V28.71'; s.brain=Object.assign({},s.brain||{},{version:'V28.71',realPixelTwin:'active',renderUsesRealPhotos:'active',mobileSafeRender:'strong'}); return s; }; global.__v2871PreflightWrapped=true; } }catch(_){ }
   console.log('[Spesa Pronta] V28.71 PRO MASTER Real Pixel Twin active');
 })();
+
+
+// =============================================================
+// V28.72 PRO Real Photo Twin Mobile Fix
+// Obiettivo: il Cervello Server non deve mai mostrare un render bianco.
+// La UI usa prima la foto reale con <img>; il server espone alias V28.72
+// e segnala che il gemello reale è mobile-safe/direct-photo-first.
+// =============================================================
+(function(){
+  const V2872_VERSION='V28.72';
+  try{
+    const prev=v2867RenderBrainProduct;
+    if(typeof prev==='function' && !global.__v2872RenderWrapped){
+      v2867RenderBrainProduct=function(key='', opts={}){
+        const out=prev.call(this,key,opts)||{};
+        try{
+          if(out.ok){
+            out.version=V2872_VERSION;
+            if(out.render){
+              out.render.version=V2872_VERSION;
+              out.render.mobileFix='real-photo-direct-first: browser <img> fallback, no blank SVG pattern';
+              out.render.spec=Object.assign({},out.render.spec||{},{version:V2872_VERSION,renderMode:(out.render.spec?.renderMode||'')+' + direct_photo_viewer'});
+            }
+            if(out.reasoning){
+              out.reasoning.version=V2872_VERSION;
+              out.reasoning.engines=Object.assign({},out.reasoning.engines||{},{render:'V28.72 direct real photo first + semantic SVG fallback'});
+            }
+            if(out.fields){
+              out.fields.virtualRenderV2872=out.render;
+              out.fields.humanReasoningV2872=out.reasoning;
+            }
+          }
+        }catch(_){ }
+        return out;
+      };
+      global.__v2872RenderWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    const prev=publicServerBrainV2840;
+    if(typeof prev==='function' && !global.__v2872ServerBrainWrapped){
+      publicServerBrainV2840=function(opts={}){
+        const out=prev.call(this,opts||{})||{};
+        try{
+          out.version='V28.72 PRO Real Photo Twin Mobile Fix';
+          out.reasoningBusV2872={active:true,policy:'foto reale diretta prima del render SVG; niente pannelli bianchi su mobile',renderEngine:'V28.72 direct-photo-first + semantic fallback',mobileSafe:true};
+          (out.products||[]).forEach(p=>{ const f=p.fields||{}; if(f.virtualRenderV2871 && !f.virtualRenderV2872) f.virtualRenderV2872=f.virtualRenderV2871; if(f.humanReasoningV2871 && !f.humanReasoningV2872) f.humanReasoningV2872=f.humanReasoningV2871; });
+        }catch(_){ }
+        return out;
+      };
+      global.__v2872ServerBrainWrapped=true;
+    }
+  }catch(_){ }
+  try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2872PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this)||{}; s.version=V2872_VERSION; s.brain=Object.assign({},s.brain||{},{version:V2872_VERSION,realPhotoTwinMobileFix:'active',renderBlankGuard:'active'}); return s; }; global.__v2872PreflightWrapped=true; } }catch(_){ }
+  console.log('[Spesa Pronta] V28.72 PRO Real Photo Twin Mobile Fix active');
+})();
