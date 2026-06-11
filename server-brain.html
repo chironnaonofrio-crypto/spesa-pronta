@@ -192,13 +192,8 @@
     .semanticOverlay{display:none!important}
     .render80Info{background:linear-gradient(180deg,#eefbf4,#f7fbff)!important;border-color:#bfead2!important}
 
-    /* V29.4 PRO HUMAN RENDER UI overrides */
-    .semanticOverlay{display:none!important}
-    .semanticMini{display:none!important}
-    .render80Info{background:linear-gradient(180deg,#eefbf4,#f6fbff)!important;border-color:#b9e6d0!important}
-    .render80Card h4 small{font-size:.8rem}
-    .render80Stage{background:linear-gradient(180deg,#ffffff,#f4f9ff)!important}
-    .render80Facts span{max-width:100%;word-break:break-word}
+    /* V30 Reference Render Engine */
+    .v30Actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px}.v30Import{display:grid;grid-template-columns:1fr auto;gap:8px;margin:8px 0 12px}.v30Import input{border:1px solid var(--line);border-radius:16px;padding:12px;font:inherit;font-weight:850;min-width:0;background:#fbfdff}.v30Info{border:1px solid #cfe5ff;background:linear-gradient(180deg,#f7fbff,#edf6ff);border-radius:18px;padding:12px;color:#31506f;font-weight:900;line-height:1.38;margin-bottom:12px}.v30Grid{display:grid;grid-template-columns:1.1fr .9fr;gap:12px}.v30Card{background:linear-gradient(180deg,#fff,#f3f9ff);border:1px solid #d9e8fb;border-radius:22px;padding:10px;box-shadow:0 12px 26px rgba(10,43,86,.06);min-width:0}.v30Card h4{margin:0 0 9px;font-size:1rem;color:#10233f;display:flex;align-items:center;justify-content:space-between;gap:8px}.v30Card small{color:#60748e;font-weight:1000}.v30Stage{display:grid;place-items:center;min-height:260px;border-radius:18px;background:#fff;border:1px solid #dce9f7;overflow:hidden;padding:8px}.v30Img{display:block;width:100%;max-width:460px;max-height:58vh;object-fit:contain;border-radius:16px;background:#fff;box-shadow:0 14px 34px rgba(7,27,50,.10)}.v30Facts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.v30Facts span{border:1px solid #d9e8fb;background:#f6fbff;border-radius:999px;padding:6px 9px;font-size:.74rem;font-weight:1000;color:#16427d}.v30Facts .ok{background:#edfff6;border-color:#baf2d5;color:#0b7e48}.v30Facts .warn{background:#fff8e7;border-color:#f3d89c;color:#7b5500}.v30RefGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px}.v30RefCard{border:1px solid #d9e8fb;background:#fbfdff;border-radius:18px;padding:8px;display:grid;gap:6px}.v30RefCard img{width:100%;aspect-ratio:1/1;border-radius:14px;object-fit:contain;background:#fff}.v30RefCard b{font-size:.78rem;line-height:1.1}.v30RefCard small{font-size:.7rem;color:#60748e}.v30Twin{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.v30Slot{border:1px solid #d9e8fb;border-radius:18px;background:#fbfdff;min-height:210px;display:grid;place-items:center;text-align:center;padding:8px}.v30Slot img{width:100%;max-height:220px;object-fit:contain}.v30Slot b{display:block;font-size:.8rem;margin-bottom:6px}.v30Slot span{font-weight:1000;color:#8a6400}@media(max-width:680px){.v30Actions,.v30Import,.v30Grid{grid-template-columns:1fr}.v30Twin{grid-template-columns:1fr}.v30Stage{min-height:220px}.v30Img{max-height:48vh}.v30Card{border-radius:18px;padding:9px}}
 
 </style>
 </head>
@@ -211,7 +206,7 @@
           <h1>Cervello Server</h1>
           <p class="subtitle">Memoria prodotti · foto reali · valori titolare · ricerca precisa</p>
         </div>
-        <span class="build" id="buildBadge">V29.4</span>
+        <span class="build" id="buildBadge">V30.0</span>
       </div>
     </header>
 
@@ -366,138 +361,78 @@
   function renderVirtual(f){
     const product=currentProduct()||{};
     const folder=f.objectFolder||{};
-    const vr=f.virtualRenderV2872||f.virtualRenderV2871||f.virtualRenderV2870||f.virtualRenderV2868||f.virtualRenderV2867||{};
-    const spec=vr.spec||{};
-    const reason=f.humanReasoningV2872||f.humanReasoningV2871||f.humanReasoningV2870||f.humanReasoningV2868||f.humanReasoningV2867||{};
-    const photos=arr(folder.photos,80);
-    function pickSrc(obj){ if(!obj) return ''; if(typeof obj==='string') return obj; return obj.dataUrl||obj.thumbDataUrl||obj.externalUrl||obj.imageUrl||obj.url||obj.src||''; }
-    function validSrc(src){src=String(src||'').trim(); return src && (/^data:image\//i.test(src)||/^https?:\/\//i.test(src));}
-    const candidates=[];
-    function add(obj,kind,score){const src=pickSrc(obj); if(validSrc(src)) candidates.push({src,kind:kind||obj?.kind||'foto',score:Number(score||obj?.score||0)});}
-    add(folder.representativePhoto,'foto profilo scelta',100);
-    add(product.profilePhoto,'foto scheda prodotto',96);
-    add(f.profilePhoto,'foto memoria prodotto',94);
-    photos.filter(p=>/front|product|profilo|representative/i.test(String(p.kind||p.type||''))).forEach((p,i)=>add(p,p.kind||'foto frontale',88-i));
-    photos.forEach((p,i)=>add(p,p.kind||'foto cartella',62-i));
-    arr(f.externalReferenceImages,30).concat(arr(f.externalReferences,30),arr(f.externalLearning?.referenceImages,30),arr(f.externalLearning?.references,30)).forEach((r,i)=>add({imageUrl:r.imageUrl||r.externalUrl||r.url},r.sourceLabel||r.source||'reference API',50-i));
-    const real=(candidates.sort((a,b)=>b.score-a.score)[0])||{src:profileSrc(product.profilePhoto||f.profilePhoto),kind:'fallback scheda prodotto'};
-    const fallback=profileSrc(product.profilePhoto||f.profilePhoto);
-    const name=String(f.identity?.productName||product.title||'Prodotto').trim();
-    const brand=String(f.identity?.brand||product.brand||'').trim();
-    const fmt=String(f.identity?.format||product.format||spec.format||'').trim();
-    const cat=String(f.classification?.category||product.category||spec.category||'').trim();
-    const text=(name+' '+brand+' '+cat+' '+String(spec.shape||spec.family||'')+' '+String(spec.content||'')).toLowerCase();
-    const isDark=/cola|soft|dark|scur/.test(text);
-    const isDet=/dexal|candegg|clean|laundry|deters/.test(text);
-    const isWater=/acqua|water|sant/.test(text);
-    const label=isDet?'#f4a7ad':(/cola|lemon|soft/.test(text)?'#123a86':'#1d8ce3');
-    const label2=isDet?'#fff':(/cola|lemon/.test(text)?'#f7c71e':'#fff');
-    const openSrc=real.src||fallback;
-    const boxes=[
-      ['Foto usata',real.kind],
-      ['Nome',name],
-      ['Marca',brand],
-      ['Formato',fmt],
-      ['Categoria',cat],
-      ['Foto in cartella',folder.photoCount??photos.length??0],
-      ['Render server',vr.version||'—']
-    ];
-    const evidence=pills(reason.identityEvidence||[],'Nessuna prova identità salvata');
-    const synthNote=isDet?'flacone/pulizia':(isDark?'bottiglia + contenuto scuro':isWater?'acqua/bottiglia chiara':'prodotto da confermare');
-    return `<div class="section"><h3>🧊 Render AI · V29.4 PRO HUMAN RENDER</h3>
-      <div class="render80Actions"><button class="primary" id="btnRealPixelRender">Rigenera render umano</button><button class="ghost" id="btnOnlineReference">Cerca reference online/API</button><button class="ghost" id="btnOpenRenderImage">Apri grande</button><button class="ghost" data-open-photos="1">Apri tab Foto</button></div>
-      <div class="render80Info">V29.4: render umano con foto reale + reference online reale + crop etichetta. Il 360 non viene più finto: mostra fronte/reference e segnala chiaramente lato/retro mancanti. Per un 360 vero servono foto lato, retro e alto nella cartella oggetto.</div>
-      <div class="render80Stack">
-        <div class="render80Card"><h4><span>Render studio da pixel</span><small id="realPixelRenderStatus">pronto</small></h4><div class="render80Stage"><img class="render80Img realPhotoImg" id="realPixelRenderImg" src="${esc(openSrc)}" data-fallback-src="${esc(fallback)}" alt="Render studio da pixel" loading="eager" decoding="async"><span class="render80Loading" id="realPixelRenderLoading" style="display:none">genero…</span></div><div class="render80Facts" id="realPixelRenderFacts"><span class="warn">foto reale pronta</span><span>${esc(real.kind)}</span></div></div>
-        <div class="render80Card"><h4><span>Gemello semantico fotorealistico</span><small id="semanticTwinStatus">foto + ragionamento</small></h4><div class="semanticPhotoTwin"><img class="realPhotoImg" id="semanticTwinImg" src="${esc(openSrc)}" data-fallback-src="${esc(fallback)}" alt="Gemello semantico fotorealistico" loading="eager" decoding="async"><div class="semanticOverlay"></div></div><div class="render80Facts" id="semanticTwinFacts"><span>${esc(synthNote)}</span><span>texture reale</span><span>${esc(cat||'categoria')}</span></div><div class="semanticMini"><div class="semanticMiniTitle">Bozza semantica secondaria</div><div class="semanticMiniShape" style="--label:${label};--label2:${label2}">${esc(brand||'Marca')} · ${esc(name||'Prodotto')} · ${esc(fmt||'')}</div></div></div>
-        <div class="render80Card"><h4><span>Etichetta rilevata dai pixel</span><small id="labelCropStatus">in attesa</small></h4><div class="render80Stage"><img class="render80Img" id="labelCropImg" src="${esc(openSrc)}" data-fallback-src="${esc(fallback)}" alt="Etichetta rilevata" loading="lazy" decoding="async"></div><div class="render80Facts" id="labelCropFacts"><span>label box umano</span><span>OCR-ready</span></div></div>
-        <div class="render80Card"><h4><span>Render 360° PRO</span><small id="render360Status">stimato</small></h4><div class="render80Stage"><img class="render80Img" id="render360Img" src="${esc(openSrc)}" data-fallback-src="${esc(fallback)}" alt="Render 360 PRO" loading="lazy" decoding="async"></div><div class="render80Facts" id="render360Facts"><span>frontale reale</span><span>lato/retro stimati</span><span>aggiungi foto lato/retro per 360 reale</span></div></div>
-        <div class="render80Card reference80"><h4><span>Reference online/API</span><small id="onlineReferenceStatus">non cercata</small></h4><div class="render80Stage"><img class="render80Img" id="onlineReferenceImg" src="${esc(openSrc)}" data-fallback-src="${esc(fallback)}" alt="Reference online/API" loading="lazy" decoding="async"></div><div class="render80Facts" id="onlineReferenceFacts"><span>usa Open Facts/API quando disponibili</span><span>zero token OpenAI</span></div></div>
+    const official=folder.officialRenderV3000||f.officialRenderV3000||{};
+    const refs=arr(folder.referenceCandidatesV3000||folder.referenceImagesV3000||[],20);
+    const r360=folder.render360V3000||f.render360V3000||{};
+    const fallback=profileSrc(product.profilePhoto||f.profilePhoto||folder.representativePhoto);
+    function srcOf(o){ if(!o) return ''; if(typeof o==='string') return o; return o.transparentDataUrl||o.officialDataUrl||o.officialRenderDataUrl||o.whiteDataUrl||o.studioDataUrl||o.displayUrl||o.imageDataUrl||o.dataUrl||o.imageUrl||o.externalUrl||o.url||''; }
+    const officialSrc=srcOf(official)||fallback;
+    const ref0=refs[0]||official.reference||{};
+    const front=r360.front||officialSrc, side=r360.side||'', back=r360.back||'';
+    const id=f.identity||{};
+    const q=official.quality||{};
+    const candidatesHtml=refs.length?`<div class="v30RefGrid">${refs.slice(0,8).map(r=>`<div class="v30RefCard"><img src="${esc(srcOf(r)||fallback)}" data-fallback-src="${esc(fallback)}" alt="reference"><b>${esc(r.productName||r.title||'Reference')}</b><small>${esc(r.brand||'')} ${r.source?'· '+esc(r.source):''}</small><small>score ${esc(r.score||'—')}</small><button class="ghost mini" data-v30-use-ref="${esc(r.imageUrl||'')}">Usa come render</button></div>`).join('')}</div>`:'<div class="empty">Nessuna reference salvata. Premi “Cerca render online” o incolla l’URL immagine trovata su Google Immagini.</div>';
+    const slot=(title,src,miss)=>`<div class="v30Slot"><div><b>${esc(title)}</b>${src?`<img src="${esc(src)}" alt="${esc(title)}">`:`<span>${esc(miss)}</span>`}</div></div>`;
+    return `<div class="section"><h3>🧊 Render AI · V30 Reference Render Engine</h3>
+      <div class="v30Actions"><button class="primary" id="btnV30SearchRender">Cerca render online</button><button class="ghost" id="btnV30OpenOfficial">Apri render grande</button><button class="ghost" data-open-photos="1">Apri tab Foto</button><button class="ghost" id="btnV30CopySources">Copia fonti render</button></div>
+      <div class="v30Import"><input id="v30ImportUrl" placeholder="Incolla URL immagine prodotto da Google/sito"><button class="primary" id="btnV30ImportUrl">Importa URL</button></div>
+      <div class="v30Info">V30: il server non genera più disegnini. Cerca reference reali gratuite/API/manuali, sceglie quella coerente, pulisce lo sfondo con Sharp e salva un render ufficiale nella cartella oggetto. OpenAI non viene usato.</div>
+      <div class="v30Grid">
+        <div class="v30Card"><h4><span>Render ufficiale prodotto</span><small id="v30OfficialStatus">${esc(q.level||'da generare')}</small></h4><div class="v30Stage"><img class="v30Img" id="v30OfficialRenderImg" src="${esc(officialSrc)}" data-fallback-src="${esc(fallback)}" alt="Render ufficiale"></div><div class="v30Facts" id="v30OfficialFacts"><span class="${officialSrc!==fallback?'ok':'warn'}">${esc(q.message||'premi Cerca render online o Importa URL')}</span>${q.score?`<span>score ${esc(q.score)}</span>`:''}<span>${esc(official.mode||official.renderMode||'reference_cleaned')}</span></div></div>
+        <div class="v30Card"><h4><span>Reference reali trovate</span><small id="v30ReferenceStatus">${refs.length?refs.length+' fonti':'da cercare'}</small></h4><div id="v30ReferenceList">${candidatesHtml}</div><div class="v30Facts"><span>Open Facts automatico</span><span>URL Google manuale</span><span>zero token OpenAI</span></div></div>
       </div>
-      <div class="render80Data section"><h3>📌 Dati rapidi render</h3><div class="kv">${boxes.map(x=>row(x[0],x[1])).join('')}</div><div class="renderActions"><button class="ghost" id="btnRenderTransparent">Sfondo trasparente</button><button class="ghost" id="btnRenderWhite">Sfondo bianco</button><button class="ghost" id="btnCopyRenderSvg">Copia SVG</button></div></div>
-      <div class="section"><h3>🧠 Prove identità</h3>${evidence}</div>
+      <div class="v30Card" style="margin-top:12px"><h4><span>360 reale / incompleto</span><small>${esc(r360.mode||'frontale')}</small></h4><div class="v30Twin">${slot('Fronte ufficiale',front,'manca fronte')}${slot('Lato',side,'serve lato')}${slot('Retro',back,'serve retro')}</div><div class="v30Facts"><span class="${side&&back?'ok':'warn'}">${side&&back?'360 reale':'360 incompleto'}</span><span>niente 3D finto</span></div></div>
+      <div class="v30Card" style="margin-top:12px"><h4><span>Dati render</span><small>memoria server</small></h4><div class="kv">${row('Nome',id.productName||product.title)}${row('Marca',id.brand||product.brand)}${row('Formato',id.format||product.format)}${row('Categoria',f.classification?.category||product.category)}${row('Fonte render',official.source||official.reference?.source||ref0.source||'—')}${row('Qualità',q.level||'—')}${row('Score',q.score||official.qualityScore||'—')}</div><div class="renderActions"><button class="ghost" id="btnRenderTransparent">Apri PNG pulito</button><button class="ghost" id="btnRenderWhite">Render legacy bianco</button><button class="ghost" id="btnCopyRenderSvg">Copia JSON render</button></div></div>
     </div>`;
   }
 
-
-
-  async function loadRealPixelRender(force=false){
-    const p=currentProduct(); const s=getSettings();
-    const img=$('realPixelRenderImg'), status=$('realPixelRenderStatus'), loading=$('realPixelRenderLoading'), facts=$('realPixelRenderFacts');
+  async function loadV30ReferenceRender(force=false, sourceUrl=''){
+    const p=currentProduct(); const s=getSettings(); const img=$('v30OfficialRenderImg'), status=$('v30OfficialStatus'), facts=$('v30OfficialFacts'), refBox=$('v30ReferenceList'), refStatus=$('v30ReferenceStatus');
     if(!p||!img) return;
-    if(img.dataset.loaded==='1' && !force) return;
-    img.dataset.loaded='1';
-    if(force){ img.dataset.loaded='1'; }
-    if(status) status.textContent=force?'rigenero':'caricamento';
-    if(loading) loading.style.display='inline-flex';
-    if(facts) facts.innerHTML='<span class="warn">richiesta render in corso</span>';
+    if(status) status.textContent=force?'cerco…':'controllo…';
+    if(facts) facts.innerHTML='<span class="warn">cerco reference reali e creo render ufficiale</span>';
     try{
-      const ownerToken=getOwnerToken();
-      const nonce=Date.now();
-      const endpoints=[`${apiBase()}/ai/server-brain/photo-render?householdId=${encodeURIComponent(s.householdId)}&key=${encodeURIComponent(p.key)}&mode=white&force=${force?'1':'0'}&ts=${nonce}`, `/api/ai/server-brain/photo-render?householdId=${encodeURIComponent(s.householdId)}&key=${encodeURIComponent(p.key)}&mode=white&force=${force?'1':'0'}&ts=${nonce}`];
+      const ownerToken=getOwnerToken(); const payload={householdId:s.householdId,key:p.key,sourceUrl};
+      const endpoints=[`${apiBase()}/ai/server-brain/reference-render/search`,`/api/ai/server-brain/reference-render/search`];
       for(const url of endpoints){
-        const headers={Authorization:'Bearer '+s.token}; if(ownerToken) headers['X-Owner-Token']=ownerToken;
-        const r=await fetchJson(url,{headers,cache:'no-store'});
-        if(r.ok && r.data?.ok){
-          const rr=r.data.render||{}; const src=rr.whiteDataUrl||rr.transparentDataUrl||rr.studioDataUrl||rr.masterDataUrl||rr.masterUrl||'';
-          if(src) img.src=src;
-          const semantic=$('semanticTwinImg'), semStatus=$('semanticTwinStatus'), semFacts=$('semanticTwinFacts');
-          const labelImg=$('labelCropImg'), labelStatus=$('labelCropStatus'), labelFacts=$('labelCropFacts');
-          const view360=$('render360Img'), view360Status=$('render360Status'), view360Facts=$('render360Facts');
-          const semSrc=rr.semanticDataUrl||rr.studioDataUrl||rr.whiteDataUrl||rr.transparentDataUrl||src;
-          if(semantic && semSrc) semantic.src=semSrc;
-          if(labelImg && rr.labelCropDataUrl) labelImg.src=rr.labelCropDataUrl;
-          if(view360 && rr.render360DataUrl) view360.src=rr.render360DataUrl;
-          if(semStatus) semStatus.textContent='analisi + 360';
-          if(semFacts) semFacts.innerHTML=`<span>${esc(rr.quality?.level||'gemello pronto')}</span><span>pixel reali</span><span>label box</span>`;
-          if(labelStatus) labelStatus.textContent=rr.labelBox?.confidence?('conf. '+rr.labelBox.confidence+'%'):'label';
-          if(labelFacts) labelFacts.innerHTML=`<span>etichetta rilevata</span><span>conf. ${esc(rr.labelBox?.confidence||rr.quality?.labelConfidence||'—')}</span><span>crop OCR-ready</span>`;
-          if(view360Status) view360Status.textContent=rr.render360DataUrl?'360 stimato':'foto';
-          if(view360Facts) view360Facts.innerHTML=`<span>frontale reale</span><span>lato/retro stimati</span><span>${rr.render360DataUrl?'board creato':'manca board'}</span>`;
-          if(status) status.textContent=rr.quality?.level||r.data.mode||'ok';
-          if(loading) loading.style.display='none';
-          if(facts) facts.innerHTML=`<span class="ok">${esc(rr.quality?.message||'render reale generato')}</span><span>score ${esc(rr.quality?.score||'—')}</span><span>${esc(r.data.mode||'real_pixel')}</span>`;
-          p.fields.realPixelRenderV2920=r.data;
-          p.fields.realPixelRenderV2900=r.data;
-          p.fields.realPixelRenderV2880=r.data;
+        const headers={'Content-Type':'application/json',Authorization:'Bearer '+s.token}; if(ownerToken) headers['X-Owner-Token']=ownerToken;
+        const r=await fetchJson(url,{method:'POST',headers,body:JSON.stringify(payload),cache:'no-store'});
+        if(r.ok&&r.data?.ok){
+          const o=r.data.officialRender||r.data.render||{}; const src=o.transparentDataUrl||o.officialDataUrl||o.officialRenderDataUrl||o.whiteDataUrl||o.studioDataUrl||''; if(src) img.src=src;
+          if(status) status.textContent=o.quality?.level||o.mode||'ok';
+          if(facts) facts.innerHTML=`<span class="ok">${esc(o.quality?.message||'render ufficiale salvato')}</span><span>score ${esc(o.quality?.score||o.qualityScore||'—')}</span><span>${esc(o.source||o.reference?.source||'reference')}</span>`;
+          const refs=arr(r.data.references||r.data.candidates,12); if(refStatus) refStatus.textContent=refs.length?refs.length+' fonti':'fonti salvate';
+          if(refBox&&refs.length){ refBox.innerHTML=`<div class="v30RefGrid">${refs.slice(0,8).map(ref=>`<div class="v30RefCard"><img src="${esc(ref.displayUrl||ref.imageDataUrl||ref.imageUrl||'')}" alt="reference"><b>${esc(ref.productName||ref.title||'Reference')}</b><small>${esc(ref.brand||'')} ${ref.source?'· '+esc(ref.source):''}</small><small>score ${esc(ref.score||'—')}</small><button class="ghost mini" data-v30-use-ref="${esc(ref.imageUrl||'')}">Usa come render</button></div>`).join('')}</div>`; v30BindReferenceButtons(); }
+          p.fields.objectFolder=p.fields.objectFolder||{}; p.fields.objectFolder.officialRenderV3000=o; p.fields.objectFolder.referenceImagesV3000=refs; p.fields.objectFolder.referenceCandidatesV3000=refs;
+          $('notice').className='notice ok'; $('notice').innerHTML='<span>🧊</span><div><b>Render ufficiale V30 creato.</b><span> Salvato nel cervello server senza OpenAI.</span></div>';
           return;
         }
-        logErr('real-pixel-render-failed',{url,status:r.status,body:r.data});
+        logErr('v30-generate-official-failed',{url,status:r.status,body:r.data});
       }
-    }catch(e){ logErr('real-pixel-render-error',{error:e.message||String(e)}); }
-    if(status) status.textContent='fallback foto';
-    if(loading) loading.style.display='none';
-    if(facts) facts.innerHTML='<span class="warn">render server non disponibile: fallback V29.4, controlla log Render</span>'; if(status) status.textContent='fallback sicuro';
+    }catch(e){ logErr('v30-generate-official-error',{error:e.message||String(e)}); }
+    if(status) status.textContent='non riuscito'; if(facts) facts.innerHTML='<span class="warn">non trovato: incolla un URL immagine prodotto</span>';
+  }
+  async function loadRealPixelRender(force=false){ return loadV30ReferenceRender(force); }
+  function v30BindReferenceButtons(){ document.querySelectorAll('[data-v30-use-ref]').forEach(btn=>btn.onclick=()=>importV30ReferenceUrl(btn.getAttribute('data-v30-use-ref')||'')); }
+  async function importV30ReferenceUrl(urlArg=''){
+    const p=currentProduct(); const s=getSettings(); if(!p) return;
+    const url=String(urlArg||$('v30ImportUrl')?.value||prompt('Incolla URL immagine prodotto da Google / sito / supermercato','')||'').trim(); if(!url) return;
+    const img=$('v30OfficialRenderImg'), status=$('v30OfficialStatus'), facts=$('v30OfficialFacts'); if(status) status.textContent='importo URL'; if(facts) facts.innerHTML='<span class="warn">scarico immagine e pulisco render</span>';
+    try{
+      const ownerToken=getOwnerToken(); const payload={householdId:s.householdId,key:p.key,imageUrl:url,generate:true}; const endpoints=[`${apiBase()}/ai/server-brain/reference-render/import`,`/api/ai/server-brain/reference-render/import`];
+      for(const ep of endpoints){ const headers={'Content-Type':'application/json',Authorization:'Bearer '+s.token}; if(ownerToken) headers['X-Owner-Token']=ownerToken; const r=await fetchJson(ep,{method:'POST',headers,body:JSON.stringify(payload),cache:'no-store'}); if(r.ok&&r.data?.ok){ const o=r.data.officialRender||r.data.generated?.officialRender||r.data.render||{}; const src=o.transparentDataUrl||o.officialDataUrl||o.whiteDataUrl||r.data.reference?.displayUrl||''; if(img&&src) img.src=src; if(status) status.textContent=o.quality?.level||'importato'; if(facts) facts.innerHTML=`<span class="ok">URL importato come render ufficiale</span><span>${esc(r.data.reference?.source||'URL titolare')}</span>`; p.fields.objectFolder=p.fields.objectFolder||{}; p.fields.objectFolder.officialRenderV3000=o; p.fields.objectFolder.referenceCandidatesV3000=arr(r.data.candidates||r.data.references,12); p.fields.objectFolder.referenceImagesV3000=p.fields.objectFolder.referenceCandidatesV3000; return; } logErr('v30-import-url-failed',{url:ep,status:r.status,body:r.data}); }
+    }catch(e){ logErr('v30-import-url-error',{error:e.message||String(e)}); }
+    alert('Import URL non riuscito. Prova un URL immagine diretto .jpg/.png/.webp');
   }
 
   async function loadOnlineReference(force=false){
-    const p=currentProduct(); const s=getSettings();
-    const img=$('onlineReferenceImg'), status=$('onlineReferenceStatus'), facts=$('onlineReferenceFacts');
-    if(!p||!img) return;
-    if(img.dataset.loaded==='1' && !force) return;
-    img.dataset.loaded='1';
+    const p=currentProduct(); const s=getSettings(); const box=$('v30ReferenceList'), status=$('v30ReferenceStatus'); if(!p||!box) return;
     if(status) status.textContent='cerco…';
-    if(facts) facts.innerHTML='<span class="warn">cerco reference Open Facts/API</span>';
     try{
-      const ownerToken=getOwnerToken(); const nonce=Date.now();
-      const endpoints=[`${apiBase()}/ai/server-brain/reference-image?householdId=${encodeURIComponent(s.householdId)}&key=${encodeURIComponent(p.key)}&ts=${nonce}`, `/api/ai/server-brain/reference-image?householdId=${encodeURIComponent(s.householdId)}&key=${encodeURIComponent(p.key)}&ts=${nonce}`];
-      for(const url of endpoints){
-        const headers={Authorization:'Bearer '+s.token}; if(ownerToken) headers['X-Owner-Token']=ownerToken;
-        const r=await fetchJson(url,{headers,cache:'no-store'});
-        if(r.ok && r.data?.ok){
-          const ref=r.data.reference||{}; const src=ref.displayUrl||ref.imageDataUrl||ref.imageUrl||ref.image_front_url||ref.image||'';
-          if(src) img.src=src;
-          if(status) status.textContent=ref.source||'trovata';
-          if(facts) facts.innerHTML=`<span class="ok">${esc(ref.productName||ref.product_name||'reference trovata')}</span><span>${esc(ref.brand||ref.brands||'')}</span><span>${esc(ref.source||'Open Facts')}</span>`;
-          p.fields.onlineReferenceV2900=r.data;
-          p.fields.onlineReferenceV2880=r.data;
-          return;
-        }
-        logErr('online-reference-failed',{url,status:r.status,body:r.data});
-      }
-    }catch(e){ logErr('online-reference-error',{error:e.message||String(e)}); }
-    if(status) status.textContent='non trovata';
-    if(facts) facts.innerHTML='<span class="warn">nessuna reference online utile trovata</span>';
+      const ownerToken=getOwnerToken(); const endpoints=[`${apiBase()}/ai/server-brain/reference-render/search?householdId=${encodeURIComponent(s.householdId)}&key=${encodeURIComponent(p.key)}&force=1&ts=${Date.now()}`,`/api/ai/server-brain/reference-render/search?householdId=${encodeURIComponent(s.householdId)}&key=${encodeURIComponent(p.key)}&force=1&ts=${Date.now()}`];
+      for(const url of endpoints){ const headers={Authorization:'Bearer '+s.token}; if(ownerToken) headers['X-Owner-Token']=ownerToken; const r=await fetchJson(url,{headers,cache:'no-store'}); if(r.ok&&r.data?.ok){ const refs=arr(r.data.references||r.data.candidates,12); if(status) status.textContent=refs.length?refs.length+' fonti':'non trovate'; box.innerHTML=refs.length?`<div class="v30RefGrid">${refs.slice(0,8).map(ref=>`<div class="v30RefCard"><img src="${esc(ref.displayUrl||ref.imageDataUrl||ref.imageUrl||'')}" alt="reference"><b>${esc(ref.productName||ref.title||'Reference')}</b><small>${esc(ref.brand||'')} ${ref.source?'· '+esc(ref.source):''}</small><small>score ${esc(ref.score||'—')}</small><button class="ghost mini" data-v30-use-ref="${esc(ref.imageUrl||'')}">Usa come render</button></div>`).join('')}</div>`:'<div class="empty">Nessuna reference trovata. Incolla URL immagine da Google/sito.</div>'; v30BindReferenceButtons(); p.fields.objectFolder=p.fields.objectFolder||{}; p.fields.objectFolder.referenceImagesV3000=refs; p.fields.objectFolder.referenceCandidatesV3000=refs; return; } }
+    }catch(e){ logErr('v30-reference-search-error',{error:e.message||String(e)}); }
+    if(status) status.textContent='errore';
   }
 
 
@@ -522,13 +457,15 @@
     d.querySelector('#btnCopyProductJson')?.addEventListener('click',()=>copyText(JSON.stringify(f,null,2),'JSON articolo copiato ✅'));
     d.querySelector('#btnDeleteBrainProduct')?.addEventListener('click',deleteBrainProduct);
     d.querySelector('#btnRegenerateRender')?.addEventListener('click',()=>refreshVirtualRender('transparent',{retry:true}));
-    d.querySelector('#btnRealPixelRender')?.addEventListener('click',()=>loadRealPixelRender(true));
-    d.querySelector('#btnOnlineReference')?.addEventListener('click',()=>loadOnlineReference(true));
-    if(state.tab==='render'){ setTimeout(()=>loadRealPixelRender(false),90); setTimeout(()=>loadOnlineReference(false),160); }
+    d.querySelector('#btnV30SearchRender')?.addEventListener('click',()=>loadV30ReferenceRender(true));
+    d.querySelector('#btnV30ImportUrl')?.addEventListener('click',()=>importV30ReferenceUrl());
+    d.querySelector('#btnV30OpenOfficial')?.addEventListener('click',()=>{const src=(d.querySelector('#v30OfficialRenderImg')?.src)||(currentProduct()?.fields?.objectFolder?.officialRenderV3000?.officialDataUrl)||(currentProduct()?.fields?.objectFolder?.officialRenderV3000?.studioDataUrl)||'';const w=window.open('about:blank','_blank');if(w){w.document.write('<title>Render ufficiale V30</title><body style="margin:0;background:#f4f8ff;display:grid;place-items:center;min-height:100vh"><img style="max-width:96vw;max-height:96vh;object-fit:contain;border-radius:22px" src="'+String(src).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"></body>');}});
+    d.querySelector('#btnV30CopySources')?.addEventListener('click',()=>copyText(JSON.stringify(currentProduct()?.fields?.objectFolder?.referenceImagesV3000||currentProduct()?.fields?.objectFolder?.referenceCandidatesV3000||[],null,2),'Fonti render copiate ✅'));
+    if(state.tab==='render'){ v30BindReferenceButtons(); }
     d.querySelector('#btnRenderTransparent')?.addEventListener('click',()=>refreshVirtualRender('transparent'));
     d.querySelector('#btnRenderWhite')?.addEventListener('click',()=>refreshVirtualRender('white'));
-    d.querySelector('#btnOpenRenderImage')?.addEventListener('click',()=>{const r=f.virtualRenderV2872||f.virtualRenderV2871||f.virtualRenderV2870||f.virtualRenderV2868||f.virtualRenderV2867||{}; const img=d.querySelector('#realPixelRenderImg')||d.querySelector('#render360Img')||d.querySelector('#semanticTwinImg')||d.querySelector('.realPhotoImg'); const src=(img&&img.src)||(p.fields.realPixelRenderV2920?.render?.render360DataUrl)||(p.fields.realPixelRenderV2920?.render?.studioDataUrl)||(p.fields.realPixelRenderV2900?.render?.studioDataUrl)||(p.fields.realPixelRenderV2900?.render?.whiteDataUrl)||r.svgDataUri||''; const w=window.open('about:blank','_blank'); if(w){w.document.write('<title>Render AI</title><body style="margin:0;background:#f4f8ff;display:grid;place-items:center;min-height:100vh"><img style="max-width:96vw;max-height:96vh;object-fit:contain;border-radius:22px" src="'+String(src).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"></body>');} });
-    d.querySelector('#btnCopyRenderSvg')?.addEventListener('click',()=>copyText((f.virtualRenderV2872||f.virtualRenderV2871||f.virtualRenderV2870||f.virtualRenderV2868||f.virtualRenderV2867)?.svg||JSON.stringify(f.virtualRenderV2872||f.virtualRenderV2871||f.virtualRenderV2870||f.virtualRenderV2868||f.virtualRenderV2867||{},null,2),'Render SVG copiato ✅'));
+    d.querySelector('#btnOpenRenderImage')?.addEventListener('click',()=>{const r=f.virtualRenderV2872||f.virtualRenderV2871||f.virtualRenderV2870||f.virtualRenderV2868||f.virtualRenderV2867||{}; const img=d.querySelector('#v30OfficialRenderImg')||d.querySelector('#realPixelRenderImg')||d.querySelector('#render360Img')||d.querySelector('#semanticTwinImg')||d.querySelector('.realPhotoImg'); const src=(img&&img.src)||(p.fields.objectFolder?.officialRenderV3000?.officialDataUrl)||(p.fields.objectFolder?.officialRenderV3000?.studioDataUrl)||r.svgDataUri||''; const w=window.open('about:blank','_blank'); if(w){w.document.write('<title>Render AI</title><body style="margin:0;background:#f4f8ff;display:grid;place-items:center;min-height:100vh"><img style="max-width:96vw;max-height:96vh;object-fit:contain;border-radius:22px" src="'+String(src).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"></body>');} });
+    d.querySelector('#btnCopyRenderSvg')?.addEventListener('click',()=>copyText(JSON.stringify((currentProduct()?.fields?.objectFolder?.officialRenderV3000)||(f.virtualRenderV2872||f.virtualRenderV2871||f.virtualRenderV2870||f.virtualRenderV2868||f.virtualRenderV2867)||{},null,2),'JSON render copiato ✅'));
   }
   function isOwnerPhotoDataUrl(s){return /^data:image\/(png|jpe?g|webp);base64,/i.test(String(s||''));}
   function isOwnerPhotoUrl(s){return /^https?:\/\//i.test(String(s||'').trim());}
