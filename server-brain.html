@@ -206,7 +206,7 @@
           <h1>Cervello Server</h1>
           <p class="subtitle">Memoria prodotti · foto reali · valori titolare · ricerca precisa</p>
         </div>
-        <span class="build" id="buildBadge">V30.0</span>
+        <span class="build" id="buildBadge">V30.1</span>
       </div>
     </header>
 
@@ -374,9 +374,9 @@
     const candidatesHtml=refs.length?`<div class="v30RefGrid">${refs.slice(0,8).map(r=>`<div class="v30RefCard"><img src="${esc(srcOf(r)||fallback)}" data-fallback-src="${esc(fallback)}" alt="reference"><b>${esc(r.productName||r.title||'Reference')}</b><small>${esc(r.brand||'')} ${r.source?'· '+esc(r.source):''}</small><small>score ${esc(r.score||'—')}</small><button class="ghost mini" data-v30-use-ref="${esc(r.imageUrl||'')}">Usa come render</button></div>`).join('')}</div>`:'<div class="empty">Nessuna reference salvata. Premi “Cerca render online” o incolla l’URL immagine trovata su Google Immagini.</div>';
     const slot=(title,src,miss)=>`<div class="v30Slot"><div><b>${esc(title)}</b>${src?`<img src="${esc(src)}" alt="${esc(title)}">`:`<span>${esc(miss)}</span>`}</div></div>`;
     return `<div class="section"><h3>🧊 Render AI · V30 Reference Render Engine</h3>
-      <div class="v30Actions"><button class="primary" id="btnV30SearchRender">Cerca render online</button><button class="ghost" id="btnV30OpenOfficial">Apri render grande</button><button class="ghost" data-open-photos="1">Apri tab Foto</button><button class="ghost" id="btnV30CopySources">Copia fonti render</button></div>
+      <div class="v30Actions"><button class="primary" id="btnV30SearchRender">Cerca render online</button><button class="ghost" id="btnV30OpenOfficial">Apri render grande</button><button class="ghost" data-open-photos="1">Apri tab Foto</button><button class="ghost" id="btnV30CopySources">Copia fonti render</button><button class="ghost" id="btnV30TestGoogle">Test Google API</button></div>
       <div class="v30Import"><input id="v30ImportUrl" placeholder="Incolla URL immagine prodotto da Google/sito"><button class="primary" id="btnV30ImportUrl">Importa URL</button></div>
-      <div class="v30Info">V30: il server non genera più disegnini. Cerca reference reali gratuite/API/manuali, sceglie quella coerente, pulisce lo sfondo con Sharp e salva un render ufficiale nella cartella oggetto. OpenAI non viene usato.</div>
+      <div class="v30Info">V30.1: Google CSE collegato con diagnosi. Il server cerca più query intelligenti, legge GOOGLE_API_KEY + GOOGLE_CSE_ID/GOOGLE_CX, mostra errori chiari e crea il render da reference reali/API/manuali senza OpenAI.</div>
       <div class="v30Grid">
         <div class="v30Card"><h4><span>Render ufficiale prodotto</span><small id="v30OfficialStatus">${esc(q.level||'da generare')}</small></h4><div class="v30Stage"><img class="v30Img" id="v30OfficialRenderImg" src="${esc(officialSrc)}" data-fallback-src="${esc(fallback)}" alt="Render ufficiale"></div><div class="v30Facts" id="v30OfficialFacts"><span class="${officialSrc!==fallback?'ok':'warn'}">${esc(q.message||'premi Cerca render online o Importa URL')}</span>${q.score?`<span>score ${esc(q.score)}</span>`:''}<span>${esc(official.mode||official.renderMode||'reference_cleaned')}</span></div></div>
         <div class="v30Card"><h4><span>Reference reali trovate</span><small id="v30ReferenceStatus">${refs.length?refs.length+' fonti':'da cercare'}</small></h4><div id="v30ReferenceList">${candidatesHtml}</div><div class="v30Facts"><span>Open Facts automatico</span><span>URL Google manuale</span><span>zero token OpenAI</span></div></div>
@@ -407,12 +407,35 @@
           $('notice').className='notice ok'; $('notice').innerHTML='<span>🧊</span><div><b>Render ufficiale V30 creato.</b><span> Salvato nel cervello server senza OpenAI.</span></div>';
           return;
         }
+        const msg=r.data?.message||r.data?.error||'ricerca fallita';
+        const cfg=r.data?.configured?`api ${r.data.configured.apiKey?'ok':'NO'} · cx ${r.data.configured.cx?'ok':'NO'}`:'';
+        const g=r.data?.googleTest?`Google: ${r.data.googleTest.error||'ok'} · risultati ${r.data.googleTest.count||0}`:'';
+        if(status) status.textContent='diagnosi';
+        if(facts) facts.innerHTML=`<span class="warn">${esc(msg)}</span>${cfg?`<span>${esc(cfg)}</span>`:''}${g?`<span>${esc(g)}</span>`:''}`;
         logErr('v30-generate-official-failed',{url,status:r.status,body:r.data});
       }
-    }catch(e){ logErr('v30-generate-official-error',{error:e.message||String(e)}); }
-    if(status) status.textContent='non riuscito'; if(facts) facts.innerHTML='<span class="warn">non trovato: incolla un URL immagine prodotto</span>';
+    }catch(e){ logErr('v30-generate-official-error',{error:e.message||String(e)}); if(facts) facts.innerHTML=`<span class="warn">errore pagina: ${esc(e.message||String(e))}</span>`; }
+    if(status) status.textContent='non riuscito';
   }
   async function loadRealPixelRender(force=false){ return loadV30ReferenceRender(force); }
+
+  async function v30TestGoogleApi(){
+    const p=currentProduct(); const f=p?.fields||{}; const id=f.identity||{};
+    const q=[id.brand||p?.brand,id.productName||p?.title,id.format||p?.format].filter(Boolean).join(' ')||'Dexal Candeggina Delicata Maxi';
+    const status=$('v30OfficialStatus'), facts=$('v30OfficialFacts'), refBox=$('v30ReferenceList'), refStatus=$('v30ReferenceStatus');
+    if(status) status.textContent='test Google';
+    if(facts) facts.innerHTML='<span class="warn">test Google CSE in corso</span>';
+    try{
+      const r=await fetchJson(`/api/ai/google-cse-test?q=${encodeURIComponent(q)}`,{cache:'no-store'});
+      const data=r.data||{};
+      if(status) status.textContent=data.ok?'Google ok':'Google errore';
+      if(facts) facts.innerHTML=`<span class="${data.ok?'ok':'warn'}">${data.ok?'Google CSE risponde':'Google CSE non risponde'}</span><span>api ${data.configured?.apiKey?'ok':'NO'} · cx ${data.configured?.cx?'ok':'NO'}</span><span>risultati ${esc(data.count||0)} / total ${esc(data.totalResults||0)}</span>${data.error?`<span>${esc(data.error)}</span>`:''}${data.message?`<span>${esc(data.message)}</span>`:''}`;
+      const items=arr(data.items,8);
+      if(refStatus) refStatus.textContent=items.length?items.length+' test':'test';
+      if(refBox&&items.length){ refBox.innerHTML=`<div class="v30RefGrid">${items.map(it=>`<div class="v30RefCard"><img src="${esc(it.link||'')}" alt="test"><b>${esc(it.title||'Risultato Google')}</b><small>${esc(it.displayLink||'')}</small><button class="ghost mini" data-v30-use-ref="${esc(it.link||'')}">Usa come render</button></div>`).join('')}</div>`; v30BindReferenceButtons(); }
+    }catch(e){ if(status) status.textContent='test fallito'; if(facts) facts.innerHTML=`<span class="warn">${esc(e.message||String(e))}</span>`; }
+  }
+
   function v30BindReferenceButtons(){ document.querySelectorAll('[data-v30-use-ref]').forEach(btn=>btn.onclick=()=>importV30ReferenceUrl(btn.getAttribute('data-v30-use-ref')||'')); }
   async function importV30ReferenceUrl(urlArg=''){
     const p=currentProduct(); const s=getSettings(); if(!p) return;
@@ -461,6 +484,7 @@
     d.querySelector('#btnV30ImportUrl')?.addEventListener('click',()=>importV30ReferenceUrl());
     d.querySelector('#btnV30OpenOfficial')?.addEventListener('click',()=>{const src=(d.querySelector('#v30OfficialRenderImg')?.src)||(currentProduct()?.fields?.objectFolder?.officialRenderV3000?.officialDataUrl)||(currentProduct()?.fields?.objectFolder?.officialRenderV3000?.studioDataUrl)||'';const w=window.open('about:blank','_blank');if(w){w.document.write('<title>Render ufficiale V30</title><body style="margin:0;background:#f4f8ff;display:grid;place-items:center;min-height:100vh"><img style="max-width:96vw;max-height:96vh;object-fit:contain;border-radius:22px" src="'+String(src).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"></body>');}});
     d.querySelector('#btnV30CopySources')?.addEventListener('click',()=>copyText(JSON.stringify(currentProduct()?.fields?.objectFolder?.referenceImagesV3000||currentProduct()?.fields?.objectFolder?.referenceCandidatesV3000||[],null,2),'Fonti render copiate ✅'));
+    d.querySelector('#btnV30TestGoogle')?.addEventListener('click',v30TestGoogleApi);
     if(state.tab==='render'){ v30BindReferenceButtons(); }
     d.querySelector('#btnRenderTransparent')?.addEventListener('click',()=>refreshVirtualRender('transparent'));
     d.querySelector('#btnRenderWhite')?.addEventListener('click',()=>refreshVirtualRender('white'));

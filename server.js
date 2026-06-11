@@ -3643,6 +3643,12 @@ const server = http.createServer(async (req,res)=>{
       return send(res, 200, Object.assign(preflightSnapshotV98(), { diagnostics:{ learningAudit:(db.assistantBrain.learningAudit||[]).slice(0,120), globalProducts:publicGlobalProductMemory(30), knowledgeFeeder:db.assistantBrain.knowledgeFeeder||null, monsterBrainV96:db.assistantBrain.monsterBrainV96||null, ultraBrainV97:db.assistantBrain.ultraBrainV97||null } }));
     }
 
+    if(req.method === 'GET' && (pathName === '/api/ai/google-cse-test' || pathName === '/ai/google-cse-test')) {
+      const q=String(url.searchParams.get('q')||'Dexal Candeggina Delicata Maxi').trim();
+      const result=await v3010GoogleCseTest(q);
+      return send(res,200,result);
+    }
+
     if(req.method === 'POST' && (pathName === '/api/ai/server-brain/update' || pathName === '/ai/server-brain/update')) {
       const householdId=String(body.householdId||url.searchParams.get('householdId')||'').trim();
       const bearer=(req.headers.authorization||'').replace(/^Bearer\s+/,'').trim();
@@ -9008,3 +9014,153 @@ async function v30rr360(key=''){ ensureDbShape(); const rec=db.assistantBrain?.g
 try{ const prev=v2842PublicObjectFolder; if(typeof prev==='function'&&!global.__v30rrFolderWrapped){ v2842PublicObjectFolder=function(record={}){ const out=prev(record)||{}; const f=record.objectFolder||{}; out.officialRenderV3000=f.officialRenderV3000||record.officialRenderV3000||null; out.referenceImagesV3000=Array.isArray(f.referenceImagesV3000)?f.referenceImagesV3000.slice(0,16):[]; out.render360V3000=f.render360V3000||record.render360V3000||null; return out; }; global.__v30rrFolderWrapped=true; } }catch(_){ }
 try{ v2879GenerateRealPixelRender=v30rrGenerate; }catch(_){ }
 (function(){ const V='V30.0'; try{ const prev=publicServerBrainV2840; if(typeof prev==='function'&&!global.__v30rrBrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prev.call(this,opts)||{}; try{ out.version='V30.0 Reference Render Engine'; out.reasoningBusV3000={active:true,policy:'server cerca/importa reference reali, pulisce lo sfondo e salva render ufficiale senza OpenAI',ownerImportUrl:true,googleCse:!!(process.env.GOOGLE_API_KEY&&process.env.GOOGLE_CSE_ID)}; }catch(_){} return out; }; global.__v30rrBrainWrapped=true; } }catch(_){ } console.log('[Spesa Pronta] V30.0 Reference Render Engine active'); })();
+
+
+// =============================================================
+// V30.1 GOOGLE CSE RENDER FIX
+// - legge anche GOOGLE_CX
+// - fa più query intelligenti
+// - mostra errori Google invece di "non trovato" generico
+// - test endpoint: /api/ai/google-cse-test?q=...
+// =============================================================
+function v3010GoogleEnv(){
+  const apiKey=String(process.env.GOOGLE_API_KEY||process.env.GOOGLE_CSE_KEY||process.env.GOOGLE_CUSTOM_SEARCH_KEY||process.env.CUSTOM_SEARCH_API_KEY||'').trim();
+  const cx=String(process.env.GOOGLE_CSE_ID||process.env.GOOGLE_CX||process.env.GOOGLE_SEARCH_CX||process.env.GOOGLE_SEARCH_ENGINE_ID||process.env.GOOGLE_CUSTOM_SEARCH_CX||process.env.CUSTOM_SEARCH_CX||'').trim();
+  return {apiKey,cx,configured:!!(apiKey&&cx),country:String(process.env.GOOGLE_SEARCH_COUNTRY||'it').trim(),language:String(process.env.GOOGLE_SEARCH_LANGUAGE||'lang_it').trim()};
+}
+function v3010QueryVariants(rec={}){
+  const id=(typeof v3000Id==='function'?v3000Id(rec):v30rrId(rec));
+  const brand=String(id.brand||'').trim();
+  const name=String(id.name||'').trim();
+  const format=String(id.format||'').trim();
+  const cat=String(id.category||'').replace(/_/g,' ').trim();
+  const base=[brand,name,format].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+  const compact=[brand,name].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+  const out=[];
+  const add=(q)=>{ q=String(q||'').replace(/\s+/g,' ').trim(); if(q && !out.includes(q)) out.push(q); };
+  add(base);
+  add([compact,'prodotto'].filter(Boolean).join(' '));
+  add([compact,'packshot'].filter(Boolean).join(' '));
+  add([compact,'immagine prodotto'].filter(Boolean).join(' '));
+  add([compact,cat].filter(Boolean).join(' '));
+  if(/candegg|dexal|clean|laundry|pulizia|deterg/i.test(base+' '+cat)){
+    add([brand,'candeggina delicata'].filter(Boolean).join(' '));
+    add([brand,'candeggina'].filter(Boolean).join(' '));
+    add([brand,'candeggina delicata maxi'].filter(Boolean).join(' '));
+  }
+  if(/cola|bevanda|drink|soft/i.test(base+' '+cat)){
+    add([brand,'cola lemon taste'].filter(Boolean).join(' '));
+    add([brand,'cola prodotto'].filter(Boolean).join(' '));
+  }
+  return out.slice(0,8);
+}
+async function v3010GoogleSearchQuery(q='', opts={}){
+  const env=v3010GoogleEnv();
+  if(!env.configured) return {ok:false,error:'google_cse_not_configured',message:'Mancano GOOGLE_API_KEY e/o GOOGLE_CSE_ID/GOOGLE_CX su Render',items:[],configured:{apiKey:!!env.apiKey,cx:!!env.cx}};
+  const params=new URLSearchParams({key:env.apiKey,cx:env.cx,searchType:'image',safe:'active',num:String(opts.num||10),q:String(q||'')});
+  if(env.country) params.set('gl',env.country);
+  if(env.language) params.set('lr',env.language);
+  params.set('hl','it');
+  const url='https://www.googleapis.com/customsearch/v1?'+params.toString();
+  const ctrl=new AbortController(); const timer=setTimeout(()=>ctrl.abort(), Number(opts.timeoutMs||9500));
+  try{
+    const r=await fetch(url,{headers:{'user-agent':'Spesa-Pronta/30.1 GoogleCSE'},signal:ctrl.signal});
+    const txt=await r.text();
+    let data=null; try{ data=JSON.parse(txt); }catch(_){ data={raw:txt.slice(0,700)}; }
+    if(!r.ok) return {ok:false,error:'google_cse_http_'+r.status,message:data?.error?.message||txt.slice(0,220),items:[],status:r.status,googleError:data?.error||null,configured:{apiKey:true,cx:true},query:q};
+    const items=Array.isArray(data?.items)?data.items:[];
+    return {ok:true,query:q,totalResults:data?.searchInformation?.totalResults||'0',items,configured:{apiKey:true,cx:true}};
+  }catch(e){
+    return {ok:false,error:'google_cse_fetch_failed',message:String(e?.message||e),items:[],configured:{apiKey:!!env.apiKey,cx:!!env.cx},query:q};
+  }finally{ clearTimeout(timer); }
+}
+async function v3010GoogleCseTest(q='Dexal Candeggina Delicata Maxi'){
+  const env=v3010GoogleEnv();
+  const res=await v3010GoogleSearchQuery(q,{num:5,timeoutMs:9000});
+  return {ok:!!res.ok,version:'V30.1',configured:{apiKey:!!env.apiKey,cx:!!env.cx,country:env.country,language:env.language},query:q,totalResults:res.totalResults||'0',count:Array.isArray(res.items)?res.items.length:0,error:res.error||null,message:res.message||null,items:(res.items||[]).slice(0,5).map(it=>({title:it.title||'',link:it.link||'',displayLink:it.displayLink||'',contextLink:it.image?.contextLink||''}))};
+}
+async function v3010GoogleCandidates(rec={}){
+  const out=[];
+  const env=v3010GoogleEnv();
+  if(!env.configured){
+    try{ updateGlobalLearningAudit({type:'v3010-google-cse-not-configured',apiKey:!!env.apiKey,cx:!!env.cx}); }catch(_){ }
+    return [];
+  }
+  const queries=v3010QueryVariants(rec);
+  for(const q of queries){
+    const res=await v3010GoogleSearchQuery(q,{num:10,timeoutMs:9500});
+    if(!res.ok){
+      try{ updateGlobalLearningAudit({type:'v3010-google-cse-error',query:q,error:res.error,message:res.message}); }catch(_){ }
+      continue;
+    }
+    for(const it of (res.items||[])){
+      v3000PushCandidate(out,{imageUrl:it.link,title:it.title,source:'Google Custom Search',sourceLabel:'Google CSE',pageUrl:it.image?.contextLink||it.displayLink||'',license:'check_source',kind:'google_cse_image'},rec);
+    }
+    if(out.length>=8) break;
+  }
+  out.sort((a,b)=>(b.score||0)-(a.score||0));
+  return out.slice(0,14);
+}
+async function v3010FindReferenceCandidates(rec={},opts={}){
+  const all=[];
+  try{ for(const c of v3000MemoryCandidates(rec)) v3000PushCandidate(all,c,rec); }catch(_){ }
+  const packs=await Promise.allSettled([v3000OpenFactsCandidates(rec),v3010GoogleCandidates(rec),v3000SerpCandidates(rec)]);
+  const sources=[];
+  for(const p of packs){
+    if(p.status==='fulfilled'){
+      sources.push(Array.isArray(p.value)?p.value.length:0);
+      for(const c of p.value||[]) v3000PushCandidate(all,c,rec);
+    } else {
+      sources.push('err');
+    }
+  }
+  all.sort((a,b)=>(b.score||0)-(a.score||0));
+  const result=all.slice(0,20);
+  try{ updateGlobalLearningAudit({type:'v3010-reference-candidates',productName:rec.productName||'',brand:rec.brand||'',count:result.length,sources}); }catch(_){ }
+  return result;
+}
+async function v3010SearchAndBuildOfficialRender(key='',opts={}){
+  ensureDbShape();
+  const rec=db.assistantBrain?.globalProductMemory?.products?.[key];
+  if(!rec) return {ok:false,version:'V30.1',error:'product_not_found'};
+  const cached=rec.objectFolder?.officialRenderV3000||rec.officialRenderV3000;
+  if(cached&&cached.transparentDataUrl&&!opts.force) return {ok:true,version:'V30.1',mode:'cached_official_render',officialRender:cached,candidates:rec.objectFolder?.referenceCandidatesV3000||[],debug:{cached:true}};
+  const candidates=await v3010FindReferenceCandidates(rec,opts);
+  const env=v3010GoogleEnv();
+  let official=null,used=null,lastError=null;
+  for(const c of candidates){
+    try{
+      const src=c.imageDataUrl||c.displayUrl||await v3000RemoteDataUrl(c.imageUrl,14000);
+      if(!src){ lastError={candidate:c.imageUrl||'',error:'image_download_failed'}; continue; }
+      c.displayUrl=src; c.imageDataUrl=src;
+      official=await v3000BuildOfficialRenderFromDataUrl(src,rec,c);
+      used=c;
+      if(official) break;
+    }catch(e){
+      lastError={candidate:c.imageUrl||'',error:String(e?.message||e).slice(0,160)};
+      try{ updateGlobalLearningAudit({type:'v3010-candidate-render-failed',key,error:lastError.error,source:c.sourceLabel||c.source||''}); }catch(_){ }
+    }
+  }
+  if(!official){
+    const testQuery=v3010QueryVariants(rec)[0]||v3000Query(rec);
+    const googleTest=await v3010GoogleSearchQuery(testQuery,{num:3,timeoutMs:9000});
+    return {ok:false,version:'V30.1',error:'reference_render_not_found',message:candidates.length?'Ho trovato candidate ma non sono riuscito a scaricare/pulire l’immagine. Prova Importa URL da Google Immagini.':'Nessuna reference trovata. Controlla GOOGLE_API_KEY/GOOGLE_CSE_ID e siti del motore, oppure incolla URL immagine.',configured:{googleCse:env.configured,apiKey:!!env.apiKey,cx:!!env.cx},googleTest:{ok:googleTest.ok,error:googleTest.error,message:googleTest.message,totalResults:googleTest.totalResults,count:(googleTest.items||[]).length,query:testQuery},lastError,candidates:candidates.slice(0,8)};
+  }
+  official.usedCandidate=used?{imageUrl:used.imageUrl,title:used.title,sourceLabel:used.sourceLabel,score:used.score}:null;
+  official.qualityScore=Math.max(60,Math.min(98,(used?.score||0)+36));
+  official.quality=Object.assign({},official.quality||{},{level:'official_reference_render_v301',score:official.qualityScore,message:'Render creato da reference reale trovata online/API e pulita dal server'});
+  v3000SaveOfficialRender(rec,official,candidates);
+  try{ updateGlobalLearningAudit({type:'v3010-official-render-created',key,productName:rec.productName||'',brand:rec.brand||'',source:official.sourceLabel,score:official.qualityScore}); }catch(_){ }
+  return {ok:true,version:'V30.1',mode:'reference_cleaned_official_render',officialRender:official,candidates:rec.objectFolder?.referenceCandidatesV3000||[],debug:{googleCse:env.configured,used:official.usedCandidate}};
+}
+try{ v3000GoogleCandidates=v3010GoogleCandidates; v3000FindReferenceCandidates=v3010FindReferenceCandidates; v3000SearchAndBuildOfficialRender=v3010SearchAndBuildOfficialRender; }catch(_){ }
+(function(){
+  try{
+    const prev=publicServerBrainV2840;
+    if(typeof prev==='function'&&!global.__v3010BrainWrapped){
+      publicServerBrainV2840=function(opts={}){ const out=prev.call(this,opts)||{}; try{ const env=v3010GoogleEnv(); out.version='V30.1 GOOGLE CSE RENDER FIX'; out.reasoningBusV3010={active:true,googleCse:{configured:env.configured,apiKey:!!env.apiKey,cx:!!env.cx,country:env.country,language:env.language},testEndpoint:'/api/ai/google-cse-test?q=Dexal%20Candeggina'}; }catch(_){} return out; };
+      global.__v3010BrainWrapped=true;
+    }
+  }catch(_){ }
+  console.log('[Spesa Pronta] V30.1 Google CSE Render Fix active');
+})();
