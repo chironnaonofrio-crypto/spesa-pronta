@@ -978,11 +978,55 @@ function v2842ApplyOwnerOverrides(record={}){
   record.sources=Object.assign({}, record.sources||{}, {ownerOverride:Number(record.sources?.ownerOverride||0)+1});
   return record;
 }
+
+function v2874DeleteObjectPhotos(record={}, photoIds=[], actor=''){
+  const folder=v2842EnsureObjectFolder(record);
+  const ids=[...new Set(v2840List(photoIds).map(x=>String(x||'').trim()).filter(Boolean))];
+  if(!ids.length) return {ok:false,error:'photo_id_required',message:'Nessuna foto selezionata'};
+  folder.photos=Array.isArray(folder.photos)?folder.photos:[];
+  const removed=folder.photos.filter(p=>ids.includes(String(p.id||'')));
+  if(!removed.length) return {ok:false,error:'photo_not_found',message:'Foto non trovata nella cartella oggetto'};
+  folder.photos=folder.photos.filter(p=>!ids.includes(String(p.id||'')));
+  const repStillThere=folder.representativePhotoId && folder.photos.find(p=>String(p.id||'')===String(folder.representativePhotoId||''));
+  if(!repStillThere){
+    const best=folder.photos.find(p=>p.kind==='product_front' && (p.dataUrl||p.externalUrl)) || folder.photos.find(p=>p.dataUrl||p.externalUrl) || null;
+    if(best){
+      folder.representativePhotoId=best.id;
+      folder.representativePhoto=Object.assign({}, best);
+      folder.hasRealProfilePhoto=!!(best.dataUrl||best.externalUrl);
+      record.profilePhoto=Object.assign({}, best);
+      if(record.ownerProfilePhoto && ids.includes(String(record.ownerProfilePhoto.id||''))) record.ownerProfilePhoto=null;
+    }else{
+      folder.representativePhotoId='';
+      folder.representativePhoto=null;
+      folder.hasRealProfilePhoto=false;
+      record.profilePhoto=null;
+      if(record.ownerProfilePhoto && ids.includes(String(record.ownerProfilePhoto.id||''))) record.ownerProfilePhoto=null;
+    }
+    folder.profilePhotoLockedByOwner=false;
+    if(record.ownerOverrides){
+      record.ownerOverrides.profilePhotoLockedByOwner=false;
+      record.ownerOverrides.representativePhotoId=folder.representativePhotoId||'';
+    }
+  }
+  folder.photoCount=folder.photos.length;
+  folder.updatedAt=v2842Now();
+  record.updatedAt=v2842Now();
+  record.ownerOverrideHistory=Array.isArray(record.ownerOverrideHistory)?record.ownerOverrideHistory:[];
+  record.ownerOverrideHistory.unshift({at:v2842Now(), actor:actor||'server_owner', fields:['deletePhoto'], removedPhotoIds:ids.slice(0,20), removedCount:removed.length, remainingPhotoCount:folder.photoCount});
+  record.ownerOverrideHistory=record.ownerOverrideHistory.slice(0,30);
+  v2840AttachMemoryCard(record,{});
+  updateGlobalLearningAudit({type:'owner-photo-deleted-v2874', key:record.key||'', productName:record.productName||'', brand:record.brand||'', actor, removedPhotoIds:ids.slice(0,10), removedCount:removed.length, remainingPhotoCount:folder.photoCount});
+  return {ok:true, removedCount:removed.length, removedPhotos:removed.map(p=>({id:p.id||'',kind:p.kind||'',source:p.source||''})), remainingPhotoCount:folder.photoCount};
+}
+
 function v2842UpdateOwnerOverride(key='', updates={}, actor=''){
   ensureDbShape();
   const g=db.assistantBrain.globalProductMemory||{products:{}};
   const record=g.products[key];
   if(!record) return {ok:false,error:'product_not_found'};
+  const deletePhotoIds=[...new Set(v2840List(updates?.deletePhotoIds, updates?.deletePhotoId).map(x=>String(x||'').trim()).filter(Boolean))];
+  let deletePhotoResult=null;
   if(updates && updates.clearOwnerLock){
     record.ownerOverrides={enabled:false, version:'V28.43_owner_locked_values', fields:{}, lockedFields:[], clearedAt:v2842Now(), updatedBy:actor||'server_owner'};
     record.lockedByOwner=false;
@@ -992,8 +1036,15 @@ function v2842UpdateOwnerOverride(key='', updates={}, actor=''){
     updateGlobalLearningAudit({type:'owner-override-cleared', key:record.key||key, productName:record.productName||'', brand:record.brand||'', actor});
     return {ok:true, product:v2840PublicProductBrainDetail(record)};
   }
+  if(deletePhotoIds.length){
+    deletePhotoResult=v2874DeleteObjectPhotos(record, deletePhotoIds, actor||'server_owner');
+    if(!deletePhotoResult.ok) return deletePhotoResult;
+  }
   const allowed=['productName','brand','format','category','unit','barcode','ingredients','allergens','possibleTraces','colors','labels','nutrition','visualSignature','packaging','packageType','productType'];
   const fields={};
+  const hasFieldUpdates=allowed.some(k=>Object.prototype.hasOwnProperty.call(updates||{},k));
+  const wantsRepChange=!!(updates&&updates.representativePhotoId);
+  const wantsPhotoChange=!!(updates&&(updates.profilePhotoDataUrl || updates.profilePhotoBase64 || updates.profilePhotoUrl || updates.representativePhotoDataUrl || updates.representativePhotoUrl));
   for(const k of allowed){
     if(Object.prototype.hasOwnProperty.call(updates,k)){
       const v=v2842CleanOverrideValue(k,updates[k]);
@@ -1001,6 +1052,11 @@ function v2842UpdateOwnerOverride(key='', updates={}, actor=''){
       if(k==='productName' && !String(v||'').trim()) continue;
       fields[k]=v;
     }
+  }
+  if(deletePhotoResult && !hasFieldUpdates && !wantsRepChange && !wantsPhotoChange){
+    v2840AttachMemoryCard(record,{});
+    record.updatedAt=v2842Now(); g.updatedAt=v2842Now();
+    return {ok:true, product:v2840PublicProductBrainDetail(record), photoDelete:deletePhotoResult};
   }
   const prev=record.ownerOverrides||{};
   const before=Object.assign({}, prev.fields||{});
@@ -1035,7 +1091,7 @@ function v2842UpdateOwnerOverride(key='', updates={}, actor=''){
   v2840AttachMemoryCard(record,{});
   record.updatedAt=v2842Now(); g.updatedAt=v2842Now();
   updateGlobalLearningAudit({type:'owner-override-updated', key:record.key||key, productName:record.productName||'', brand:record.brand||'', lockedFields:record.ownerOverrides.lockedFields, actor, fieldCount:Object.keys(fields).length, photoChanged:!!ownerPhotoChange, representativePhotoId:ownerPhotoChange?.id||updates.representativePhotoId||''});
-  return {ok:true, product:v2840PublicProductBrainDetail(record)};
+  return {ok:true, product:v2840PublicProductBrainDetail(record), photoDelete:deletePhotoResult};
 }
 
 function v2840Completion(card={}){
@@ -8085,13 +8141,13 @@ function v2871RenderBrainProduct(key='', opts={}){
 
 
 // =============================================================
-// V28.72 PRO Real Photo Twin Mobile Fix
+// V28.73 PRO Real Photo Twin Mobile Fix
 // Obiettivo: il Cervello Server non deve mai mostrare un render bianco.
-// La UI usa prima la foto reale con <img>; il server espone alias V28.72
+// La UI usa prima la foto reale con <img>; il server espone alias V28.73
 // e segnala che il gemello reale è mobile-safe/direct-photo-first.
 // =============================================================
 (function(){
-  const V2872_VERSION='V28.72';
+  const V2872_VERSION='V28.73';
   try{
     const prev=v2867RenderBrainProduct;
     if(typeof prev==='function' && !global.__v2872RenderWrapped){
@@ -8107,7 +8163,7 @@ function v2871RenderBrainProduct(key='', opts={}){
             }
             if(out.reasoning){
               out.reasoning.version=V2872_VERSION;
-              out.reasoning.engines=Object.assign({},out.reasoning.engines||{},{render:'V28.72 direct real photo first + semantic SVG fallback'});
+              out.reasoning.engines=Object.assign({},out.reasoning.engines||{},{render:'V28.73 direct real photo first + semantic SVG fallback'});
             }
             if(out.fields){
               out.fields.virtualRenderV2872=out.render;
@@ -8126,8 +8182,8 @@ function v2871RenderBrainProduct(key='', opts={}){
       publicServerBrainV2840=function(opts={}){
         const out=prev.call(this,opts||{})||{};
         try{
-          out.version='V28.72 PRO Real Photo Twin Mobile Fix';
-          out.reasoningBusV2872={active:true,policy:'foto reale diretta prima del render SVG; niente pannelli bianchi su mobile',renderEngine:'V28.72 direct-photo-first + semantic fallback',mobileSafe:true};
+          out.version='V28.73 PRO Real Photo Twin Mobile Fix';
+          out.reasoningBusV2872={active:true,policy:'foto reale diretta prima del render SVG; niente pannelli bianchi su mobile',renderEngine:'V28.73 direct-photo-first + semantic fallback',mobileSafe:true};
           (out.products||[]).forEach(p=>{ const f=p.fields||{}; if(f.virtualRenderV2871 && !f.virtualRenderV2872) f.virtualRenderV2872=f.virtualRenderV2871; if(f.humanReasoningV2871 && !f.humanReasoningV2872) f.humanReasoningV2872=f.humanReasoningV2871; });
         }catch(_){ }
         return out;
@@ -8136,5 +8192,59 @@ function v2871RenderBrainProduct(key='', opts={}){
     }
   }catch(_){ }
   try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2872PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this)||{}; s.version=V2872_VERSION; s.brain=Object.assign({},s.brain||{},{version:V2872_VERSION,realPhotoTwinMobileFix:'active',renderBlankGuard:'active'}); return s; }; global.__v2872PreflightWrapped=true; } }catch(_){ }
-  console.log('[Spesa Pronta] V28.72 PRO Real Photo Twin Mobile Fix active');
+  console.log('[Spesa Pronta] V28.73 PRO Real Photo Twin Mobile Fix active');
+})();
+
+
+// =============================================================
+// V28.74 PRO Photo Delete + Render Retry
+// Opzioni premium: elimina foto sbagliate dalla cartella articolo
+// e forza una nuova richiesta render dal Cervello Server.
+// =============================================================
+(function(){
+  const V2874_VERSION='V28.74';
+  try{
+    const prev=v2867RenderBrainProduct;
+    if(typeof prev==='function' && !global.__v2874RenderWrapped){
+      v2867RenderBrainProduct=function(key='', opts={}){
+        const out=prev.call(this,key,opts)||{};
+        try{
+          if(out.ok){
+            out.version=V2874_VERSION;
+            if(out.render){
+              out.render.version=V2874_VERSION;
+              out.render.retryAvailable=true;
+              out.render.renderRetryMode='manual_safe_retry';
+            }
+            if(out.reasoning){
+              out.reasoning.version=V2874_VERSION;
+              out.reasoning.engines=Object.assign({},out.reasoning.engines||{},{render:'V28.74 direct real photo first + retry render'});
+            }
+            if(out.fields){
+              out.fields.virtualRenderV2872=out.render;
+              out.fields.humanReasoningV2872=out.reasoning;
+            }
+          }
+        }catch(_){ }
+        return out;
+      };
+      global.__v2874RenderWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    const prev=publicServerBrainV2840;
+    if(typeof prev==='function' && !global.__v2874ServerBrainWrapped){
+      publicServerBrainV2840=function(opts={}){
+        const out=prev.call(this,opts||{})||{};
+        try{
+          out.version='V28.74 PRO Photo Delete + Render Retry';
+          out.reasoningBusV2874={active:true,policy:'foto sbagliate eliminabili + render rigenerabile manualmente',renderEngine:'V28.74 retry-safe real-photo-first',mobileSafe:true};
+        }catch(_){ }
+        return out;
+      };
+      global.__v2874ServerBrainWrapped=true;
+    }
+  }catch(_){ }
+  try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2874PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this)||{}; s.version=V2874_VERSION; s.brain=Object.assign({},s.brain||{},{version:V2874_VERSION,photoDelete:'active',renderRetry:'active'}); return s; }; global.__v2874PreflightWrapped=true; } }catch(_){ }
+  console.log('[Spesa Pronta] V28.74 PRO Photo Delete + Render Retry active');
 })();

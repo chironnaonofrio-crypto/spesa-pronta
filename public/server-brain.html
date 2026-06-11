@@ -44,7 +44,7 @@
     @media(max-width:980px){.renderHero{grid-template-columns:1fr}.virtualRender{max-height:60vh;max-width:520px;margin:0 auto}.renderSpec{max-width:100%}}
     @media(max-width:420px){.virtualRender{max-height:52vh;border-radius:20px}.renderActions{grid-template-columns:1fr}.section h3{font-size:.96rem}}
   
-    /* V28.72 PRO Real Photo Twin Viewer: real <img> first, SVG only fallback, zero blank on mobile */
+    /* V28.74 PRO Real Photo Twin Viewer: real <img> first, SVG only fallback, zero blank on mobile */
     .renderHero{display:block!important;max-width:min(100%,820px)!important;margin:0 auto!important;overflow:visible!important}
     .realRenderGrid{display:grid;grid-template-columns:1fr;gap:14px;width:100%;max-width:760px;margin:0 auto}
     .renderStage{background:linear-gradient(180deg,#fbfdff,#eef6ff);border:1px solid #d9e8fb;border-radius:26px;padding:12px;box-shadow:0 14px 36px rgba(10,43,86,.08);overflow:hidden}
@@ -58,6 +58,15 @@
     @media(max-width:980px){.renderSpec .kv{grid-template-columns:1fr}.realPixelTwin,.virtualRenderFrame svg{max-height:min(58vh,600px)}}
     @media(max-width:520px){.detailBody{padding:10px}.section{padding:10px;border-radius:19px}.renderStage{padding:8px;border-radius:20px}.realPixelTwin{max-height:54vh}.virtualRenderFrame svg{max-height:40vh}.realPhotoViewport{min-height:220px;max-height:50vh;border-radius:18px}.realPhotoImg{max-height:48vh;border-radius:14px}.renderActions{grid-template-columns:1fr}.renderStageHead{font-size:.92rem}.renderStageHead small{display:none}}
 
+  
+    /* V28.74 SAFE REAL PHOTO TWIN: never blank, profile photo first, mobile compact */
+    .realPhotoViewport.safeTwin{min-height:clamp(230px,58vw,440px)!important;max-height:58vh!important;background:linear-gradient(180deg,#ffffff,#f2f8ff)!important}
+    .safeTwinImg{display:block!important;width:100%!important;height:100%!important;max-width:100%!important;max-height:56vh!important;object-fit:contain!important;border-radius:18px!important;background:#fff!important}
+    .safePhotoStatus{display:flex;gap:7px;flex-wrap:wrap;justify-content:center;margin-top:8px}
+    .safePhotoStatus span{border:1px solid #d9e8fb;background:#f6fbff;border-radius:999px;padding:7px 10px;font-size:.74rem;font-weight:1000;color:#16427d}
+    .realPhotoEmergency{padding:14px;border-radius:18px;border:1px solid #f3d89c;background:#fff8e7;color:#835700;font-weight:900;line-height:1.35;margin-top:8px}
+    @media(max-width:520px){.realPhotoViewport.safeTwin{min-height:300px!important;max-height:54vh!important}.safeTwinImg{max-height:52vh!important}.realRenderGrid{gap:10px!important}.renderStage{padding:9px!important}.renderSpec{font-size:.92rem}.renderSpec .kv{grid-template-columns:1fr!important}}
+
   </style>
 </head>
 <body>
@@ -69,7 +78,7 @@
           <h1>Cervello Server</h1>
           <p class="subtitle">Memoria prodotti · foto reali · valori titolare · ricerca precisa</p>
         </div>
-        <span class="build" id="buildBadge">V28.72</span>
+        <span class="build" id="buildBadge">V28.74</span>
       </div>
     </header>
 
@@ -214,7 +223,7 @@
     const photos=arr(folder.photos,60);
     const current=folder.representativePhoto || photos.find(p=>p.id===folder.representativePhotoId) || photos[0] || null;
     const currentSrc=current?(current.thumbDataUrl||current.dataUrl||current.externalUrl||''):profileSrc(f.profilePhoto);
-    const gallery=photos.length?`<div class="gallery">${photos.map(p=>{const src=p.thumbDataUrl||p.dataUrl||p.externalUrl||'';const active=p.id===folder.representativePhotoId;return `<div class="gitem ${active?'active':''}"><img src="${esc(src)}" alt=""><b>${esc(p.kind||'foto')}</b><small>${active?'Foto profilo attuale · ':''}score ${esc(p.score||0)} · ${esc(Math.round((p.bytes||0)/1024))} KB</small>${active?'<span class="activeBadge">SCELTA ORA</span>':`<button class="ghost mini" data-rep-photo="${esc(p.id)}">Imposta come foto articolo</button>`}</div>`}).join('')}</div>`:'<div class="empty">Nessuna foto reale salvata nella cartella. Puoi comunque caricare/incollare qui la foto corretta e bloccarla come immagine ufficiale dell’articolo.</div>';
+    const gallery=photos.length?`<div class="gallery">${photos.map(p=>{const src=p.thumbDataUrl||p.dataUrl||p.externalUrl||'';const active=p.id===folder.representativePhotoId;return `<div class="gitem ${active?'active':''}"><img src="${esc(src)}" alt=""><b>${esc(p.kind||'foto')}</b><small>${active?'Foto profilo attuale · ':''}score ${esc(p.score||0)} · ${esc(Math.round((p.bytes||0)/1024))} KB</small>${active?'<span class="activeBadge">SCELTA ORA</span>':`<button class="ghost mini" data-rep-photo="${esc(p.id)}">Imposta come foto articolo</button>`}<button class="danger mini" data-delete-photo="${esc(p.id)}">Elimina foto</button></div>`}).join('')}</div>`:'<div class="empty">Nessuna foto reale salvata nella cartella. Puoi comunque caricare/incollare qui la foto corretta e bloccarla come immagine ufficiale dell’articolo.</div>';
     return `<div class="photoManager"><div class="photoPickerHero"><img class="currentProfile" id="ownerPhotoPreview" src="${esc(currentSrc)}" alt=""><div><h4>Foto profilo articolo</h4><p>Questa è l’immagine che rappresenta il prodotto nel cervello server. Se il server sceglie male, il titolare può correggerla: da quel momento questa foto vince sulla scelta automatica.</p><div class="chips"><span class="chip ${folder.profilePhotoLockedByOwner?'lock':'warn'}">${folder.profilePhotoLockedByOwner?'Foto bloccata dal titolare':'Scelta automatica server'}</span><span class="chip ${photos.length?'ok':'warn'}">${photos.length} foto in cartella</span></div></div></div><div class="photoTools"><div class="photoNote">Puoi scegliere una foto già salvata sotto, oppure caricare/incollare una foto migliore. Ideale: prodotto frontale, etichetta leggibile, poca confusione intorno.</div><div class="actions"><label class="fileBtn">📷 Carica foto corretta<input id="ownerPhotoFile" type="file" accept="image/*"></label><button class="primary" id="btnSaveOwnerPhoto">Salva come foto articolo</button></div><textarea id="ownerPhotoText" placeholder="Oppure incolla qui URL immagine https://... o data:image... base64 già compresso"></textarea><div class="photoPreviewRow" id="ownerPhotoPreviewRow"><img id="ownerPhotoPreviewSmall" alt=""><div>Foto pronta. Premi “Salva come foto articolo” per bloccarla nel cervello server.</div></div></div>${gallery}</div>`;
   }
   function renderOverview(f){return `<div class="section"><h3>🧾 Identità articolo</h3><div class="kv">${row('Nome',f.identity?.productName)}${row('Marca',f.identity?.brand)}${row('Formato',f.identity?.format)}${row('Categoria',f.classification?.category)}${row('Famiglia',f.classification?.categoryFamily)}${row('Unità',f.quantity?.unit)}${row('Barcode',f.barcode)}${row('Cartella oggetto',f.objectFolder?.folderId)}${row('Foto salvate',f.objectFolder?.photoCount)}${row('Aggiornato',fmtDate(f.timestamps?.updatedAt))}</div></div><div class="section"><h3>✅ Campi compilati</h3>${pills(f.filledFields,'Nessun campo compilato')}</div><div class="section"><h3>⚠️ Campi mancanti</h3>${pills(f.missingFields,'Nessun campo mancante')}</div><div class="section"><h3>🔎 Aspetto / firma</h3><div class="kv">${row('Colori',arr(f.visualAppearance?.colors,12).join(', '))}${row('Confezione',f.visualAppearance?.packageType||f.packaging)}${row('Tipo',f.visualAppearance?.productType)}${row('Firma visiva',f.visualAppearance?.visualSignature)}${row('Firma semantica',f.semanticVisualSignatureV2854?.signature)}${row('Regola firma',f.semanticVisualSignatureV2854?.rules)}</div></div>`}
@@ -259,22 +268,37 @@
       const label=isJug?'<path class="labelZone" d="M25 48 L76 46 L73 72 C58 78 40 78 24 73 Z"/>':'<path class="labelZone" d="M28 51 Q50 45 72 51 L72 70 Q50 77 28 70 Z"/>';
       return `<svg class="realPhotoGuide" viewBox="0 0 100 110" preserveAspectRatio="none" aria-hidden="true"><path class="outline" d="${outline}"/>${label}</svg>`;
     }
+    function safeProfileImage(){
+      // V28.74: il dettaglio in alto riesce già a mostrare la foto.
+      // Quindi il Render AI usa quella stessa fonte come fallback obbligatorio: mai più riquadro bianco.
+      const candidates=[];
+      try{ candidates.push(profileSrc(product.profilePhoto)); }catch{}
+      try{ candidates.push(profileSrc(f.profilePhoto)); }catch{}
+      try{ candidates.push(profileSrc(folder.ownerProfilePhoto||folder.representativePhoto)); }catch{}
+      for(const c of candidates){
+        const u=String(c||'').trim();
+        if(u && (u.startsWith('data:image') || /^https?:\/\//i.test(u))) return u;
+      }
+      return candidates.find(Boolean)||placeholder(product.title||f.identity?.productName||'Prodotto');
+    }
     function realTwinHtml(){
       const p=bestPhoto();
-      if(!p) return '<div class="empty">Manca una foto frontale reale utilizzabile: scegli una foto nella tab Foto oppure caricane una. Senza foto reale il gemello resta sintetico.</div>';
+      const fallbackSrc=safeProfileImage();
+      const src=(p&&p.uri)||fallbackSrc;
       const title=esc([f.identity?.brand,f.identity?.productName].filter(Boolean).join(' · ')||product.title||'Foto reale articolo');
-      const facts=[p.kind||'foto reale', spec.shape||spec.family||'', spec.content||reason.appearance?.content||'', spec.format||reason.subject?.format||''].filter(Boolean).slice(0,5);
-      return `<div class="realPhotoTwinCard"><div class="realPhotoViewport"><img class="realPhotoImg" src="${esc(p.uri)}" alt="${title}" loading="eager" decoding="async">${guideSvg()}<div class="realPhotoFallback empty">La foto reale è salvata ma il browser non l’ha caricata. Usa “Apri grande” o scegli/carica una nuova foto nella tab Foto.</div></div><div class="photoTwinFacts">${facts.map(x=>`<span>${esc(x)}</span>`).join('')}</div></div>`;
+      const facts=[(p&&p.kind)||'foto profilo garantita', spec.shape||spec.family||'', spec.content||reason.appearance?.content||'', spec.format||reason.subject?.format||''].filter(Boolean).slice(0,5);
+      const note=p?'pixel reali dalla cartella oggetto':'fallback foto profilo scheda: il server mostra comunque la foto reale disponibile';
+      return `<div class="realPhotoTwinCard"><div class="realPhotoViewport safeTwin"><img class="realPhotoImg safeTwinImg" src="${esc(src)}" data-fallback-src="${esc(fallbackSrc)}" alt="${title}" loading="eager" decoding="async">${guideSvg()}<div class="realPhotoFallback empty">La foto non è stata caricata dal browser. Apro il fallback profilo o scegli/carica la foto corretta nella tab Foto.</div></div><div class="safePhotoStatus"><span>${esc(note)}</span>${facts.map(x=>`<span>${esc(x)}</span>`).join('')}</div></div>`;
     }
     const realHtml=realTwinHtml();
     const synthetic=okSvg(vr.svg)||`<img class="virtualRender" id="virtualRenderImg" src="${esc(vr.svgDataUri||placeholder(f.identity?.productName||'Render AI'))}" alt="Render virtuale articolo">`;
     const boxes=[
-      ['Motore', vr.version||spec.version||'V28.72'], ['Modalità', spec.renderMode||'real_photo_direct_first'], ['Score realismo', spec.detailScore!=null?`${spec.detailScore}/100`:'—'], ['Texture reale', spec.referencePhotoAvailable?'sì':'foto diretta/browser'], ['Fonte immagine', spec.referencePhotoKind||spec.referencePhotoSource||'foto cartella/profilo'], ['Famiglia', spec.family||spec.shape||reason.subject?.shape], ['Forma', spec.shape||reason.subject?.shape], ['Corpo', spec.bodyColor], ['Etichetta', [spec.labelColor,spec.labelAccentColor,spec.labelThirdColor].filter(Boolean).join(' / ')], ['Tappo', spec.capColor], ['Contenuto', spec.content||reason.appearance?.content], ['Categoria', spec.category||reason.subject?.category], ['Formato', spec.format||reason.subject?.format], ['Qualità render', spec.renderQuality?.level||vr.version], ['Foto reali', spec.photoCount??folder.photoCount??'—'], ['Campioni visivi', spec.renderQuality?.visualSamples??'—']
+      ['Motore', vr.version||spec.version||'V28.74'], ['Modalità', spec.renderMode||'real_photo_direct_first'], ['Score realismo', spec.detailScore!=null?`${spec.detailScore}/100`:'—'], ['Texture reale', spec.referencePhotoAvailable?'sì':'foto diretta/browser'], ['Fonte immagine', spec.referencePhotoKind||spec.referencePhotoSource||'foto cartella/profilo'], ['Famiglia', spec.family||spec.shape||reason.subject?.shape], ['Forma', spec.shape||reason.subject?.shape], ['Corpo', spec.bodyColor], ['Etichetta', [spec.labelColor,spec.labelAccentColor,spec.labelThirdColor].filter(Boolean).join(' / ')], ['Tappo', spec.capColor], ['Contenuto', spec.content||reason.appearance?.content], ['Categoria', spec.category||reason.subject?.category], ['Formato', spec.format||reason.subject?.format], ['Qualità render', spec.renderQuality?.level||vr.version], ['Foto reali', spec.photoCount??folder.photoCount??'—'], ['Campioni visivi', spec.renderQuality?.visualSamples??'—']
     ];
     const rulePills=pills(reason.decisionRules||[],'Nessuna regola salvata');
     const evidence=pills(reason.identityEvidence||[],'Nessuna prova identità salvata');
     const risks=pills(reason.riskFlags||[],'Nessun rischio evidente');
-    return `<div class="section"><h3>🧊 Gemello visivo REAL PHOTO TWIN</h3><div class="renderHero"><div class="realRenderGrid"><div class="renderStage real"><div class="renderStageHead"><span>Foto reale interpretata</span><span class="photoRealBadge">pixel reali diretti</span></div>${realHtml}</div><div class="renderStage"><div class="renderStageHead"><span>Gemello semantico server</span><small>forma + colore + etichetta</small></div><div class="virtualRenderFrame" id="virtualRenderFrame">${synthetic}</div></div></div><div class="renderSpec"><p class="subtitle" style="margin:0 0 10px">V28.72 non si affida più solo all’SVG: mostra prima la foto reale salvata dal cervello, poi sopra mette guida visiva, sagoma, etichetta e ragionamento. Così su cellulare non resta bianco e vedi davvero i pixel imparati.</p><div class="kv">${boxes.map(x=>row(x[0],x[1])).join('')}</div><div class="renderActions"><button class="primary" id="btnRenderTransparent">Sfondo trasparente</button><button class="ghost" id="btnRenderWhite">Sfondo bianco</button><button class="ghost" id="btnOpenRenderImage">Apri grande</button><button class="ghost" id="btnCopyRenderSvg">Copia SVG</button></div></div></div></div><div class="section"><h3>🧠 Ragionamento umano server</h3><div class="reasonGrid"><div class="reasonBox"><b>Prove identità</b>${evidence}</div><div class="reasonBox"><b>Regole decisionali</b>${rulePills}</div><div class="reasonBox"><b>Rischi/attenzioni</b>${risks}</div><div class="reasonBox"><b>Motori collegati</b><div class="kv">${row('Pixel',reason.engines?.pixelJudge)}${row('OCR',reason.engines?.ocr)}${row('Memoria',reason.engines?.memory)}${row('OpenAI',reason.engines?.openai)}</div></div></div></div><div class="section"><h3>📐 Specifica render</h3><div class="json">${esc(redact(JSON.stringify(vr,null,2)))}</div></div>`;
+    return `<div class="section"><h3>🧊 Gemello visivo REAL PHOTO TWIN SAFE + RETRY</h3><div class="renderHero"><div class="realRenderGrid"><div class="renderStage real"><div class="renderStageHead"><span>Foto reale garantita</span><span class="photoRealBadge">mai più bianco</span></div>${realHtml}</div><div class="renderStage"><div class="renderStageHead"><span>Gemello semantico server</span><small>forma + colore + etichetta</small></div><div class="virtualRenderFrame" id="virtualRenderFrame">${synthetic}</div></div></div><div class="renderSpec"><p class="subtitle" style="margin:0 0 10px">V28.74 SAFE + RETRY mostra prima una foto reale garantita: se la foto della cartella non carica, usa subito la foto profilo già visibile nella scheda. Ora puoi anche rigenerare il render manualmente se fallisce e cancellare le foto sbagliate dalla cartella articolo. Su mobile il blocco resta compatto e leggibile.</p><div class="kv">${boxes.map(x=>row(x[0],x[1])).join('')}</div><div class="renderActions"><button class="primary" id="btnRegenerateRender">Rigenera render</button><button class="ghost" id="btnRenderTransparent">Sfondo trasparente</button><button class="ghost" id="btnRenderWhite">Sfondo bianco</button><button class="ghost" id="btnOpenRenderImage">Apri grande</button><button class="ghost" id="btnCopyRenderSvg">Copia SVG</button></div></div></div></div><div class="section"><h3>🧠 Ragionamento umano server</h3><div class="reasonGrid"><div class="reasonBox"><b>Prove identità</b>${evidence}</div><div class="reasonBox"><b>Regole decisionali</b>${rulePills}</div><div class="reasonBox"><b>Rischi/attenzioni</b>${risks}</div><div class="reasonBox"><b>Motori collegati</b><div class="kv">${row('Pixel',reason.engines?.pixelJudge)}${row('OCR',reason.engines?.ocr)}${row('Memoria',reason.engines?.memory)}${row('OpenAI',reason.engines?.openai)}</div></div></div></div><div class="section"><h3>📐 Specifica render</h3><div class="json">${esc(redact(JSON.stringify(vr,null,2)))}</div></div>`;
   }
 
 
@@ -285,13 +309,20 @@
     d.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{state.tab=b.dataset.tab;renderDetail();});
     d.querySelectorAll('[data-open-photos]').forEach(b=>b.onclick=()=>{state.tab='photos';renderDetail();setTimeout(()=>$('detail')?.scrollIntoView({behavior:'smooth',block:'start'}),40);});
     d.querySelectorAll('[data-rep-photo]').forEach(btn=>btn.onclick=()=>saveOwnerUpdate({representativePhotoId:btn.dataset.repPhoto},'Foto articolo scelta dal titolare ✅'));
+    d.querySelectorAll('[data-delete-photo]').forEach(btn=>btn.onclick=()=>deletePhotoFromBrain(btn.dataset.deletePhoto));
     d.querySelector('#ownerPhotoFile')?.addEventListener('change',handleOwnerPhotoFile);
     d.querySelector('#btnSaveOwnerPhoto')?.addEventListener('click',saveManualOwnerPhoto);
-    d.querySelectorAll('.realPhotoImg').forEach(img=>img.addEventListener('error',()=>{img.closest('.realPhotoTwinCard')?.classList.add('imgFailed');logErr('real-photo-render-load-error',{src:String(img.src||'').slice(0,160)});}));
+    d.querySelectorAll('.realPhotoImg').forEach(img=>img.addEventListener('error',()=>{
+      const fb=img.getAttribute('data-fallback-src')||'';
+      if(fb && img.src!==fb){ img.src=fb; return; }
+      img.closest('.realPhotoTwinCard')?.classList.add('imgFailed');
+      logErr('real-photo-render-load-error',{src:String(img.src||'').slice(0,160)});
+    }));
     d.querySelector('#btnSaveOwner')?.addEventListener('click',()=>saveOwnerUpdate({productName:val('edProductName'),brand:val('edBrand'),format:val('edFormat'),category:val('edCategory'),unit:val('edUnit'),barcode:val('edBarcode'),visualSignature:val('edSignature'),packaging:val('edPackaging'),packageType:val('edPackaging'),productType:val('edProductType'),ingredients:parseList(val('edIngredients')),allergens:parseList(val('edAllergens')),possibleTraces:parseList(val('edTraces')),colors:parseList(val('edColors'))},'Valori titolare salvati ✅'));
     d.querySelector('#btnClearOwner')?.addEventListener('click',()=>{if(confirm('Sbloccare i valori titolare per questo articolo?')) saveOwnerUpdate({clearOwnerLock:true},'Valori titolare sbloccati ✅')});
     d.querySelector('#btnCopyProductJson')?.addEventListener('click',()=>copyText(JSON.stringify(f,null,2),'JSON articolo copiato ✅'));
     d.querySelector('#btnDeleteBrainProduct')?.addEventListener('click',deleteBrainProduct);
+    d.querySelector('#btnRegenerateRender')?.addEventListener('click',()=>refreshVirtualRender('transparent',{retry:true}));
     d.querySelector('#btnRenderTransparent')?.addEventListener('click',()=>refreshVirtualRender('transparent'));
     d.querySelector('#btnRenderWhite')?.addEventListener('click',()=>refreshVirtualRender('white'));
     d.querySelector('#btnOpenRenderImage')?.addEventListener('click',()=>{const r=f.virtualRenderV2872||f.virtualRenderV2871||f.virtualRenderV2870||f.virtualRenderV2868||f.virtualRenderV2867||{}; const img=d.querySelector('.realPhotoImg'); const src=(img&&img.src)||r.svgDataUri||''; const w=window.open('about:blank','_blank'); if(w){w.document.write('<title>Render AI</title><body style="margin:0;background:#f4f8ff;display:grid;place-items:center;min-height:100vh"><img style="max-width:96vw;max-height:96vh;object-fit:contain;border-radius:22px" src="'+String(src).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"></body>');} });
@@ -345,12 +376,14 @@
   function render(){renderMetrics();renderProducts();renderDetail();renderServerErrors();renderCorrections();renderClientErrors();$('filterText').textContent=state.includeDeep?'Ricerca profonda attiva: include anche ingredienti, allergeni, tracce, OCR e JSON prodotto.':'Ricerca identità attiva: non include ingredienti/allergeni, così “latte” non mostra prodotti con sole tracce di latte.';}
   async function load(){const s=getSettings();if(!s.householdId||!s.token){$('notice').className='notice bad';$('notice').innerHTML='<span>🔒</span><div><b>Account cloud non trovato.</b><span> Apri l’app, fai login/sync e poi rientra qui.</span></div>';logErr('missing-auth',{householdId:!!s.householdId,token:!!s.token});state.all=[];state.filtered=[];render();return;}const limit=1000;const endpoints=[`${apiBase()}/ai/server-brain?householdId=${encodeURIComponent(s.householdId)}&limit=${limit}`,`/api/ai/server-brain?householdId=${encodeURIComponent(s.householdId)}&limit=${limit}`];let last=null;for(const url of endpoints){try{const r=await fetchJson(url,{headers:{Authorization:'Bearer '+s.token}});last=r;if(r.ok&&r.data?.ok){state.brain=r.data;state.all=arr(r.data.products,1000);$('notice').className='notice ok';$('notice').innerHTML=`<span>✅</span><div><b>Cervello caricato.</b><span> ${state.all.length} prodotti letti. Ricerca precisa, modifica titolare, render AI ed elimina articolo pronti.</span></div>`;applyFilter();return;}logErr('server-brain-fetch-failed',{url,status:r.status,body:r.data});}catch(e){logErr('server-brain-fetch-error',{url,error:e.message||String(e)});}}$('notice').className='notice bad';$('notice').innerHTML='<span>⚠️</span><div><b>Non sono riuscito a leggere il cervello server.</b><span> Controlla login, endpoint e token dalla Diagnosi AI.</span></div>';state.brain=last?.data||null;state.all=[];state.filtered=[];render();}
 
-  async function refreshVirtualRender(background='transparent'){
+  async function refreshVirtualRender(background='transparent', opts={}){
     const s=getSettings();const p=currentProduct();if(!p){alert('Seleziona un prodotto');return;}
     const ownerToken=getOwnerToken();
-    const endpoints=[`${apiBase()}/ai/server-brain/render?householdId=${encodeURIComponent(s.householdId)}&key=${encodeURIComponent(p.key)}&background=${encodeURIComponent(background)}`,`/api/ai/server-brain/render?householdId=${encodeURIComponent(s.householdId)}&key=${encodeURIComponent(p.key)}&background=${encodeURIComponent(background)}`];
-    for(const url of endpoints){try{const headers={Authorization:'Bearer '+s.token};if(ownerToken)headers['X-Owner-Token']=ownerToken;const r=await fetchJson(url,{headers});if(r.ok&&r.data?.ok){p.fields.virtualRenderV2872=r.data.render;p.fields.humanReasoningV2872=r.data.reasoning;p.fields.virtualRenderV2871=r.data.render;p.fields.humanReasoningV2871=r.data.reasoning;p.fields.virtualRenderV2870=r.data.render;p.fields.humanReasoningV2870=r.data.reasoning;p.fields.virtualRenderV2868=r.data.render;p.fields.humanReasoningV2868=r.data.reasoning;p.fields.virtualRenderV2867=r.data.render;p.fields.humanReasoningV2867=r.data.reasoning;renderDetail();$('notice').className='notice ok';$('notice').innerHTML='<span>🧊</span><div><b>Render aggiornato.</b><span> Il gemello virtuale usa forma, colori, etichetta e dati attuali del cervello.</span></div>';return;}logErr('render-fetch-failed',{url,status:r.status,body:r.data});}catch(e){logErr('render-fetch-error',{url,error:e.message||String(e)});}}
-    alert('Render non generato. Copia errori e mandameli.');
+    const retry=opts&&opts.retry?'1':'0';
+    const stamp=Date.now();
+    const endpoints=[`${apiBase()}/ai/server-brain/render?householdId=${encodeURIComponent(s.householdId)}&key=${encodeURIComponent(p.key)}&background=${encodeURIComponent(background)}&retry=${retry}&ts=${stamp}`,`/api/ai/server-brain/render?householdId=${encodeURIComponent(s.householdId)}&key=${encodeURIComponent(p.key)}&background=${encodeURIComponent(background)}&retry=${retry}&ts=${stamp}`];
+    for(const url of endpoints){try{const headers={Authorization:'Bearer '+s.token};if(ownerToken)headers['X-Owner-Token']=ownerToken;const r=await fetchJson(url,{headers,cache:'no-store'});if(r.ok&&r.data?.ok){p.fields.virtualRenderV2872=r.data.render;p.fields.humanReasoningV2872=r.data.reasoning;p.fields.virtualRenderV2871=r.data.render;p.fields.humanReasoningV2871=r.data.reasoning;p.fields.virtualRenderV2870=r.data.render;p.fields.humanReasoningV2870=r.data.reasoning;p.fields.virtualRenderV2868=r.data.render;p.fields.humanReasoningV2868=r.data.reasoning;p.fields.virtualRenderV2867=r.data.render;p.fields.humanReasoningV2867=r.data.reasoning;renderDetail();$('notice').className='notice ok';$('notice').innerHTML=`<span>🧊</span><div><b>${opts&&opts.retry?'Render rigenerato.':'Render aggiornato.'}</b><span> Il gemello virtuale usa forma, colori, etichetta e dati attuali del cervello.</span></div>`;return;}logErr('render-fetch-failed',{url,status:r.status,body:r.data,retry});}catch(e){logErr('render-fetch-error',{url,error:e.message||String(e),retry});}}
+    alert(opts&&opts.retry?'Rigenerazione render non riuscita. Copia errori e mandameli.':'Render non generato. Copia errori e mandameli.');
   }
   async function deleteBrainProduct(){
     const s=getSettings();const p=currentProduct();if(!p){alert('Seleziona un prodotto');return;}
@@ -361,6 +394,14 @@
     const endpoints=[`${apiBase()}/ai/server-brain/delete`,`/api/ai/server-brain/delete`];
     for(const url of endpoints){try{const headers={'Content-Type':'application/json',Authorization:'Bearer '+s.token};if(ownerToken) headers['X-Owner-Token']=ownerToken;const r=await fetchJson(url,{method:'POST',headers,body:JSON.stringify(payload)});if(r.ok&&r.data?.ok){$('notice').className='notice ok';$('notice').innerHTML=`<span>🗑️</span><div><b>Articolo eliminato dal cervello.</b><span> ${esc(name)} rimosso dalla memoria server.</span></div>`;state.selectedKey='';await load();return;}logErr('brain-delete-failed',{url,status:r.status,body:r.data});}catch(e){logErr('brain-delete-error',{url,error:e.message||String(e)});}}
     alert('Eliminazione non riuscita. Copia errori e mandameli.');
+  }
+
+  async function deletePhotoFromBrain(photoId){
+    const p=currentProduct();
+    if(!p||!photoId){alert('Foto non trovata');return;}
+    const ok=confirm('Vuoi eliminare questa foto dal cervello server? Se era sbagliata verrà rimossa dalla cartella articolo.');
+    if(!ok) return;
+    await saveOwnerUpdate({deletePhotoId:photoId},'Foto eliminata dal cervello ✅');
   }
 
   async function saveOwnerUpdate(updates,msg){const s=getSettings();const p=currentProduct();if(!p){alert('Seleziona un prodotto');return;}const ownerToken=getOwnerToken();const payload={householdId:s.householdId,key:p.key,updates,ownerToken};const endpoints=[`${apiBase()}/ai/server-brain/update`,`/api/ai/server-brain/update`];for(const url of endpoints){try{const headers={'Content-Type':'application/json',Authorization:'Bearer '+s.token};if(ownerToken) headers['X-Owner-Token']=ownerToken;const r=await fetchJson(url,{method:'POST',headers,body:JSON.stringify(payload)});if(r.ok&&r.data?.ok){$('notice').className='notice ok';$('notice').innerHTML=`<span>✅</span><div><b>${esc(msg||'Aggiornato')}</b><span> Rileggo la memoria server…</span></div>`;const keep=p.key;await load();state.selectedKey=keep;applyFilter();return;}logErr('owner-update-failed',{url,status:r.status,body:r.data});}catch(e){logErr('owner-update-error',{url,error:e.message||String(e)});}}alert('Salvataggio non riuscito. Copia errori e mandameli.');render();}
