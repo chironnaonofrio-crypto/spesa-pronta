@@ -9017,7 +9017,7 @@ try{ v2879GenerateRealPixelRender=v30rrGenerate; }catch(_){ }
 
 
 // =============================================================
-// V30.1 GOOGLE CSE RENDER FIX
+// V30.2 GOOGLE CSE FORCE BUILD
 // - legge anche GOOGLE_CX
 // - fa più query intelligenti
 // - mostra errori Google invece di "non trovato" generico
@@ -9077,7 +9077,7 @@ async function v3010GoogleSearchQuery(q='', opts={}){
 async function v3010GoogleCseTest(q='Dexal Candeggina Delicata Maxi'){
   const env=v3010GoogleEnv();
   const res=await v3010GoogleSearchQuery(q,{num:5,timeoutMs:9000});
-  return {ok:!!res.ok,version:'V30.1',configured:{apiKey:!!env.apiKey,cx:!!env.cx,country:env.country,language:env.language},query:q,totalResults:res.totalResults||'0',count:Array.isArray(res.items)?res.items.length:0,error:res.error||null,message:res.message||null,items:(res.items||[]).slice(0,5).map(it=>({title:it.title||'',link:it.link||'',displayLink:it.displayLink||'',contextLink:it.image?.contextLink||''}))};
+  return {ok:!!res.ok,version:'V30.2',configured:{apiKey:!!env.apiKey,cx:!!env.cx,country:env.country,language:env.language},query:q,totalResults:res.totalResults||'0',count:Array.isArray(res.items)?res.items.length:0,error:res.error||null,message:res.message||null,items:(res.items||[]).slice(0,5).map(it=>({title:it.title||'',link:it.link||'',displayLink:it.displayLink||'',contextLink:it.image?.contextLink||''}))};
 }
 async function v3010GoogleCandidates(rec={}){
   const out=[];
@@ -9122,9 +9122,9 @@ async function v3010FindReferenceCandidates(rec={},opts={}){
 async function v3010SearchAndBuildOfficialRender(key='',opts={}){
   ensureDbShape();
   const rec=db.assistantBrain?.globalProductMemory?.products?.[key];
-  if(!rec) return {ok:false,version:'V30.1',error:'product_not_found'};
+  if(!rec) return {ok:false,version:'V30.2',error:'product_not_found'};
   const cached=rec.objectFolder?.officialRenderV3000||rec.officialRenderV3000;
-  if(cached&&cached.transparentDataUrl&&!opts.force) return {ok:true,version:'V30.1',mode:'cached_official_render',officialRender:cached,candidates:rec.objectFolder?.referenceCandidatesV3000||[],debug:{cached:true}};
+  if(cached&&cached.transparentDataUrl&&!opts.force) return {ok:true,version:'V30.2',mode:'cached_official_render',officialRender:cached,candidates:rec.objectFolder?.referenceCandidatesV3000||[],debug:{cached:true}};
   const candidates=await v3010FindReferenceCandidates(rec,opts);
   const env=v3010GoogleEnv();
   let official=null,used=null,lastError=null;
@@ -9144,23 +9144,27 @@ async function v3010SearchAndBuildOfficialRender(key='',opts={}){
   if(!official){
     const testQuery=v3010QueryVariants(rec)[0]||v3000Query(rec);
     const googleTest=await v3010GoogleSearchQuery(testQuery,{num:3,timeoutMs:9000});
-    return {ok:false,version:'V30.1',error:'reference_render_not_found',message:candidates.length?'Ho trovato candidate ma non sono riuscito a scaricare/pulire l’immagine. Prova Importa URL da Google Immagini.':'Nessuna reference trovata. Controlla GOOGLE_API_KEY/GOOGLE_CSE_ID e siti del motore, oppure incolla URL immagine.',configured:{googleCse:env.configured,apiKey:!!env.apiKey,cx:!!env.cx},googleTest:{ok:googleTest.ok,error:googleTest.error,message:googleTest.message,totalResults:googleTest.totalResults,count:(googleTest.items||[]).length,query:testQuery},lastError,candidates:candidates.slice(0,8)};
+    return {ok:false,version:'V30.2',error:'reference_render_not_found',message:candidates.length?'Ho trovato candidate ma non sono riuscito a scaricare/pulire l’immagine. Prova Importa URL da Google Immagini.':'Nessuna reference trovata. Controlla GOOGLE_API_KEY/GOOGLE_CSE_ID e siti del motore, oppure incolla URL immagine.',configured:{googleCse:env.configured,apiKey:!!env.apiKey,cx:!!env.cx},googleTest:{ok:googleTest.ok,error:googleTest.error,message:googleTest.message,totalResults:googleTest.totalResults,count:(googleTest.items||[]).length,query:testQuery},lastError,candidates:candidates.slice(0,8)};
   }
   official.usedCandidate=used?{imageUrl:used.imageUrl,title:used.title,sourceLabel:used.sourceLabel,score:used.score}:null;
   official.qualityScore=Math.max(60,Math.min(98,(used?.score||0)+36));
   official.quality=Object.assign({},official.quality||{},{level:'official_reference_render_v301',score:official.qualityScore,message:'Render creato da reference reale trovata online/API e pulita dal server'});
   v3000SaveOfficialRender(rec,official,candidates);
   try{ updateGlobalLearningAudit({type:'v3010-official-render-created',key,productName:rec.productName||'',brand:rec.brand||'',source:official.sourceLabel,score:official.qualityScore}); }catch(_){ }
-  return {ok:true,version:'V30.1',mode:'reference_cleaned_official_render',officialRender:official,candidates:rec.objectFolder?.referenceCandidatesV3000||[],debug:{googleCse:env.configured,used:official.usedCandidate}};
+  return {ok:true,version:'V30.2',mode:'reference_cleaned_official_render',officialRender:official,candidates:rec.objectFolder?.referenceCandidatesV3000||[],debug:{googleCse:env.configured,used:official.usedCandidate}};
 }
 try{ v3000GoogleCandidates=v3010GoogleCandidates; v3000FindReferenceCandidates=v3010FindReferenceCandidates; v3000SearchAndBuildOfficialRender=v3010SearchAndBuildOfficialRender; }catch(_){ }
 (function(){
   try{
     const prev=publicServerBrainV2840;
     if(typeof prev==='function'&&!global.__v3010BrainWrapped){
-      publicServerBrainV2840=function(opts={}){ const out=prev.call(this,opts)||{}; try{ const env=v3010GoogleEnv(); out.version='V30.1 GOOGLE CSE RENDER FIX'; out.reasoningBusV3010={active:true,googleCse:{configured:env.configured,apiKey:!!env.apiKey,cx:!!env.cx,country:env.country,language:env.language},testEndpoint:'/api/ai/google-cse-test?q=Dexal%20Candeggina'}; }catch(_){} return out; };
+      publicServerBrainV2840=function(opts={}){ const out=prev.call(this,opts)||{}; try{ const env=v3010GoogleEnv(); out.version='V30.2 GOOGLE CSE FORCE BUILD'; out.reasoningBusV3010={active:true,googleCse:{configured:env.configured,apiKey:!!env.apiKey,cx:!!env.cx,country:env.country,language:env.language},testEndpoint:'/api/ai/google-cse-test?q=Dexal%20Candeggina'}; }catch(_){} return out; };
       global.__v3010BrainWrapped=true;
     }
   }catch(_){ }
-  console.log('[Spesa Pronta] V30.1 Google CSE Render Fix active');
+  console.log('[Spesa Pronta] V30.2 Google CSE Force Build active');
 })();
+
+
+// V30.2 FORCE NEW ZIP marker
+(function(){ try{ global.__SPESA_PRONTA_BUILD_ID='V30.2-FORCE-NEW-ZIP-3020-1781211503'; console.log('[Spesa Pronta] V30.2-FORCE-NEW-ZIP-3020-1781211503 active'); }catch(_){} })();

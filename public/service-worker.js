@@ -1,4 +1,4 @@
-const CACHE_NAME='spesa-pronta-v30-reference-render-engine';
+const CACHE_NAME='spesa-pronta-v30-2-google-cse-force-new';
 const ASSETS=['./','./index.html','./assets/styles.css?v=3000','./assets/app.v27-48-premium-mega-vision.js?v=3000','./assets/app.js?v=3000','./assets/vision-seed-memory.json','./clear-cache.html','./debug.html','./server-brain.html?v=3000'];
 self.addEventListener('install',event=>{self.skipWaiting();event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(ASSETS)).catch(()=>{}));});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))));self.clients.claim();});
