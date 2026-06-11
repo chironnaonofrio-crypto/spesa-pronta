@@ -198,7 +198,7 @@
           <h1>Cervello Server</h1>
           <p class="subtitle">Memoria prodotti · foto reali · valori titolare · ricerca precisa</p>
         </div>
-        <span class="build" id="buildBadge">V29.1</span>
+        <span class="build" id="buildBadge">V29.2</span>
       </div>
     </header>
 
@@ -391,12 +391,14 @@
     ];
     const evidence=pills(reason.identityEvidence||[],'Nessuna prova identità salvata');
     const synthNote=isDet?'flacone/pulizia':(isDark?'bottiglia + contenuto scuro':isWater?'acqua/bottiglia chiara':'prodotto da confermare');
-    return `<div class="section"><h3>🧊 Render AI · V29.1 PRO MASTER SAFE</h3>
+    return `<div class="section"><h3>🧊 Render AI · V29.2 PRO 360 INTELLIGENTE</h3>
       <div class="render80Actions"><button class="primary" id="btnRealPixelRender">Rigenera render PRO</button><button class="ghost" id="btnOnlineReference">Cerca reference online/API</button><button class="ghost" id="btnOpenRenderImage">Apri grande</button><button class="ghost" data-open-photos="1">Apri tab Foto</button></div>
-      <div class="render80Info">V29.1: render studio sicuro, reference online con fallback dataURL e pulsante rigenera realmente collegato al server. Se il crop non è perfetto, il server non deve rompersi: crea comunque una card studio utile e leggibile.</div>
+      <div class="render80Info">V29.2: il server pulisce il soggetto usando una sola componente principale, rileva la zona etichetta dai pixel, crea un render 360° stimato e cerca solo reference online reali. Se mancano foto lato/retro il 360 resta stimato e te lo segnala.</div>
       <div class="render80Stack">
         <div class="render80Card"><h4><span>Render studio da pixel</span><small id="realPixelRenderStatus">pronto</small></h4><div class="render80Stage"><img class="render80Img realPhotoImg" id="realPixelRenderImg" src="${esc(openSrc)}" data-fallback-src="${esc(fallback)}" alt="Render studio da pixel" loading="eager" decoding="async"><span class="render80Loading" id="realPixelRenderLoading" style="display:none">genero…</span></div><div class="render80Facts" id="realPixelRenderFacts"><span class="warn">foto reale pronta</span><span>${esc(real.kind)}</span></div></div>
         <div class="render80Card"><h4><span>Gemello semantico fotorealistico</span><small id="semanticTwinStatus">foto + ragionamento</small></h4><div class="semanticPhotoTwin"><img class="realPhotoImg" id="semanticTwinImg" src="${esc(openSrc)}" data-fallback-src="${esc(fallback)}" alt="Gemello semantico fotorealistico" loading="eager" decoding="async"><div class="semanticOverlay"></div></div><div class="render80Facts" id="semanticTwinFacts"><span>${esc(synthNote)}</span><span>texture reale</span><span>${esc(cat||'categoria')}</span></div><div class="semanticMini"><div class="semanticMiniTitle">Bozza semantica secondaria</div><div class="semanticMiniShape" style="--label:${label};--label2:${label2}">${esc(brand||'Marca')} · ${esc(name||'Prodotto')} · ${esc(fmt||'')}</div></div></div>
+        <div class="render80Card"><h4><span>Etichetta rilevata dai pixel</span><small id="labelCropStatus">in attesa</small></h4><div class="render80Stage"><img class="render80Img" id="labelCropImg" src="${esc(openSrc)}" data-fallback-src="${esc(fallback)}" alt="Etichetta rilevata" loading="lazy" decoding="async"></div><div class="render80Facts" id="labelCropFacts"><span>label box umano</span><span>OCR-ready</span></div></div>
+        <div class="render80Card"><h4><span>Render 360° PRO</span><small id="render360Status">stimato</small></h4><div class="render80Stage"><img class="render80Img" id="render360Img" src="${esc(openSrc)}" data-fallback-src="${esc(fallback)}" alt="Render 360 PRO" loading="lazy" decoding="async"></div><div class="render80Facts" id="render360Facts"><span>frontale reale</span><span>lato/retro stimati</span><span>aggiungi foto lato/retro per 360 reale</span></div></div>
         <div class="render80Card reference80"><h4><span>Reference online/API</span><small id="onlineReferenceStatus">non cercata</small></h4><div class="render80Stage"><img class="render80Img" id="onlineReferenceImg" src="${esc(openSrc)}" data-fallback-src="${esc(fallback)}" alt="Reference online/API" loading="lazy" decoding="async"></div><div class="render80Facts" id="onlineReferenceFacts"><span>usa Open Facts/API quando disponibili</span><span>zero token OpenAI</span></div></div>
       </div>
       <div class="render80Data section"><h3>📌 Dati rapidi render</h3><div class="kv">${boxes.map(x=>row(x[0],x[1])).join('')}</div><div class="renderActions"><button class="ghost" id="btnRenderTransparent">Sfondo trasparente</button><button class="ghost" id="btnRenderWhite">Sfondo bianco</button><button class="ghost" id="btnCopyRenderSvg">Copia SVG</button></div></div>
@@ -424,18 +426,25 @@
         const headers={Authorization:'Bearer '+s.token}; if(ownerToken) headers['X-Owner-Token']=ownerToken;
         const r=await fetchJson(url,{headers,cache:'no-store'});
         if(r.ok && r.data?.ok){
-          const rr=r.data.render||{}; const src=rr.studioDataUrl||rr.whiteDataUrl||rr.transparentDataUrl||rr.masterDataUrl||rr.masterUrl||'';
+          const rr=r.data.render||{}; const src=rr.whiteDataUrl||rr.transparentDataUrl||rr.studioDataUrl||rr.masterDataUrl||rr.masterUrl||'';
           if(src) img.src=src;
           const semantic=$('semanticTwinImg'), semStatus=$('semanticTwinStatus'), semFacts=$('semanticTwinFacts');
+          const labelImg=$('labelCropImg'), labelStatus=$('labelCropStatus'), labelFacts=$('labelCropFacts');
+          const view360=$('render360Img'), view360Status=$('render360Status'), view360Facts=$('render360Facts');
           const semSrc=rr.semanticDataUrl||rr.studioDataUrl||rr.whiteDataUrl||rr.transparentDataUrl||src;
           if(semantic && semSrc) semantic.src=semSrc;
-          if(semStatus) semStatus.textContent='analisi + card studio';
-          if(semFacts) semFacts.innerHTML=`<span>${esc(rr.quality?.level||'gemello pronto')}</span><span>pixel reali</span><span>card studio</span>`;
+          if(labelImg && rr.labelCropDataUrl) labelImg.src=rr.labelCropDataUrl;
+          if(view360 && rr.render360DataUrl) view360.src=rr.render360DataUrl;
+          if(semStatus) semStatus.textContent='analisi + 360';
+          if(semFacts) semFacts.innerHTML=`<span>${esc(rr.quality?.level||'gemello pronto')}</span><span>pixel reali</span><span>label box</span>`;
+          if(labelStatus) labelStatus.textContent=rr.labelBox?.confidence?('conf. '+rr.labelBox.confidence+'%'):'label';
+          if(labelFacts) labelFacts.innerHTML=`<span>etichetta rilevata</span><span>conf. ${esc(rr.labelBox?.confidence||rr.quality?.labelConfidence||'—')}</span><span>crop OCR-ready</span>`;
+          if(view360Status) view360Status.textContent=rr.render360DataUrl?'360 stimato':'foto';
+          if(view360Facts) view360Facts.innerHTML=`<span>frontale reale</span><span>lato/retro stimati</span><span>${rr.render360DataUrl?'board creato':'manca board'}</span>`;
           if(status) status.textContent=rr.quality?.level||r.data.mode||'ok';
           if(loading) loading.style.display='none';
           if(facts) facts.innerHTML=`<span class="ok">${esc(rr.quality?.message||'render reale generato')}</span><span>score ${esc(rr.quality?.score||'—')}</span><span>${esc(r.data.mode||'real_pixel')}</span>`;
-          p.fields.realPixelRenderV2900=r.data;
-          p.fields.realPixelRenderV2910=r.data;
+          p.fields.realPixelRenderV2920=r.data;
           p.fields.realPixelRenderV2900=r.data;
           p.fields.realPixelRenderV2880=r.data;
           return;
@@ -467,8 +476,6 @@
           if(src) img.src=src;
           if(status) status.textContent=ref.source||'trovata';
           if(facts) facts.innerHTML=`<span class="ok">${esc(ref.productName||ref.product_name||'reference trovata')}</span><span>${esc(ref.brand||ref.brands||'')}</span><span>${esc(ref.source||'Open Facts')}</span>`;
-          p.fields.onlineReferenceV2900=r.data;
-          p.fields.onlineReferenceV2910=r.data;
           p.fields.onlineReferenceV2900=r.data;
           p.fields.onlineReferenceV2880=r.data;
           return;
@@ -507,7 +514,7 @@
     if(state.tab==='render'){ setTimeout(()=>loadRealPixelRender(false),90); setTimeout(()=>loadOnlineReference(false),160); }
     d.querySelector('#btnRenderTransparent')?.addEventListener('click',()=>refreshVirtualRender('transparent'));
     d.querySelector('#btnRenderWhite')?.addEventListener('click',()=>refreshVirtualRender('white'));
-    d.querySelector('#btnOpenRenderImage')?.addEventListener('click',()=>{const r=f.virtualRenderV2872||f.virtualRenderV2871||f.virtualRenderV2870||f.virtualRenderV2868||f.virtualRenderV2867||{}; const img=d.querySelector('#realPixelRenderImg')||d.querySelector('#semanticTwinImg')||d.querySelector('.realPhotoImg'); const src=(img&&img.src)||(p.fields.realPixelRenderV2900?.render?.studioDataUrl)||(p.fields.realPixelRenderV2900?.render?.whiteDataUrl)||r.svgDataUri||''; const w=window.open('about:blank','_blank'); if(w){w.document.write('<title>Render AI</title><body style="margin:0;background:#f4f8ff;display:grid;place-items:center;min-height:100vh"><img style="max-width:96vw;max-height:96vh;object-fit:contain;border-radius:22px" src="'+String(src).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"></body>');} });
+    d.querySelector('#btnOpenRenderImage')?.addEventListener('click',()=>{const r=f.virtualRenderV2872||f.virtualRenderV2871||f.virtualRenderV2870||f.virtualRenderV2868||f.virtualRenderV2867||{}; const img=d.querySelector('#realPixelRenderImg')||d.querySelector('#render360Img')||d.querySelector('#semanticTwinImg')||d.querySelector('.realPhotoImg'); const src=(img&&img.src)||(p.fields.realPixelRenderV2920?.render?.render360DataUrl)||(p.fields.realPixelRenderV2920?.render?.studioDataUrl)||(p.fields.realPixelRenderV2900?.render?.studioDataUrl)||(p.fields.realPixelRenderV2900?.render?.whiteDataUrl)||r.svgDataUri||''; const w=window.open('about:blank','_blank'); if(w){w.document.write('<title>Render AI</title><body style="margin:0;background:#f4f8ff;display:grid;place-items:center;min-height:100vh"><img style="max-width:96vw;max-height:96vh;object-fit:contain;border-radius:22px" src="'+String(src).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"></body>');} });
     d.querySelector('#btnCopyRenderSvg')?.addEventListener('click',()=>copyText((f.virtualRenderV2872||f.virtualRenderV2871||f.virtualRenderV2870||f.virtualRenderV2868||f.virtualRenderV2867)?.svg||JSON.stringify(f.virtualRenderV2872||f.virtualRenderV2871||f.virtualRenderV2870||f.virtualRenderV2868||f.virtualRenderV2867||{},null,2),'Render SVG copiato ✅'));
   }
   function isOwnerPhotoDataUrl(s){return /^data:image\/(png|jpe?g|webp);base64,/i.test(String(s||''));}
