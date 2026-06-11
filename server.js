@@ -7320,3 +7320,215 @@ function v2867RenderBrainProduct(key='', opts={}){
   try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2867PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this); s.version='V28.67'; s.brain=Object.assign({},s.brain||{},{version:'V28.67',humanReasoningBus:'active',ocrSpaceRouter:'multi-crop enhanced ROI + quality gate',virtualProductRender:'active in server brain',ownerDelete:'active',engineBridge:'VisionAI + Pixel/OCR + Memory + OpenFacts pass through final truth bus'}); return s; }; global.__v2867PreflightWrapped=true; } }catch(_){ }
   console.log('[Spesa Pronta] V28.67 PRO Human Reasoning Bus + OCR.space Router + Virtual Render + Owner Delete active');
 })();
+
+// =============================================================
+// V28.68 PRO Realistic Product Render + Human Pixel Understanding
+// Obiettivo: il render non deve sembrare un disegnino generico.
+// Deve mostrare forma, proporzioni, colori, etichetta e contenuto
+// come il server li ha realmente interpretati dalla memoria prodotto.
+// =============================================================
+const V2868_VERSION = 'V28.68';
+function v2868Clean(v='', max=180){ return String(v==null?'':v).replace(/[\u0000-\u001f\u007f]+/g,' ').replace(/\s+/g,' ').trim().slice(0,max); }
+function v2868Norm(v=''){ return String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[’'`]/g,' ').replace(/[^a-z0-9]+/g,' ').trim(); }
+function v2868Xml(v=''){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').slice(0,240); }
+function v2868List(...vals){
+  const out=[]; const push=x=>{ if(x==null) return; if(Array.isArray(x)) return x.forEach(push); if(typeof x==='object') return; String(x).split(/\n|\s*[;,]\s*/).forEach(y=>{ const c=v2868Clean(y,180); if(c) out.push(c); }); };
+  vals.forEach(push); return [...new Set(out)].slice(0,160);
+}
+const v2868PrevRenderSpec = (typeof v2867RenderSpec==='function') ? v2867RenderSpec : null;
+const v2868PrevHumanReasoning = (typeof v2867BuildHumanReasoning==='function') ? v2867BuildHumanReasoning : null;
+function v2868Color(word='', fallback='#e5e7eb'){
+  const n=v2868Norm(word);
+  if(/turchese|turquoise|teal|acqua marina|verde acqua/.test(n)) return '#22c7bd';
+  if(/celeste|ciano|cyan|azzurro chiaro|sky/.test(n)) return '#7dd3fc';
+  if(/blu scuro|navy|blue dark|dark blue/.test(n)) return '#123a86';
+  if(/blu|blue|azzurro/.test(n)) return '#2563eb';
+  if(/giallo|yellow|oro|gold|limone/.test(n)) return '#facc15';
+  if(/rosso|red/.test(n)) return '#ef4444';
+  if(/rosa|pink|salmon|salmone/.test(n)) return '#f4a7ad';
+  if(/arancio|orange/.test(n)) return '#fb923c';
+  if(/verde|green/.test(n)) return '#10b981';
+  if(/nero|black|scuro|dark|marrone|brown/.test(n)) return '#161616';
+  if(/bianco|white|chiaro|trasparente|clear/.test(n)) return '#f8fafc';
+  if(/grigio|grey|gray|silver/.test(n)) return '#94a3b8';
+  return fallback;
+}
+function v2868Evidence(record={}, card={}, extra={}){
+  return [record.productName,record.brand,record.format,record.category,record.productType,record.packageType,record.packaging,record.visualSignature,card?.identity?.productName,card?.identity?.brand,card?.identity?.format,card?.classification?.category,card?.visualAppearance?.productType,card?.visualAppearance?.packageType,card?.visualAppearance?.visualSignature,extra.text,extra.ocrText,...v2868List(record.detectedText,record.visibleEvidence,record.evidenceTokens,card?.detectedText,card?.visibleEvidence,card?.evidenceTokens,record.objectFolder?.photos?.flatMap?.(p=>[p.visualSignature,(p.colors||[]).join(' '),(p.detectedText||[]).join(' '),(p.visibleEvidence||[]).join(' ')])||[])].filter(Boolean).join(' ');
+}
+function v2868BestVisualSample(record={}){
+  const f=record.objectFolder||{};
+  const samples=[record.visualFeatures,record.memoryCard?.visualFeatures,record.deepVisualMemoryV2861?.sample,record.freeVisualMemoryV2860?.sample];
+  (f.visualFeatureSamples||[]).forEach(s=>samples.push(s.features||s.visualFeatures||s));
+  const s=samples.find(x=>x&&typeof x==='object')||{};
+  const deep=s.visualDeepV2861||s.deepVisualV2861||{};
+  const bbox=s.objectBBoxV2861||deep.bbox||{};
+  const aspect = Number(bbox.aspect || s.objectAspect || ((s.objectHeight&&s.objectWidth)?Number(s.objectHeight)/Math.max(1,Number(s.objectWidth)):0)) || 0;
+  return {raw:s,deep,bbox,aspect,coverage:Number(s.objectCoverage||bbox.area||0)||0};
+}
+function v2868ProductFamily(ev='', shape=''){
+  const n=v2868Norm(ev);
+  if(/dexal|candeggina|detersivo|detergente|bucato|laundry|cleaning|ammorbidente|lavatrice/.test(n)) return 'detergent_jug';
+  if(/sant\s*anna|santanna|acqua naturale|acqua minerale|water/.test(n)) return 'water_bottle';
+  if(/\bcola\b|lemon\s*taste|soft\s*drinks|bibita cola/.test(n)) return 'cola_bottle';
+  if(/pesto|salsa|condimento|sugo|spread/.test(n)) return 'jar';
+  if(/box|scatola|cartone|cereali|pasta|riso|farina/.test(n)) return 'box';
+  if(/busta|sacchetto|pouch|bag/.test(n)) return 'pouch';
+  if(/bottle|bottiglia|bevanda|drink|liquido/.test(n) || shape==='bottle') return 'generic_bottle';
+  return shape||'package';
+}
+function v2868DominantPalette(card={}, record={}, family='', ev=''){
+  const colors=v2868List(card?.visualAppearance?.colors,record.colors,record.memoryCard?.visualAppearance?.colors,record.objectFolder?.representativePhoto?.colors).slice(0,12);
+  let body='#f8fafc', body2='#dbeafe', label='#1d4ed8', label2='#facc15', cap='#facc15', liquid='#161616', liquidOpacity='.88', content='non visibile';
+  const n=v2868Norm(ev);
+  if(colors.length){ body=v2868Color(colors[0],body); label=v2868Color(colors[1]||colors[0],label); label2=v2868Color(colors[2]||colors[1]||'bianco',label2); cap=v2868Color(colors[3]||colors[2]||colors[1]||'',cap); }
+  if(family==='cola_bottle'){
+    body='#dbeafe'; body2='#f8fbff'; label='#163b8f'; label2='#facc15'; cap='#f3ca18'; liquid='#15110d'; liquidOpacity='.90'; content='liquido scuro';
+    if(/blues/.test(n)){ label='#153b8b'; label2='#f3c51b'; }
+  }
+  if(family==='water_bottle'){
+    body='#e0f2fe'; body2='#f8fbff'; label='#38bdf8'; label2='#ffffff'; cap='#93c5fd'; liquid='#7dd3fc'; liquidOpacity='.28'; content='liquido chiaro';
+    if(/sant\s*anna|santanna/.test(n)){ label='#64d6e6'; label2='#ef4444'; cap='#9ed7ff'; }
+  }
+  if(family==='detergent_jug'){
+    body='#22c7bd'; body2='#7dd3fc'; label='#f3a6ad'; label2='#ffffff'; cap='#2563eb'; liquid='#ffffff'; liquidOpacity='.0'; content='non visibile';
+  }
+  if(family==='jar') { body='#f8fafc'; body2='#ecfccb'; label='#16a34a'; label2='#fde68a'; cap='#14532d'; liquid='#4d7c0f'; liquidOpacity='.55'; content='cremoso/solido'; }
+  return {colors,body,body2,label,label2,cap,liquid,liquidOpacity,content};
+}
+function v2868SplitText(txt='', max=18, lines=2){
+  const words=v2868Clean(txt,90).split(/\s+/).filter(Boolean); const out=[''];
+  for(const w of words){ const i=out.length-1; if((out[i]+' '+w).trim().length<=max) out[i]=(out[i]+' '+w).trim(); else if(out.length<lines) out.push(w); else out[i]=(out[i]+' '+w).trim(); }
+  return out.filter(Boolean).map(x=>x.slice(0,max+8));
+}
+function v2868RenderSpec(card={}, record={}){
+  const base=v2868PrevRenderSpec?v2868PrevRenderSpec(card,record):{};
+  const ev=v2868Evidence(record,card);
+  const shape=base.shape||((typeof v2867ProductShape==='function')?v2867ProductShape(card,record):'package');
+  const family=v2868ProductFamily(ev, shape);
+  const palette=v2868DominantPalette(card,record,family,ev);
+  const sample=v2868BestVisualSample(record);
+  const name=v2868Clean(card?.identity?.productName||record.productName||base.name||'Prodotto',70);
+  const brand=v2868Clean(card?.identity?.brand||record.brand||base.brand||'',48);
+  const format=v2868Clean(card?.identity?.format||record.format||base.format||'',24);
+  const category=v2868Clean(card?.classification?.category||record.category||base.category||'',44);
+  const aspect=sample.aspect || (family==='detergent_jug'?1.55:(family.includes('bottle')?3.15:1.75));
+  const photoCount=Number(record.objectFolder?.photos?.length||card?.objectFolder?.photoCount||0);
+  const hasRealPhoto=!!(record.objectFolder?.representativePhoto?.dataUrl||record.objectFolder?.representativePhoto?.externalUrl||card?.objectFolder?.hasRealProfilePhoto);
+  const visualFacts=[];
+  if(family.includes('bottle')) visualFacts.push('profilo verticale da bottiglia');
+  if(family==='detergent_jug') visualFacts.push('flacone con manico laterale');
+  if(palette.content) visualFacts.push('contenuto: '+palette.content);
+  if(palette.colors.length) visualFacts.push('palette da memoria: '+palette.colors.slice(0,6).join(', '));
+  if(sample.aspect) visualFacts.push('proporzione oggetto: '+Number(sample.aspect).toFixed(2));
+  if(hasRealPhoto) visualFacts.push('derivato da foto reale salvata');
+  return Object.assign({},base,{version:V2868_VERSION,engine:'realistic_virtual_product_render_v2868',family,shape:family==='generic_bottle'?'bottle':family,bodyColor:palette.body,secondaryBodyColor:palette.body2,labelColor:palette.label,labelAccentColor:palette.label2,capColor:palette.cap,content:palette.content,contentColor:palette.liquid,contentOpacity:palette.liquidOpacity,name,brand,format,category,aspect,photoCount,hasRealPhoto,renderQuality:{level:hasRealPhoto&&photoCount>=2?'alta':hasRealPhoto?'media':'stimata',photoAware:hasRealPhoto,visualSamples:Number(record.objectFolder?.visualFeatureSamples?.length||0),pixelAspect:sample.aspect||null,objectCoverage:sample.coverage||null},visualFacts,source:'server_memory_plus_real_photo_pixel_clues_v2868',colors:palette.colors});
+}
+function v2868LabelLines(spec={}){
+  const brand=v2868Clean(spec.brand||'',28), name=v2868Clean(spec.name||'',56), fmt=v2868Clean(spec.format||'',20);
+  let main=brand||name.split(' ')[0]||'Prodotto';
+  let second=brand?name.replace(new RegExp('^'+brand.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\s*','i'),''):name;
+  if(spec.family==='cola_bottle'){ main=brand||'Blues'; second=/lemon/i.test(name)?'Cola · Lemon Taste':(name||'Cola'); }
+  if(spec.family==='water_bottle'){ main=brand||"Sant'Anna"; second=/acqua/i.test(name)?name:'Acqua naturale'; }
+  if(spec.family==='detergent_jug'){ main=brand||'Dexal'; second=name.replace(new RegExp('^'+(brand||'Dexal').replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\s*','i'),'')||'Candeggina delicata'; }
+  const small=v2868SplitText(second,22,2);
+  return {main:v2868Clean(main,24),small,format:fmt};
+}
+function v2868BottleSvg(spec={}){
+  const l=v2868LabelLines(spec); const water=spec.family==='water_bottle'; const cola=spec.family==='cola_bottle';
+  const labelY=cola?455:430, labelH=cola?170:150;
+  const ridges=water?`<g opacity=".35" stroke="#7aa9c7" stroke-width="5" fill="none"><path d="M250 250 Q360 228 470 250"/><path d="M235 330 Q360 305 485 330"/><path d="M228 660 Q360 690 492 660"/><path d="M235 735 Q360 765 485 735"/></g>`:'';
+  const lemon=cola?`<circle cx="506" cy="503" r="28" fill="#facc15" opacity=".95"/><circle cx="520" cy="488" r="10" fill="#fff7ad" opacity=".8"/><path d="M520 486 L542 472" stroke="#123a86" stroke-width="5" stroke-linecap="round"/>`:'';
+  const brandCapsule=cola?`<rect x="306" y="468" width="108" height="38" rx="19" fill="#e7f2ff" opacity=".92"/><text x="360" y="493" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="23" font-weight="900" fill="#24539d">${v2868Xml(l.main)}</text>`:`<text x="360" y="480" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="40" font-weight="1000" fill="#ffffff">${v2868Xml(l.main)}</text>`;
+  const labelText=cola?`<text x="360" y="565" text-anchor="middle" font-family="Georgia,serif" font-size="92" font-style="italic" font-weight="900" fill="#ffffff" stroke="#08245a" stroke-width="2">Cola</text><text x="360" y="617" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="23" font-weight="1000" fill="#071b3b">${v2868Xml(l.small.join(' ').replace(/^cola\s*/i,'')||'LEMON TASTE')}</text>`:`${l.small.map((x,i)=>`<text x="360" y="${530+i*34}" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="${i?28:34}" font-weight="1000" fill="#07345d">${v2868Xml(x)}</text>`).join('')}<text x="360" y="615" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="24" font-weight="900" fill="#07345d">${v2868Xml(l.format)}</text>`;
+  return `<g filter="url(#shadow)">
+    <rect x="315" y="78" width="90" height="88" rx="18" fill="url(#capGrad)"/><g opacity=".28" stroke="#8a6d00" stroke-width="3">${[330,345,360,375,390].map(x=>`<path d="M${x} 86 L${x} 158"/>`).join('')}</g>
+    <path id="bottleBody" d="M296 150 Q298 215 266 265 Q228 326 224 420 L224 760 Q224 841 286 866 Q322 881 360 881 Q398 881 434 866 Q496 841 496 760 L496 420 Q492 326 454 265 Q422 215 424 150 Z" fill="url(#glassGrad)" stroke="#6f99b8" stroke-opacity=".38" stroke-width="8"/>
+    <clipPath id="bodyClip"><path d="M296 150 Q298 215 266 265 Q228 326 224 420 L224 760 Q224 841 286 866 Q322 881 360 881 Q398 881 434 866 Q496 841 496 760 L496 420 Q492 326 454 265 Q422 215 424 150 Z"/></clipPath>
+    <g clip-path="url(#bodyClip)"><rect x="220" y="${water?420:310}" width="280" height="555" fill="${spec.contentColor}" opacity="${spec.contentOpacity||'.7'}"/><path d="M220 ${water?430:320} Q360 ${water?408:296} 500 ${water?430:320}" fill="none" stroke="#ffffff" stroke-opacity=".35" stroke-width="14"/></g>
+    ${ridges}
+    <path d="M285 167 Q360 189 435 167" fill="none" stroke="#ffffff" stroke-opacity=".65" stroke-width="10"/>
+    <path d="M265 245 Q305 218 326 166" fill="none" stroke="#ffffff" stroke-opacity=".42" stroke-width="9" stroke-linecap="round"/>
+    <g transform="translate(0,0)"><path d="M232 ${labelY} Q360 ${labelY-38} 488 ${labelY} L488 ${labelY+labelH} Q360 ${labelY+labelH+40} 232 ${labelY+labelH} Z" fill="${spec.labelColor}"/><path d="M232 ${labelY} Q360 ${labelY-38} 488 ${labelY} L488 ${labelY+46} Q360 ${labelY+12} 232 ${labelY+46} Z" fill="${spec.labelAccentColor}" opacity=".96"/><path d="M232 ${labelY+labelH-48} Q360 ${labelY+labelH-12} 488 ${labelY+labelH-48} L488 ${labelY+labelH} Q360 ${labelY+labelH+40} 232 ${labelY+labelH} Z" fill="${spec.labelAccentColor}" opacity=".96"/>${brandCapsule}${labelText}${lemon}<path d="M238 ${labelY+10} Q360 ${labelY-24} 482 ${labelY+10}" fill="none" stroke="#ffffff" stroke-opacity=".40" stroke-width="7"/></g>
+    <ellipse cx="360" cy="886" rx="118" ry="22" fill="#08203e" opacity=".12"/>
+  </g>`;
+}
+function v2868DetergentSvg(spec={}){
+  const l=v2868LabelLines(spec);
+  const textLines=v2868SplitText(l.small.join(' '),21,3);
+  return `<g filter="url(#shadow)">
+    <rect x="294" y="72" width="132" height="78" rx="20" fill="url(#capGrad)"/><g opacity=".24" stroke="#07235c" stroke-width="4">${[310,330,350,370,390,410].map(x=>`<path d="M${x} 82 L${x} 140"/>`).join('')}</g>
+    <path fill-rule="evenodd" d="M230 160 Q232 112 280 112 L474 126 Q544 135 558 220 L600 746 Q608 838 516 867 L213 867 Q125 844 137 748 L176 285 Q182 202 230 160 Z M458 214 Q536 220 538 307 Q541 393 466 430 Q432 447 412 416 Q485 381 483 311 Q482 251 444 248 Z" fill="url(#jugGrad)" stroke="#0f766e" stroke-opacity=".28" stroke-width="9"/>
+    <path d="M458 214 Q536 220 538 307 Q541 393 466 430 Q432 447 412 416 Q485 381 483 311 Q482 251 444 248 Z" fill="#f7fbff" opacity=".88"/>
+    <path d="M192 215 Q250 185 342 187" stroke="#ffffff" stroke-opacity=".48" stroke-width="13" fill="none" stroke-linecap="round"/>
+    <path d="M188 452 L535 430 L512 635 Q386 696 184 650 Z" fill="${spec.labelColor}" rx="30"/>
+    <path d="M188 452 L535 430 L502 506 Q381 548 184 530 Z" fill="${spec.labelAccentColor}" opacity=".86"/>
+    <path d="M440 430 L535 430 L516 633 L465 654 Q492 558 440 430 Z" fill="#ef4444" opacity=".95"/>
+    <text x="360" y="505" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="54" font-weight="1000" fill="#ffffff" stroke="#b91c1c" stroke-width="1.6">${v2868Xml(l.main)}</text>
+    ${textLines.map((x,i)=>`<text x="360" y="${565+i*33}" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="${i?25:28}" font-weight="1000" fill="#072044">${v2868Xml(x)}</text>`).join('')}
+    <text x="360" y="668" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="30" font-weight="1000" fill="#061b32">${v2868Xml(l.format)}</text>
+    <path d="M180 770 Q330 835 535 770" fill="none" stroke="#0f766e" stroke-opacity=".22" stroke-width="10"/>
+    <ellipse cx="360" cy="888" rx="178" ry="25" fill="#08203e" opacity=".12"/>
+  </g>`;
+}
+function v2868GenericSvg(spec={}){
+  const l=v2868LabelLines(spec);
+  return `<g filter="url(#shadow)"><rect x="210" y="170" width="300" height="600" rx="42" fill="url(#boxGrad)" stroke="#0f3760" stroke-opacity=".18" stroke-width="8"/><rect x="240" y="350" width="240" height="190" rx="30" fill="${spec.labelColor}"/><path d="M240 350 L480 350 L438 540 L240 540 Z" fill="${spec.labelAccentColor}" opacity=".7"/><text x="360" y="425" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="42" font-weight="1000" fill="#ffffff">${v2868Xml(l.main)}</text>${l.small.map((x,i)=>`<text x="360" y="${475+i*34}" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="26" font-weight="900" fill="#08203e">${v2868Xml(x)}</text>`).join('')}<text x="360" y="582" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="24" font-weight="1000" fill="#08203e">${v2868Xml(l.format)}</text><ellipse cx="360" cy="796" rx="150" ry="24" fill="#08203e" opacity=".12"/></g>`;
+}
+function v2868VirtualSvg(spec={}, opts={}){
+  const bg=String(opts.background||'transparent').toLowerCase();
+  const bgRect=bg==='white'?`<rect width="720" height="960" rx="42" fill="#ffffff"/>`:`<rect width="720" height="960" rx="42" fill="rgba(255,255,255,0)"/>`;
+  const swatches=[spec.bodyColor,spec.labelColor,spec.labelAccentColor,spec.capColor,spec.contentColor].filter(Boolean).slice(0,5).map((c,i)=>`<circle cx="${70+i*34}" cy="88" r="13" fill="${c}" stroke="#ffffff" stroke-width="4"/>`).join('');
+  const obj=spec.family==='detergent_jug'?v2868DetergentSvg(spec):(spec.family==='cola_bottle'||spec.family==='water_bottle'||spec.family==='generic_bottle'||spec.shape==='bottle'?v2868BottleSvg(spec):v2868GenericSvg(spec));
+  const facts=(spec.visualFacts||[]).slice(0,3).map((x,i)=>`<text x="360" y="${905+i*22}" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="800" fill="#64748b">${v2868Xml(x)}</text>`).join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="720" height="960" viewBox="0 0 720 960">${bgRect}<defs>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="24" stdDeviation="22" flood-color="#0f172a" flood-opacity=".24"/></filter>
+    <linearGradient id="glassGrad" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#ffffff" stop-opacity=".78"/><stop offset=".45" stop-color="${spec.bodyColor}" stop-opacity=".52"/><stop offset="1" stop-color="#cbd5e1" stop-opacity=".78"/></linearGradient>
+    <linearGradient id="capGrad" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#fff7ad"/><stop offset="1" stop-color="${spec.capColor}"/></linearGradient>
+    <linearGradient id="jugGrad" x1="0" x2="1" y1="0" y2="1"><stop stop-color="${spec.secondaryBodyColor}"/><stop offset=".38" stop-color="${spec.bodyColor}"/><stop offset="1" stop-color="#0faaa3"/></linearGradient>
+    <linearGradient id="boxGrad" x1="0" x2="1" y1="0" y2="1"><stop stop-color="${spec.secondaryBodyColor}"/><stop offset="1" stop-color="${spec.bodyColor}"/></linearGradient>
+  </defs><rect x="28" y="24" width="664" height="912" rx="48" fill="#f8fbff" opacity="${bg==='white'?'.55':'.78'}"/>${swatches}<text x="360" y="74" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="28" font-weight="1000" fill="#0f2745">Render V28.68 · interpretazione visiva</text>${obj}<text x="360" y="872" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="18" font-weight="1000" fill="#0f2745">${v2868Xml(spec.family)} · qualità ${v2868Xml(spec.renderQuality?.level||'stimata')}</text>${facts}</svg>`;
+}
+function v2868GenerateVirtualRender(card={}, record={}, opts={}){
+  const spec=v2868RenderSpec(card,record);
+  const svg=v2868VirtualSvg(spec,opts||{});
+  return {version:V2868_VERSION,background:String(opts.background||'transparent'),spec,svgDataUri:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg),svg,upgrade:'render realistico con silhouette, palette, contenuto, etichetta e prove pixel/foto'};
+}
+function v2868BuildHumanReasoning(card={}, record={}, confirmed={}){
+  const prev=v2868PrevHumanReasoning?v2868PrevHumanReasoning(card,record,confirmed):{};
+  const spec=v2868RenderSpec(card,record);
+  const proof=v2868List(prev.identityEvidence,spec.visualFacts,record.detectedText,record.visibleEvidence).slice(0,50);
+  const rules=v2868List(prev.decisionRules,[
+    'prima vedo silhouette, contenuto e colori; poi leggo etichetta/barcode; solo dopo uso memoria',
+    'il render deve mostrare esattamente cosa il server crede di aver capito',
+    'foto reale e valori titolare correggono il modello visivo futuro'
+  ]).slice(0,20);
+  return Object.assign({},prev,{version:V2868_VERSION,renderUnderstanding:{family:spec.family,shape:spec.shape,content:spec.content,colors:[spec.bodyColor,spec.labelColor,spec.labelAccentColor,spec.capColor],quality:spec.renderQuality,visualFacts:spec.visualFacts},identityEvidence:proof,decisionRules:rules,engines:Object.assign({},prev.engines||{},{render:'V28.68 realistic SVG render from learned photo/pixel/OCR fields',pixelJudge:'V28.68 shape+content+palette reasoning bus'})});
+}
+function v2868RenderBrainProduct(key='', opts={}){
+  ensureDbShape(); const g=db.assistantBrain.globalProductMemory||{products:{}}; const rec=g.products[String(key||'').trim()];
+  if(!rec) return {ok:false,error:'product_not_found'};
+  try{ v2842EnsureObjectFolder(rec); v2842ApplyOwnerOverrides(rec); v2840AttachMemoryCard(rec,{}); }catch(_){ }
+  const card=rec.memoryCard||v2840BuildMemoryCard(rec,{}); const render=v2868GenerateVirtualRender(card,rec,opts||{}); const reasoning=v2868BuildHumanReasoning(card,rec,{});
+  try{ rec.virtualRenderV2868=render; rec.humanReasoningV2868=reasoning; if(rec.memoryCard){ rec.memoryCard.virtualRenderV2868=render; rec.memoryCard.humanReasoningV2868=reasoning; rec.memoryCard.virtualRenderV2867=render; rec.memoryCard.humanReasoningV2867=reasoning; } }catch(_){ }
+  return {ok:true,version:V2868_VERSION,key:rec.key||key,title:rec.productName||card.identity?.productName||'Prodotto',render,reasoning,fields:v2840PublicProductBrainDetail(rec).fields};
+}
+(function(){
+  try{ v2867RenderSpec=v2868RenderSpec; v2867VirtualSvg=v2868VirtualSvg; v2867GenerateVirtualRender=v2868GenerateVirtualRender; v2867BuildHumanReasoning=v2868BuildHumanReasoning; v2867RenderBrainProduct=v2868RenderBrainProduct; }catch(_){ }
+  try{
+    if(typeof v2840BuildMemoryCard==='function' && !global.__v2868CardWrapped){
+      const prev=v2840BuildMemoryCard;
+      v2840BuildMemoryCard=function(record={}, confirmed={}){ const card=prev.call(this,record,confirmed)||{}; try{ card.humanReasoningV2868=v2868BuildHumanReasoning(card,record,confirmed); card.virtualRenderV2868=v2868GenerateVirtualRender(card,record,{background:'transparent'}); card.humanReasoningV2867=card.humanReasoningV2868; card.virtualRenderV2867=card.virtualRenderV2868; }catch(_){} return card; };
+      global.__v2868CardWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof publicServerBrainV2840==='function' && !global.__v2868ServerBrainWrapped){
+      const prev=publicServerBrainV2840;
+      publicServerBrainV2840=function(opts={}){ try{ Object.values(db.assistantBrain?.globalProductMemory?.products||{}).forEach(r=>{ v2842EnsureObjectFolder(r); const card=v2840AttachMemoryCard(r,{}); if(card){ r.humanReasoningV2868=card.humanReasoningV2868; r.virtualRenderV2868=card.virtualRenderV2868; r.humanReasoningV2867=card.humanReasoningV2868; r.virtualRenderV2867=card.virtualRenderV2868; } }); }catch(_){} const out=prev.call(this,opts||{}); out.version='V28.68 PRO Realistic Human Visual Render'; out.reasoningBusV2868={active:true,policy:'render realistico = forma + contenuto + palette + etichetta + prove foto reali',renderEngine:'V28.68 realistic SVG product twin',humanUnderstanding:'server mostra cosa crede di vedere, così il titolare può correggere'}; return out; };
+      global.__v2868ServerBrainWrapped=true;
+    }
+  }catch(_){ }
+  try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2868PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this); s.version='V28.68'; s.brain=Object.assign({},s.brain||{},{version:'V28.68',realisticVirtualRender:'active',humanPixelUnderstanding:'shape+content+label+palette',renderTwin:'active in server brain',ocrSpaceRouter:'V28.67+ enhanced remains active'}); return s; }; global.__v2868PreflightWrapped=true; } }catch(_){ }
+  console.log('[Spesa Pronta] V28.68 PRO Realistic Product Render + Human Pixel Understanding active');
+})();
