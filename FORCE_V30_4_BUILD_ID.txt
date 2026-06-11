@@ -1,0 +1,2 @@
+V30.4-AUTO-WEB-HARVESTER-3040-1781218800
+Automatic reference search: OpenFacts + Google Images HTML light harvester + no captcha/proxy bypass.

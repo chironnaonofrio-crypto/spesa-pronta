@@ -9171,7 +9171,7 @@ try{ v3000GoogleCandidates=v3010GoogleCandidates; v3000FindReferenceCandidates=v
 
 
 // =============================================================
-// V30.3 GOOGLE BLOCK SAFE RENDER
+// V30.4 AUTO WEB HARVESTER
 // - Corregge errore Sharp "Expected both left and top to be set"
 // - Riconosce 403 Google Custom Search JSON API chiusa/non accessibile
 // - Continua con Open Facts / URL manuale senza far sembrare rotto il render
@@ -9273,7 +9273,7 @@ try{ v3000SearchAndBuildOfficialRender=v3030SearchAndBuildOfficialRender; }catch
   try{
     const prev=publicServerBrainV2840;
     if(typeof prev==='function'&&!global.__v3030BrainWrapped){
-      publicServerBrainV2840=function(opts={}){ const out=prev.call(this,opts)||{}; try{ const env=v3010GoogleEnv(); out.version='V30.3 GOOGLE BLOCK SAFE RENDER'; out.reasoningBusV3030={active:true,googleCse:{configured:env.configured,apiKey:!!env.apiKey,cx:!!env.cx},policy:'Google 403 gestito, OpenFacts/URL manuale attivi, bug Sharp left/top corretto'}; }catch(_){} return out; };
+      publicServerBrainV2840=function(opts={}){ const out=prev.call(this,opts)||{}; try{ const env=v3010GoogleEnv(); out.version='V30.4 AUTO WEB HARVESTER'; out.reasoningBusV3030={active:true,googleCse:{configured:env.configured,apiKey:!!env.apiKey,cx:!!env.cx},policy:'Google 403 gestito, OpenFacts/URL manuale attivi, bug Sharp left/top corretto'}; }catch(_){} return out; };
       global.__v3030BrainWrapped=true;
     }
   }catch(_){ }
@@ -9281,4 +9281,132 @@ try{ v3000SearchAndBuildOfficialRender=v3030SearchAndBuildOfficialRender; }catch
 })();
 
 // V30.3 FORCE NEW ZIP marker
-(function(){ try{ global.__SPESA_PRONTA_BUILD_ID='V30.3-GOOGLE-BLOCK-SAFE-3030-1781215200'; console.log('[Spesa Pronta] V30.3-GOOGLE-BLOCK-SAFE-3030-1781215200 active'); }catch(_){} })();
+(function(){ try{ global.__SPESA_PRONTA_BUILD_ID='V30.4-AUTO-WEB-HARVESTER-3040-1781218800'; console.log('[Spesa Pronta] V30.4-AUTO-WEB-HARVESTER-3040-1781218800 active'); }catch(_){} })();
+
+
+// =============================================================
+// V30.4 AUTO WEB HARVESTER
+// - Google Custom Search JSON API può essere bloccata per nuovi progetti.
+// - Il server prova un harvester leggero di Google Immagini HTML senza proxy,
+//   senza captcha bypass e senza rotazioni IP. Se Google blocca, passa oltre.
+// - Obiettivo: automatico prima dell'URL manuale.
+// =============================================================
+function v3040HtmlDecode(s=''){
+  return String(s||'')
+    .replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>')
+    .replace(/\\u003d/gi,'=').replace(/\\u0026/gi,'&').replace(/\\u003a/gi,':').replace(/\\u002f/gi,'/')
+    .replace(/\\x3d/gi,'=').replace(/\\x26/gi,'&').replace(/\\\//g,'/');
+}
+function v3040NormalizeUrl(u=''){
+  u=v3040HtmlDecode(u).trim();
+  try{ u=decodeURIComponent(u); }catch(_){}
+  try{ u=decodeURIComponent(u); }catch(_){}
+  u=u.replace(/\\/g,'').replace(/\s+/g,'');
+  if(u.startsWith('//')) u='https:'+u;
+  return u;
+}
+function v3040IsImageUrl(u=''){
+  u=String(u||'');
+  if(!/^https?:\/\//i.test(u)) return false;
+  if(/google\.(com|it)\/logos|\/favicon|\/maps\//i.test(u)) return false;
+  if(/base64,/i.test(u)) return false;
+  if(/\.(jpg|jpeg|png|webp)(\?|#|$)/i.test(u)) return true;
+  if(/encrypted-tbn\d\.gstatic\.com\/images/i.test(u)) return true;
+  if(/googleusercontent\.com|ggpht\.com|lh\d\.googleusercontent\.com/i.test(u)) return true;
+  return false;
+}
+function v3040ExtractImageUrls(html=''){
+  const text=v3040HtmlDecode(html);
+  const urls=[];
+  const add=(u,kind='html')=>{ u=v3040NormalizeUrl(u); if(!v3040IsImageUrl(u)) return; if(!urls.find(x=>x.url===u)) urls.push({url:u,kind}); };
+  let m;
+  const patterns=[
+    /[?&](?:imgurl|imgrefurl|url)=([^&"'<>\s]+)/gi,
+    /"(https?:\\?\/\\?\/[^"<>\s]+?)"/gi,
+    /'(https?:\\?\/\\?\/[^'<>\s]+?)'/gi,
+    /(https?:\/\/[^"'<>\s]+?\.(?:jpg|jpeg|png|webp)(?:\?[^"'<>\s]*)?)/gi
+  ];
+  for(const re of patterns){ while((m=re.exec(text))){ add(m[1]||m[0],re.source.includes('imgurl')?'imgurl':'html_url'); if(urls.length>=32) break; } }
+  return urls.slice(0,28);
+}
+function v3040GoogleBlocked(html='',status=0){
+  const t=String(html||'').slice(0,4000).toLowerCase();
+  return status===429 || status===403 || /unusual traffic|our systems have detected|sorry\/index|captcha|enable javascript|google search help/.test(t);
+}
+async function v3040FetchGoogleImagesHtml(q='',opts={}){
+  const url='https://www.google.com/search?'+new URLSearchParams({tbm:'isch',udm:'2',hl:'it',gl:'it',safe:'active',q:String(q||'')}).toString();
+  const ctrl=new AbortController(); const timer=setTimeout(()=>ctrl.abort(),Number(opts.timeoutMs||9000));
+  try{
+    const r=await fetch(url,{headers:{
+      'user-agent':'Spesa-Pronta/30.4 AutoWebHarvester (+https://spesa-pronta.it)',
+      'accept':'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'accept-language':'it-IT,it;q=0.9,en;q=0.6'
+    },signal:ctrl.signal});
+    const html=await r.text();
+    if(v3040GoogleBlocked(html,r.status)) return {ok:false,error:'google_html_blocked',status:r.status,message:'Google ha bloccato o non ha servito HTML utile. Nessun bypass: passo a Open Facts / fonti prodotto.',items:[],query:q};
+    const imgs=v3040ExtractImageUrls(html);
+    return {ok:true,status:r.status,items:imgs,query:q,count:imgs.length};
+  }catch(e){ return {ok:false,error:'google_html_fetch_failed',message:String(e?.message||e),items:[],query:q}; }
+  finally{ clearTimeout(timer); }
+}
+async function v3040GoogleHtmlCandidates(rec={}){
+  if(String(process.env.DISABLE_GOOGLE_HTML_SCRAPE||'').trim()==='1') return [];
+  const out=[];
+  const queries=(typeof v3010QueryVariants==='function'?v3010QueryVariants(rec):[v3000Query(rec)]).slice(0,5);
+  const preferredDomains=String(process.env.RENDER_REFERENCE_PREFERRED_DOMAINS||'moroniamato.it,eurospin.it,openfoodfacts.org,openproductsfacts.org,carrefour.it,conad.it,coop.it,esselunga.it,amazon.it').split(',').map(x=>x.trim()).filter(Boolean);
+  const extended=[];
+  for(const q of queries){
+    extended.push(q);
+    if(extended.length<8) extended.push(q+' prodotto');
+    if(extended.length<10 && preferredDomains.length) extended.push(q+' '+preferredDomains.slice(0,4).map(d=>'site:'+d).join(' OR '));
+  }
+  for(const q of extended.slice(0,8)){
+    const res=await v3040FetchGoogleImagesHtml(q,{timeoutMs:8500});
+    if(!res.ok){ try{ updateGlobalLearningAudit({type:'v3040-google-html-scrape-failed',query:q,error:res.error,message:res.message||''}); }catch(_){} continue; }
+    let rank=0;
+    for(const it of res.items||[]){
+      const src=it.url;
+      const thumb=/encrypted-tbn|gstatic\.com\/images/i.test(src);
+      v3000PushCandidate(out,{imageUrl:src,title:q,productName:'',brand:'',source:'Google Images HTML',sourceLabel:thumb?'Google Images thumbnail':'Google Images HTML',pageUrl:'https://www.google.com/search?tbm=isch&q='+encodeURIComponent(q),license:'check_source',kind:thumb?'google_html_thumbnail':'google_html_image',score:thumb?42:72-rank},rec);
+      rank++;
+      if(out.length>=18) break;
+    }
+    if(out.length>=10) break;
+  }
+  out.sort((a,b)=>(b.score||0)-(a.score||0));
+  return out.slice(0,16);
+}
+const __v3040PrevFindReferenceCandidates = (typeof v3010FindReferenceCandidates==='function') ? v3010FindReferenceCandidates : (typeof v3000FindReferenceCandidates==='function'?v3000FindReferenceCandidates:null);
+async function v3040FindReferenceCandidates(rec={},opts={}){
+  const all=[];
+  if(__v3040PrevFindReferenceCandidates){
+    try{ for(const c of await __v3040PrevFindReferenceCandidates(rec,opts)||[]) v3000PushCandidate(all,c,rec); }catch(e){ try{ updateGlobalLearningAudit({type:'v3040-prev-reference-failed',error:String(e?.message||e)}); }catch(_){} }
+  }
+  // Se Google JSON API è bloccata o non produce risultati, provo HTML leggero automaticamente.
+  try{ for(const c of await v3040GoogleHtmlCandidates(rec)||[]) v3000PushCandidate(all,c,rec); }catch(e){ try{ updateGlobalLearningAudit({type:'v3040-google-html-candidates-failed',error:String(e?.message||e)}); }catch(_){} }
+  all.sort((a,b)=>(b.score||0)-(a.score||0));
+  const seen=new Set(); const clean=[];
+  for(const c of all){ const k=String(c.imageUrl||c.displayUrl||''); if(!k||seen.has(k)) continue; seen.add(k); clean.push(c); if(clean.length>=24) break; }
+  try{ updateGlobalLearningAudit({type:'v3040-reference-candidates',productName:rec.productName||'',brand:rec.brand||'',count:clean.length,sources:[...new Set(clean.map(c=>c.sourceLabel||c.source||''))].slice(0,8)}); }catch(_){ }
+  return clean;
+}
+try{ v3010FindReferenceCandidates=v3040FindReferenceCandidates; v3000FindReferenceCandidates=v3040FindReferenceCandidates; }catch(_){ }
+const __v3040PrevGoogleTest=(typeof v3010GoogleCseTest==='function')?v3010GoogleCseTest:null;
+async function v3040GoogleCseTest(q='Dexal Candeggina Delicata Maxi'){
+  const base=__v3040PrevGoogleTest?await __v3040PrevGoogleTest(q):{ok:false,error:'google_cse_test_missing'};
+  let html={ok:false,count:0,error:null,message:null};
+  try{ const r=await v3040FetchGoogleImagesHtml(q,{timeoutMs:8500}); html={ok:!!r.ok,count:(r.items||[]).length,error:r.error||null,message:r.message||null}; }catch(e){ html={ok:false,count:0,error:'html_test_failed',message:String(e?.message||e)}; }
+  return Object.assign({},base,{version:'V30.4',htmlScrape:html,autoHarvester:true,ok:!!(base.ok||html.ok)});
+}
+try{ v3010GoogleCseTest=v3040GoogleCseTest; }catch(_){ }
+(function(){
+  try{
+    const prev=publicServerBrainV2840;
+    if(typeof prev==='function'&&!global.__v3040BrainWrapped){
+      publicServerBrainV2840=function(opts={}){ const out=prev.call(this,opts)||{}; try{ const env=v3010GoogleEnv(); out.version='V30.4 AUTO WEB HARVESTER'; out.reasoningBusV3040={active:true,googleCse:{configured:env.configured,apiKey:!!env.apiKey,cx:!!env.cx},googleHtmlHarvester:String(process.env.DISABLE_GOOGLE_HTML_SCRAPE||'')!=='1',policy:'automatico: OpenFacts + Google Images HTML leggero senza bypass + URL manuale solo fallback'}; }catch(_){} return out; };
+      global.__v3040BrainWrapped=true;
+    }
+  }catch(_){ }
+  console.log('[Spesa Pronta] V30.4 Auto Web Harvester active');
+})();
+(function(){ try{ global.__SPESA_PRONTA_BUILD_ID='V30.4-AUTO-WEB-HARVESTER-3040-1781218800'; console.log('[Spesa Pronta] V30.4-AUTO-WEB-HARVESTER-3040-1781218800 active'); }catch(_){} })();
