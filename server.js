@@ -8250,25 +8250,25 @@ function v2871RenderBrainProduct(key='', opts={}){
 })();
 
 // =============================================================
-// V28.75 PRO Hard Render Visible
+// V28.76 PRO Mobile Render Stack
 // La UI mostra un render inline sempre visibile anche se immagini esterne/SVG falliscono.
 // =============================================================
 (function(){
-  const V2875_VERSION='V28.75';
+  const V2875_VERSION='V28.76';
   try{
     const prev=publicServerBrainV2840;
     if(typeof prev==='function' && !global.__v2875ServerBrainWrapped){
       publicServerBrainV2840=function(opts={}){
         const out=prev.call(this,opts||{})||{};
         try{
-          out.version='V28.75 PRO Hard Render Visible';
-          out.reasoningBusV2875={active:true,policy:'render inline sempre visibile + foto eliminabili + retry render',renderEngine:'V28.75 hard HTML/SVG fallback first',mobileSafe:true};
+          out.version='V28.76 PRO Mobile Render Stack';
+          out.reasoningBusV2875={active:true,policy:'render inline sempre visibile + foto eliminabili + retry render',renderEngine:'V28.76 hard HTML/SVG fallback first',mobileSafe:true};
         }catch(_){ }
         return out;
       };
       global.__v2875ServerBrainWrapped=true;
     }
   }catch(_){ }
-  try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2875PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this)||{}; s.version=V2875_VERSION; s.brain=Object.assign({},s.brain||{},{version:V2875_VERSION,hardRenderVisible:'active'}); return s; }; global.__v2875PreflightWrapped=true; } }catch(_){ }
-  console.log('[Spesa Pronta] V28.75 PRO Hard Render Visible active');
+  try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2875PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this)||{}; s.version=V2875_VERSION; s.brain=Object.assign({},s.brain||{},{version:V2875_VERSION,mobileRenderStack:'active'}); return s; }; global.__v2875PreflightWrapped=true; } }catch(_){ }
+  console.log('[Spesa Pronta] V28.76 PRO Mobile Render Stack active');
 })();
