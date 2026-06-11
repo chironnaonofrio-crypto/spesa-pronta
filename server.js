@@ -8597,3 +8597,205 @@ try{ v2879GenerateRealPixelRender=v2880GenerateRealPixelRender; }catch(_){}
   try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2880PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this)||{}; s.version=V2880_VERSION; s.brain=Object.assign({},s.brain||{},{version:V2880_VERSION,realTwinRender:'active',onlineReference:'active'}); return s; }; global.__v2880PreflightWrapped=true; } }catch(_){ }
   console.log('[Spesa Pronta] V28.80 PRO Real Twin Render AI active');
 })();
+
+
+// =============================================================
+// V29.00 OFFICIAL PRO MASTER REAL RENDER
+// Obiettivo:
+// - reference online/API sempre caricabile (proxy data URL server-side)
+// - render pixel molto piu' pulito e centrato sul prodotto
+// - gemello semantico piu' umano: card studio fotorealistica
+// =============================================================
+function v2900GuessFamilyText(rec={}){
+  return String([
+    rec.productName,rec.brand,rec.category,rec.format,
+    rec.memoryCard?.identity?.productName,rec.memoryCard?.identity?.brand,
+    rec.memoryCard?.classification?.category
+  ].filter(Boolean).join(' ')).toLowerCase();
+}
+function v2900IsBottleLike(rec={}){
+  const t=v2900GuessFamilyText(rec);
+  return /cola|acqua|water|drink|bevanda|soft|bottle|bottiglia|1[,\.]?5|1,5|1\.5|lemon|tea|succo/.test(t);
+}
+function v2900IsJugLike(rec={}){
+  const t=v2900GuessFamilyText(rec);
+  return /dexal|candegg|deters|laundry|clean|pulizia|deterg|flacone|jug|4 ?l|4l|maxi/.test(t);
+}
+async function v2900FetchRemoteImageDataUrl(url, opts={}){
+  try{
+    url=String(url||'').trim();
+    if(!/^https?:\/\//i.test(url)) return '';
+    const ctrl=new AbortController();
+    const timeout=setTimeout(()=>ctrl.abort(), Number(opts.timeoutMs||9000));
+    try{
+      const r=await fetch(url,{headers:{'user-agent':'Spesa-Pronta/29.00 reference-proxy','accept':'image/*,*/*;q=0.8'},signal:ctrl.signal});
+      if(!r.ok) return '';
+      const ab=await r.arrayBuffer();
+      let buf=Buffer.from(ab);
+      let mime=String(r.headers.get('content-type')||'').split(';')[0].trim()||'image/jpeg';
+      try{
+        const sharp=await v2864Sharp();
+        if(sharp && buf && buf.length){
+          const pipeline=sharp(buf,{failOn:'none'}).rotate();
+          const meta=await pipeline.metadata().catch(()=>null);
+          const fit = (meta && meta.hasAlpha) ? 'png' : 'jpeg';
+          if(fit==='png'){
+            buf=await sharp(buf,{failOn:'none'}).rotate().resize({width:900,height:900,fit:'inside',withoutEnlargement:true}).png({compressionLevel:7}).toBuffer();
+            mime='image/png';
+          }else{
+            buf=await sharp(buf,{failOn:'none'}).rotate().resize({width:900,height:900,fit:'inside',withoutEnlargement:true}).jpeg({quality:88,mozjpeg:true}).toBuffer();
+            mime='image/jpeg';
+          }
+        }
+      }catch(_){ }
+      return `data:${mime};base64,${buf.toString('base64')}`;
+    } finally { clearTimeout(timeout); }
+  }catch(_){ return ''; }
+}
+function v2900BuildSmartMask(data,w,h,rec={}){
+  const base=v2879BuildMask(data,w,h); const bg=base.bg||{r:245,g:248,b:252,lum:248};
+  const mask=new Uint8Array(w*h); const bgMask=new Uint8Array(w*h);
+  const bottle=v2900IsBottleLike(rec), jug=v2900IsJugLike(rec);
+  const q=[];
+  const tryPush=(x,y)=>{ if(x<0||y<0||x>=w||y>=h) return; const idx=y*w+x; if(bgMask[idx]) return; q.push(idx); bgMask[idx]=1; };
+  for(let x=0;x<w;x++){ tryPush(x,0); tryPush(x,h-1); }
+  for(let y=0;y<h;y++){ tryPush(0,y); tryPush(w-1,y); }
+  while(q.length){
+    const idx=q.pop(); const x=idx%w, y=Math.floor(idx/w); const i=idx*4;
+    const a=data[i+3]; if(a<20) continue;
+    const r=data[i],g=data[i+1],b=data[i+2];
+    const lum=v2864Lum(r,g,b), sat=v2864Sat(r,g,b), dist=v2879Dist(r,g,b,bg.r,bg.g,bg.b);
+    const nx=(x+.5)/w, ny=(y+.5)/h; const central=(1-Math.min(1,Math.sqrt((nx-.5)*(nx-.5)*1.55 + (ny-.52)*(ny-.52)*1.0)*2));
+    const objColor = (bottle && ((lum<108 && central>.08) || sat>.24 || ((r>160&&g>120&&b<90)||(b>95&&r<95&&g<145)))) || (jug && ((g>115&&b>110&&r<120) || sat>.22));
+    const isBg = !objColor && (dist<74 || (sat<.18 && Math.abs(lum-bg.lum)<58) || (lum>232 && sat<.16) || (central<.08 && dist<108));
+    if(!isBg) continue;
+    const neigh=[[1,0],[-1,0],[0,1],[0,-1]];
+    for(const d of neigh){ const xx=x+d[0], yy=y+d[1]; if(xx<0||yy<0||xx>=w||yy>=h) continue; const n=yy*w+xx; if(bgMask[n]) continue; bgMask[n]=1; q.push(n); }
+  }
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    const idx=y*w+x, i=idx*4; const a=data[i+3]; if(a<20) continue;
+    if(bgMask[idx]) continue;
+    const r=data[i],g=data[i+1],b=data[i+2];
+    const lum=v2864Lum(r,g,b), sat=v2864Sat(r,g,b), dist=v2879Dist(r,g,b,bg.r,bg.g,bg.b);
+    const nx=(x+.5)/w, ny=(y+.5)/h; const cx=Math.abs(nx-.5), cy=Math.abs(ny-.52);
+    const central=Math.max(0,1-(cx*2.3+cy*.92));
+    const bottleCue=bottle && ((lum<112 && central>.10) || sat>.25 || ((r>160&&g>120&&b<90)||(b>95&&r<95&&g<145)));
+    const jugCue=jug && (((g>112&&b>110&&r<125) || sat>.2) && central>.08);
+    const genericCue=(base.mask[idx] && central>.06) || (dist>78 && sat>.2 && central>.08) || (lum<100 && central>.18);
+    if(bottleCue || jugCue || genericCue) mask[idx]=1;
+  }
+  return {mask,bg,bgMask};
+}
+function v2900RefineProductBox(mask,w,h,rec={}){
+  let comp=v2879BestComponent(mask,w,h);
+  const bottle=v2900IsBottleLike(rec), jug=v2900IsJugLike(rec);
+  if(!comp){
+    const boxW=Math.round(w*(jug?0.52:bottle?0.38:0.46));
+    const boxH=Math.round(h*(jug?0.82:0.80));
+    const minX=Math.max(0,Math.round(w*0.5-boxW/2));
+    const maxX=Math.min(w-1,minX+boxW);
+    const minY=Math.max(0,Math.round(h*0.10));
+    const maxY=Math.min(h-1,minY+boxH);
+    comp={minX,minY,maxX,maxY,area:boxW*boxH,central:1,tall:boxH/Math.max(1,boxW),score:1};
+  }
+  let bw=comp.maxX-comp.minX+1, bh=comp.maxY-comp.minY+1;
+  const targetTall = jug?1.32:(bottle?2.15:Math.max(1.3,comp.tall||1.3));
+  let desiredW = Math.round(Math.max(bw, bh/targetTall));
+  let desiredH = Math.round(Math.max(bh, desiredW*targetTall));
+  desiredW=Math.min(w, Math.max(desiredW, Math.round(w*(jug?0.34:0.24))));
+  desiredH=Math.min(h, Math.max(desiredH, Math.round(h*0.54)));
+  const cx=Math.round((comp.minX+comp.maxX)/2);
+  const cy=Math.round((comp.minY+comp.maxY)/2);
+  let minX=v2879Clamp(Math.round(cx-desiredW/2),0,w-1);
+  let maxX=v2879Clamp(minX+desiredW,0,w-1);
+  minX=v2879Clamp(maxX-desiredW,0,w-1);
+  let minY=v2879Clamp(Math.round(cy-desiredH*0.44),0,h-1);
+  let maxY=v2879Clamp(minY+desiredH,0,h-1);
+  minY=v2879Clamp(maxY-desiredH,0,h-1);
+  return Object.assign({},comp,{minX,minY,maxX,maxY});
+}
+function v2900MakeRefinedCrop(data,w,h,mask,box){
+  const out=v2879MakeCroppedBuffers(data,w,h,mask,box);
+  const cw=out.cw, ch=out.ch; const alpha=new Uint8Array(cw*ch); const rgba=Buffer.from(out.rgba);
+  for(let i=0;i<cw*ch;i++) alpha[i]=rgba[i*4+3];
+  for(let y=1;y<ch-1;y++) for(let x=1;x<cw-1;x++){
+    const idx=y*cw+x; if(!alpha[idx]) continue;
+    let n=0; for(let yy=-1;yy<=1;yy++) for(let xx=-1;xx<=1;xx++) if(alpha[(y+yy)*cw+(x+xx)]) n++;
+    if(n<=2) alpha[idx]=0;
+  }
+  for(let y=0;y<ch;y++) for(let x=0;x<cw;x++) rgba[(y*cw+x)*4+3]=alpha[y*cw+x];
+  let coverage=0; for(let i=0;i<cw*ch;i++) if(alpha[i]) coverage++;
+  return {rgba,cw,ch,coverage:coverage/Math.max(1,cw*ch)};
+}
+async function v2900BuildStudioCards(pngBuf, rec={}, meta={}){
+  const sharp=await v2864Sharp();
+  if(!sharp||!pngBuf) return {studioDataUrl:'',semanticDataUrl:''};
+  const label1=String(rec.brand||rec.memoryCard?.identity?.brand||'').trim()||'Marca';
+  const label2=String(rec.productName||rec.memoryCard?.identity?.productName||'').trim()||'Prodotto';
+  const label3=String(rec.format||rec.memoryCard?.identity?.format||'').trim()||'';
+  const safe=(s)=>String(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  const svgStudio=`<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1100" viewBox="0 0 900 1100"><defs><linearGradient id="g" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fbfdff"/><stop offset="1" stop-color="#eef6ff"/></linearGradient></defs><rect width="900" height="1100" rx="44" fill="url(#g)"/><rect x="42" y="42" width="816" height="1016" rx="34" fill="#ffffff" stroke="#d9e8fb" stroke-width="3"/><text x="450" y="92" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="28" font-weight="1000" fill="#10233f">Render studio da pixel reali</text><rect x="78" y="865" width="744" height="128" rx="28" fill="#f5f9ff" stroke="#dce8f7" stroke-width="2"/><text x="450" y="918" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="38" font-weight="1000" fill="#10233f">${safe(label1)} · ${safe(label2)}</text><text x="450" y="960" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="24" font-weight="900" fill="#5b6f89">${safe(label3)}${meta.category?(' · '+safe(meta.category)) : ''}</text></svg>`;
+  const studio=await sharp(Buffer.from(svgStudio)).composite([{input:pngBuf,gravity:'center',top:-40}]).png({compressionLevel:8}).toBuffer();
+  const svgSemantic=`<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1100" viewBox="0 0 900 1100"><defs><linearGradient id="bg" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#f8fbff"/><stop offset="1" stop-color="#edf5ff"/></linearGradient><linearGradient id="pill" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#f7d24a"/><stop offset="1" stop-color="#244596"/></linearGradient></defs><rect width="900" height="1100" rx="44" fill="url(#bg)"/><rect x="36" y="36" width="828" height="1028" rx="38" fill="#ffffff" stroke="#d8e7fa" stroke-width="3"/><text x="64" y="84" font-family="Inter,Arial,sans-serif" font-size="28" font-weight="1000" fill="#10233f">Gemello semantico fotorealistico</text><text x="836" y="84" text-anchor="end" font-family="Inter,Arial,sans-serif" font-size="24" font-weight="900" fill="#6b7f98">foto + ragionamento</text><rect x="76" y="854" width="748" height="120" rx="30" fill="url(#pill)" opacity=".95"/><text x="450" y="908" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="34" font-weight="1000" fill="#ffffff">${safe(label1)} · ${safe(label2)}${label3?(' · '+safe(label3)) : ''}</text><text x="450" y="948" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="900" fill="#eef6ff">${safe(meta.note||'interpretazione guidata da pixel reali')}</text></svg>`;
+  const semantic=await sharp(Buffer.from(svgSemantic)).composite([{input:pngBuf,gravity:'center',top:-48}]).png({compressionLevel:8}).toBuffer();
+  return {studioDataUrl:v2879DataUrlFromBuffer(studio,'image/png'),semanticDataUrl:v2879DataUrlFromBuffer(semantic,'image/png')};
+}
+async function v2900GenerateRealPixelRender(key='', opts={}){
+  try{
+    ensureDbShape();
+    const rec=db.assistantBrain?.globalProductMemory?.products?.[key];
+    if(!rec) return {ok:false,error:'product_not_found'};
+    const photo=v2879PickRenderPhoto(rec);
+    if(!photo) return {ok:false,error:'no_real_photo',message:'Nessuna foto reale disponibile per generare il render'};
+    const rawUrl=photo.dataUrl||'';
+    if(!rawUrl){
+      const ref=photo.externalUrl||photo.imageUrl||'';
+      return {ok:true,version:'V29.00',mode:'external_photo_passthrough',source:photo,render:{masterUrl:ref,whiteDataUrl:ref,transparentDataUrl:'',studioDataUrl:ref,semanticDataUrl:ref,quality:{level:'external_reference',score:56,message:'Reference esterna usata come render di emergenza'}}};
+    }
+    const sharp=await v2864Sharp(); const buf=v2864DataUrlBuffer(rawUrl);
+    if(!sharp||!buf) return {ok:false,error:!sharp?'sharp_not_available':'invalid_data_url'};
+    const img=sharp(buf,{failOn:'none'}).rotate().resize({width:900,height:900,fit:'inside',withoutEnlargement:true}).ensureAlpha();
+    const {data,info}=await img.raw().toBuffer({resolveWithObject:true});
+    const w=info.width,h=info.height;
+    const {mask}=v2900BuildSmartMask(data,w,h,rec);
+    const box=v2900RefineProductBox(mask,w,h,rec);
+    const masterBuf=await sharp(buf,{failOn:'none'}).rotate().resize({width:1080,height:1080,fit:'inside',withoutEnlargement:true}).jpeg({quality:90,mozjpeg:true}).toBuffer();
+    const cropped=v2900MakeRefinedCrop(data,w,h,mask,box);
+    const pngRaw=await sharp(Buffer.from(cropped.rgba),{raw:{width:cropped.cw,height:cropped.ch,channels:4}}).trim({background:{r:0,g:0,b:0,alpha:0},threshold:8}).resize({height:860,fit:'inside',withoutEnlargement:true}).png({compressionLevel:8}).toBuffer();
+    const whiteBuf=await sharp(pngRaw).flatten({background:'#ffffff'}).jpeg({quality:92,mozjpeg:true}).toBuffer();
+    const studio=await v2900BuildStudioCards(pngRaw,rec,{category:String(rec.category||rec.memoryCard?.classification?.category||'').trim(),note:'forma + etichetta + contenuto dai pixel'});
+    const density=Number(cropped.coverage||0);
+    const qualityScore=Math.round(v2879Clamp(72+Math.min(12,(box.central||0)*16)+Math.min(10,density*25)+Math.min(8,((box.maxY-box.minY+1)/Math.max(1,(box.maxX-box.minX+1)))*3),66,98));
+    rec.realPixelRenderV2900={at:Date.now(),photoId:photo.id||'',kind:photo.kind||'',bbox:{x:box.minX,y:box.minY,w:box.maxX-box.minX+1,h:box.maxY-box.minY+1,sourceW:w,sourceH:h},qualityScore,coverage:Number(density.toFixed(3)),engine:'v29_pro_master_smart_mask_studio'};
+    return {ok:true,version:'V29.00',mode:'pro_master_real_render',source:{id:photo.id||'',kind:photo.kind||'',score:photo.score||0},render:{masterDataUrl:v2879DataUrlFromBuffer(masterBuf,'image/jpeg'),whiteDataUrl:v2879DataUrlFromBuffer(whiteBuf,'image/jpeg'),transparentDataUrl:v2879DataUrlFromBuffer(pngRaw,'image/png'),studioDataUrl:studio.studioDataUrl,semanticDataUrl:studio.semanticDataUrl,bbox:rec.realPixelRenderV2900.bbox,quality:{level:qualityScore>=88?'pro_master_real':'pro_real',score:qualityScore,coverage:Number(density.toFixed(3)),message:'Render PRO MASTER: scontorno piu pulito, crop intelligente e card studio umana'}}};
+  }catch(e){ return {ok:false,error:'real_pixel_render_failed_v2900',message:String(e?.message||e).slice(0,220)}; }
+}
+async function v2900FindOnlineReferenceImage(key=''){
+  const prev=v2900FindOnlineReferenceImage.__prev;
+  const out=prev ? await prev(key) : {ok:false,error:'reference_lookup_unavailable'};
+  if(!out || !out.ok || !out.reference) return out;
+  const ref=out.reference||{};
+  const displayUrl = ref.displayUrl || ref.imageDataUrl || await v2900FetchRemoteImageDataUrl(ref.imageUrl||ref.image_front_url||ref.image||'');
+  if(displayUrl) ref.displayUrl=displayUrl;
+  ref.sourceLabel=ref.source||ref.sourceLabel||'Reference API';
+  out.version='V29.00'; out.reference=ref; out.mode=out.mode||'reference_ready';
+  return out;
+}
+if(typeof v2880FindOnlineReferenceImage==='function' && !v2880FindOnlineReferenceImage.__v29Wrapped){
+  v2900FindOnlineReferenceImage.__prev=v2880FindOnlineReferenceImage;
+  v2880FindOnlineReferenceImage=v2900FindOnlineReferenceImage;
+  v2880FindOnlineReferenceImage.__v29Wrapped=true;
+}
+try{ v2879GenerateRealPixelRender=v2900GenerateRealPixelRender; }catch(_){ }
+(function(){
+  const V2900_VERSION='V29.00';
+  try{
+    const prev=publicServerBrainV2840;
+    if(typeof prev==='function' && !global.__v2900ServerBrainWrapped){
+      publicServerBrainV2840=function(opts={}){ const out=prev.call(this,opts||{})||{}; try{ out.version='V29 OFFICIAL · PRO MASTER REAL RENDER'; out.reasoningBusV2900={active:true,policy:'render studio reale + gemello semantico umano + reference online proxata dal server',endpoint:'/api/ai/server-brain/photo-render + /reference-image',semanticTwin:'photo-first clean studio card'}; }catch(_){} return out; };
+      global.__v2900ServerBrainWrapped=true;
+    }
+  }catch(_){ }
+  try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2900PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this)||{}; s.version=V2900_VERSION; s.brain=Object.assign({},s.brain||{},{version:V2900_VERSION,proMasterRender:'active',referenceProxy:'active',semanticTwinStudio:'active'}); return s; }; global.__v2900PreflightWrapped=true; } }catch(_){ }
+  console.log('[Spesa Pronta] V29.00 OFFICIAL PRO MASTER REAL RENDER active');
+})();
