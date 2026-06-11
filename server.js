@@ -7871,3 +7871,214 @@ function v2870RenderBrainProduct(key='', opts={}){
   try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2870PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this)||{}; s.version='V28.70'; s.brain=Object.assign({},s.brain||{},{version:'V28.70',proMasterVisualTwin:'active',mobileSafeRender:'active',humanLikeRender:'silhouette+content+label+colors'}); return s; }; global.__v2870PreflightWrapped=true; } }catch(_){ }
   console.log('[Spesa Pronta] V28.70 PRO MASTER Human Visual Twin active');
 })();
+
+// =============================================================
+// V28.71 PRO MASTER Real Pixel Twin
+// Obiettivo: non solo disegno SVG. Il cervello espone un gemello
+// foto-realistico guidato da pixel reali: foto utente / immagine Open Facts
+// come texture, sagoma semantica, dettagli di etichetta e layout mobile-safe.
+// =============================================================
+const V2871_VERSION = 'V28.71';
+const v2871PrevRenderSpec = (typeof v2870RenderSpec==='function') ? v2870RenderSpec : null;
+const v2871PrevGenerateVirtualRender = (typeof v2870GenerateVirtualRender==='function') ? v2870GenerateVirtualRender : null;
+const v2871PrevBuildHumanReasoning = (typeof v2870BuildHumanReasoning==='function') ? v2870BuildHumanReasoning : null;
+function v2871Safe(v='', max=320){
+  try{ return String(v==null?'':v).replace(/[\u0000-\u001f\u007f]+/g,' ').replace(/\s+/g,' ').trim().slice(0,max); }
+  catch(_){ return ''; }
+}
+function v2871Xml(v='', max=360){
+  return v2871Safe(v,max).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function v2871Arr(v, n=80){
+  const out=[]; const push=x=>{ if(x==null) return; if(Array.isArray(x)) return x.forEach(push); if(typeof x==='object') return; String(x).split(/\n|\s*[;,]\s*/).forEach(y=>{ const c=v2871Safe(y,220); if(c) out.push(c); }); };
+  push(v); return [...new Set(out)].slice(0,n);
+}
+function v2871IsDataImage(v=''){ return /^data:image\/(png|jpe?g|webp);base64,/i.test(String(v||'')); }
+function v2871SafeUrl(v=''){
+  const s=String(v||'').trim();
+  if(v2871IsDataImage(s)) return s;
+  if(/^https?:\/\//i.test(s) && !/[<>"']/g.test(s) && s.length<1400) return s;
+  return '';
+}
+function v2871PickReferencePhoto(record={}, card={}){
+  const folder=record.objectFolder||card.objectFolder||{};
+  const photos=Array.isArray(folder.photos)?folder.photos:[];
+  const reps=[folder.representativePhoto, record.profilePhoto, record.ownerProfilePhoto, card.profilePhoto].filter(Boolean);
+  const candidates=[];
+  const add=(obj={}, kind='')=>{
+    if(!obj || typeof obj!=='object') return;
+    const data=v2871SafeUrl(obj.dataUrl||obj.thumbDataUrl||obj.imageUrl||obj.svgDataUri||'');
+    const ext=v2871SafeUrl(obj.externalUrl||obj.imageUrl||'');
+    if(data) candidates.push({uri:data, kind:kind||obj.kind||obj.type||'photo', isData:v2871IsDataImage(data), source:obj.source||obj.note||'', score:Number(obj.score||0)});
+    if(ext && ext!==data) candidates.push({uri:ext, kind:kind||obj.kind||obj.type||'external', isData:false, source:obj.source||obj.note||'', score:Number(obj.score||0)});
+  };
+  reps.forEach(x=>add(x,'representative'));
+  photos.filter(p=>p.kind==='product_front').slice(0,6).forEach(p=>add(p,'product_front'));
+  photos.slice(0,10).forEach(p=>add(p,p.kind||'photo'));
+  const refs=[];
+  (record.externalReferenceImages||[]).forEach(r=>refs.push(r));
+  (record.externalReferences||[]).forEach(r=>refs.push(r));
+  (card.externalReferenceImages||[]).forEach(r=>refs.push(r));
+  const pm=record.productMemory||card.productMemory||{};
+  if(pm.imageUrl||pm.referenceImageUrl) refs.push({imageUrl:pm.imageUrl||pm.referenceImageUrl, source:'product_memory'});
+  refs.slice(0,10).forEach(r=>add({imageUrl:r.imageUrl||r.externalUrl, source:r.sourceLabel||r.source||'Open Facts'}, 'api_reference'));
+  add({imageUrl:record.imageUrl||record.productImageUrl||''}, 'record_image');
+  const best=candidates.sort((a,b)=>Number(b.isData)-Number(a.isData) || Number(b.score||0)-Number(a.score||0))[0]||null;
+  return best ? Object.assign(best,{available:true}) : {available:false, uri:'', kind:'none', isData:false};
+}
+function v2871DetailLevel(record={}, card={}, ref={}){
+  const photoCount=Number(record.objectFolder?.photos?.length||card.objectFolder?.photoCount||0);
+  const samples=Number(record.objectFolder?.visualFeatureSamples?.length||card.objectFolder?.visualSignatures?.length||0);
+  let score=35;
+  if(ref?.available) score+=28;
+  if(ref?.isData) score+=10;
+  if(photoCount>=3) score+=12; else if(photoCount>0) score+=6;
+  if(samples>=2) score+=8;
+  if(record.ownerOverrides?.enabled || card.ownerOverrides?.enabled) score+=7;
+  return Math.max(0, Math.min(100, score));
+}
+function v2871RenderSpec(card={}, record={}){
+  const base=v2871PrevRenderSpec ? v2871PrevRenderSpec(card,record) : {};
+  const ref=v2871PickReferencePhoto(record, card);
+  const score=v2871DetailLevel(record, card, ref);
+  const facts=v2871Arr([base.visualFacts, ref.available ? `texture pixel reale: ${ref.kind}` : '', ref.available&&!ref.isData ? 'immagine riferimento web/API disponibile' : '', 'render V28.71 usa foto reale come texture quando possibile'], 16);
+  const quality = ref.available ? (score>=78?'pro-master-real':'foto-reale') : (base.renderQuality?.level||'stimata');
+  return Object.assign({}, base, {
+    version: V2871_VERSION,
+    engine: 'pro_master_real_pixel_twin_v2871',
+    renderMode: ref.available ? 'photo_texture_plus_semantic_silhouette' : 'semantic_vector_fallback',
+    referencePhotoAvailable: !!ref.available,
+    referencePhotoKind: ref.kind||'none',
+    referencePhotoIsData: !!ref.isData,
+    referencePhotoSource: ref.source||'',
+    referenceImageUrl: (!ref.isData && ref.uri) ? ref.uri : '',
+    photoTextureUri: ref.isData ? ref.uri : '',
+    detailScore: score,
+    visualFacts: facts,
+    renderQuality: Object.assign({}, base.renderQuality||{}, {
+      level: quality,
+      score,
+      target: '8/10 realismo: texture foto reale + sagoma + etichetta + colori + contenuto',
+      photoTexture: !!ref.available,
+      referenceKind: ref.kind||'none'
+    })
+  });
+}
+function v2871SVGDefs(spec={}){
+  const photo=v2871Xml(spec.photoTextureUri||'', 1200000);
+  const imageDef=photo ? `<pattern id="v2871PhotoTexture" patternUnits="objectBoundingBox" width="1" height="1"><image href="${photo}" x="0" y="0" width="900" height="1200" preserveAspectRatio="xMidYMid slice"/></pattern>` : '';
+  return `<defs>
+    <filter id="v2871SoftShadow" x="-20%" y="-20%" width="140%" height="145%"><feDropShadow dx="0" dy="28" stdDeviation="24" flood-color="#071b32" flood-opacity=".22"/><feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#071b32" flood-opacity=".18"/></filter>
+    <linearGradient id="v2871Glass" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#ffffff" stop-opacity=".68"/><stop offset=".32" stop-color="${v2871Xml(spec.bodyColor||'#e8f2ff')}" stop-opacity=".36"/><stop offset=".8" stop-color="#ffffff" stop-opacity=".20"/><stop offset="1" stop-color="#b7d6ee" stop-opacity=".42"/></linearGradient>
+    <linearGradient id="v2871Cap" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#fff3a5"/><stop offset=".52" stop-color="${v2871Xml(spec.capColor||'#facc15')}"/><stop offset="1" stop-color="#b68400"/></linearGradient>
+    <linearGradient id="v2871Label" x1="0" x2="1"><stop stop-color="${v2871Xml(spec.labelColor||'#123a86')}"/><stop offset=".55" stop-color="${v2871Xml(spec.labelAccentColor||'#facc15')}"/><stop offset="1" stop-color="${v2871Xml(spec.labelThirdColor||'#ffffff')}"/></linearGradient>
+    <radialGradient id="v2871Liquid" cx="38%" cy="16%" r="85%"><stop stop-color="#48301c" stop-opacity=".96"/><stop offset=".45" stop-color="${v2871Xml(spec.contentColor||'#17110d')}" stop-opacity=".96"/><stop offset="1" stop-color="#050505" stop-opacity=".98"/></radialGradient>
+    <linearGradient id="v2871JugBody" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#67fff4"/><stop offset=".32" stop-color="${v2871Xml(spec.bodyColor||'#21c7bd')}"/><stop offset="1" stop-color="#059a91"/></linearGradient>
+    ${imageDef}
+  </defs>`;
+}
+function v2871LabelModel(spec={}){
+  const prev=spec.labelModel||{};
+  const brand=v2871Safe(prev.brand||spec.brand||'',40);
+  const name=v2871Safe(prev.hero||spec.name||'',80);
+  const subtitle=v2871Safe(prev.subtitle||'',52);
+  const fmt=v2871Safe(prev.format||spec.format||'',22);
+  return {brand, hero:name, subtitle, format:fmt};
+}
+function v2871BottleMasterSvg(spec={}){
+  const l=v2871LabelModel(spec); const photo=!!spec.photoTextureUri;
+  const labelOpacity=photo?'.58':'1';
+  const textureFill=photo?'url(#v2871PhotoTexture)':'url(#v2871Glass)';
+  return `<g filter="url(#v2871SoftShadow)">
+    <ellipse cx="450" cy="1112" rx="190" ry="28" fill="#071b32" opacity=".16"/>
+    <clipPath id="v2871BottleClip"><path d="M386 116 L514 116 L524 220 Q584 266 624 382 Q658 478 660 662 L660 944 Q660 1034 590 1076 Q528 1114 450 1114 Q372 1114 310 1076 Q240 1034 240 944 L240 662 Q242 478 276 382 Q316 266 376 220 Z"/></clipPath>
+    <path d="M386 116 L514 116 L524 220 Q584 266 624 382 Q658 478 660 662 L660 944 Q660 1034 590 1076 Q528 1114 450 1114 Q372 1114 310 1076 Q240 1034 240 944 L240 662 Q242 478 276 382 Q316 266 376 220 Z" fill="${textureFill}" clip-path="url(#v2871BottleClip)"/>
+    ${photo?`<rect x="235" y="116" width="430" height="1000" fill="url(#v2871PhotoTexture)" clip-path="url(#v2871BottleClip)" opacity=".94"/>`:''}
+    ${!photo?`<path d="M258 410 Q450 360 642 410 L642 1052 Q450 1118 258 1052 Z" fill="url(#v2871Liquid)" opacity="${v2871Xml(spec.contentOpacity||'.88')}" clip-path="url(#v2871BottleClip)"/>`:''}
+    <path d="M386 116 L514 116 L524 220 Q584 266 624 382 Q658 478 660 662 L660 944 Q660 1034 590 1076 Q528 1114 450 1114 Q372 1114 310 1076 Q240 1034 240 944 L240 662 Q242 478 276 382 Q316 266 376 220 Z" fill="none" stroke="#7fb0d4" stroke-opacity=".68" stroke-width="10"/>
+    <rect x="370" y="52" width="160" height="92" rx="24" fill="url(#v2871Cap)"/><g opacity=".32" stroke="#805e00" stroke-width="4">${[392,414,436,458,480,502].map(x=>`<path d="M${x} 66 L${x} 132"/>`).join('')}</g>
+    <path d="M286 325 Q346 238 390 128" fill="none" stroke="#fff" stroke-opacity=".42" stroke-width="16" stroke-linecap="round"/><path d="M330 230 Q450 274 570 230" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="11"/>
+    <g opacity="${labelOpacity}"><path d="M276 548 Q450 496 624 548 L624 752 Q450 816 276 752 Z" fill="url(#v2871Label)"/><path d="M276 548 Q450 496 624 548 L624 606 Q450 562 276 606 Z" fill="${v2871Xml(spec.labelAccentColor||'#facc15')}" opacity=".86"/><path d="M276 704 Q450 754 624 704 L624 752 Q450 816 276 752 Z" fill="${v2871Xml(spec.labelAccentColor||'#facc15')}" opacity=".92"/>
+      <rect x="380" y="558" width="140" height="42" rx="21" fill="#e9f5ff" opacity=".96"/><text x="450" y="586" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="24" font-weight="1000" fill="#224d96">${v2871Xml(l.brand||spec.brand||'Brand')}</text>
+      <text x="450" y="680" text-anchor="middle" font-family="Georgia,serif" font-size="98" font-style="italic" font-weight="900" fill="#ffffff" stroke="#071b52" stroke-width="2.4">${/cola/i.test(l.hero||spec.name||'')?'Cola':v2871Xml((l.hero||spec.name||'Prodotto').slice(0,12))}</text>
+      <text x="450" y="735" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="26" font-weight="1000" fill="#081a35">${v2871Xml(l.subtitle||(/lemon/i.test((l.hero||'')+' '+(spec.name||''))?'LEMON TASTE':''))}</text>
+    </g>
+    <text x="450" y="850" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="32" font-weight="1000" fill="#10233f" opacity=".86">${v2871Xml(l.format||spec.format||'')}</text>
+  </g>`;
+}
+function v2871JugMasterSvg(spec={}){
+  const l=v2871LabelModel(spec); const photo=!!spec.photoTextureUri; const textureFill=photo?'url(#v2871PhotoTexture)':'url(#v2871JugBody)';
+  return `<g filter="url(#v2871SoftShadow)">
+    <ellipse cx="450" cy="1110" rx="232" ry="30" fill="#071b32" opacity=".16"/>
+    <clipPath id="v2871JugClip"><path fill-rule="evenodd" d="M296 138 Q318 82 390 82 L596 112 Q678 126 694 236 L734 914 Q745 1036 626 1080 L282 1080 Q158 1040 174 912 L224 320 Q238 200 296 138 Z M574 224 Q680 230 692 352 Q704 482 584 542 Q532 568 498 518 Q598 470 594 360 Q592 268 544 260 Z"/></clipPath>
+    <path fill-rule="evenodd" d="M296 138 Q318 82 390 82 L596 112 Q678 126 694 236 L734 914 Q745 1036 626 1080 L282 1080 Q158 1040 174 912 L224 320 Q238 200 296 138 Z M574 224 Q680 230 692 352 Q704 482 584 542 Q532 568 498 518 Q598 470 594 360 Q592 268 544 260 Z" fill="${textureFill}" clip-path="url(#v2871JugClip)"/>
+    ${photo?`<rect x="155" y="80" width="610" height="1010" fill="url(#v2871PhotoTexture)" clip-path="url(#v2871JugClip)" opacity=".96"/>`:''}
+    <path fill-rule="evenodd" d="M296 138 Q318 82 390 82 L596 112 Q678 126 694 236 L734 914 Q745 1036 626 1080 L282 1080 Q158 1040 174 912 L224 320 Q238 200 296 138 Z M574 224 Q680 230 692 352 Q704 482 584 542 Q532 568 498 518 Q598 470 594 360 Q592 268 544 260 Z" fill="none" stroke="#08766f" stroke-opacity=".46" stroke-width="11"/>
+    <rect x="374" y="52" width="154" height="90" rx="24" fill="url(#v2871Cap)"/><g opacity=".32" stroke="#08204a" stroke-width="4">${[394,416,438,460,482,504].map(x=>`<path d="M${x} 66 L${x} 130"/>`).join('')}</g>
+    <path d="M246 246 Q320 204 454 212" stroke="#fff" stroke-opacity=".52" stroke-width="18" fill="none" stroke-linecap="round"/>
+    <g opacity="${photo?'.62':'1'}"><path d="M230 500 L642 474 L616 760 Q468 826 226 770 Z" fill="${v2871Xml(spec.labelColor||'#f5b1b8')}"/><path d="M230 500 L642 474 L606 578 Q460 622 228 602 Z" fill="${v2871Xml(spec.labelAccentColor||'#ffffff')}" opacity=".94"/><path d="M522 476 L642 474 L618 758 L548 782 Q584 640 522 476 Z" fill="${v2871Xml(spec.labelThirdColor||'#ef4444')}" opacity=".96"/>
+      <rect x="280" y="520" width="320" height="86" rx="24" fill="#fff" opacity=".88" transform="rotate(-3 440 563)"/><text x="450" y="578" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="58" font-weight="1000" fill="#b4232c">${v2871Xml(l.brand||spec.brand||'Dexal')}</text>
+      <text x="450" y="660" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="34" font-weight="1000" fill="#071b3b">${v2871Xml(l.hero||'CANDEGGINA DELICATA')}</text><text x="450" y="704" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="30" font-weight="1000" fill="#071b3b">${v2871Xml(l.subtitle||'MAXI')}</text><text x="450" y="770" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="36" font-weight="1000" fill="#071b3b">${v2871Xml(l.format||spec.format||'')}</text></g>
+  </g>`;
+}
+function v2871VirtualSvg(spec={}, opts={}){
+  const bg=String(opts.background||'transparent').toLowerCase();
+  const bgRect=bg==='white'?`<rect width="900" height="1200" rx="38" fill="#ffffff"/>`:'';
+  const intro=`<text x="450" y="60" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="28" font-weight="1000" fill="#0f2745">Gemello V28.71 · REAL PIXEL TWIN</text>`;
+  let obj='';
+  if((spec.family||'').includes('detergent_jug')) obj=v2871JugMasterSvg(spec);
+  else if((spec.family||'').includes('bottle') || spec.shape==='bottle') obj=v2871BottleMasterSvg(spec);
+  else obj=(typeof v2870GenericMasterSvg==='function')?v2870GenericMasterSvg(spec):'';
+  const source=spec.referencePhotoAvailable?'texture foto reale + sagoma semantica':'fallback vettoriale da memoria';
+  const badge=`<g><rect x="250" y="1128" width="400" height="36" rx="18" fill="#eef6ff" stroke="#d8e8fb"/><text x="450" y="1152" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="16" font-weight="1000" fill="#16427d">${v2871Xml(source)} · score ${Number(spec.detailScore||0)}</text></g>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200">${bgRect}${v2871SVGDefs(spec)}${intro}${obj}${badge}</svg>`;
+}
+function v2871GenerateVirtualRender(card={}, record={}, opts={}){
+  const spec=v2871RenderSpec(card,record);
+  const svg=v2871VirtualSvg(spec, opts||{});
+  return {version:V2871_VERSION,background:String(opts.background||'transparent'),spec,svgDataUri:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg),svg,upgrade:'REAL PIXEL TWIN: usa foto reale/API come texture quando disponibile, con sagoma e ragionamento semantico.'};
+}
+function v2871BuildHumanReasoning(card={}, record={}, confirmed={}){
+  const prev=v2871PrevBuildHumanReasoning ? v2871PrevBuildHumanReasoning(card,record,confirmed) : {};
+  const spec=v2871RenderSpec(card,record);
+  const rules=v2871Arr([prev.decisionRules, [
+    'V28.71: il gemello non nasce solo da forme disegnate, ma usa pixel reali salvati o immagini Open Facts/API come texture.',
+    'Il server decide la sagoma con famiglia visiva + OCR + memoria + valori titolare, poi la confronta con foto reale.',
+    'Se il gemello foto-reale non somiglia al prodotto, correggi foto profilo o valori titolare: quei dati diventano verità ufficiale.'
+  ]], 40);
+  return Object.assign({}, prev, {
+    version: V2871_VERSION,
+    renderUnderstanding: Object.assign({}, prev.renderUnderstanding||{}, {version:V2871_VERSION, mode:spec.renderMode, realPixelTexture:!!spec.referencePhotoAvailable, referenceKind:spec.referencePhotoKind, detailScore:spec.detailScore, target:'realismo >= 8/10'}),
+    decisionRules: rules,
+    engines: Object.assign({}, prev.engines||{}, {render:'V28.71 REAL PIXEL TWIN: foto reale/API + sagoma semantica + overlay leggibile', pixelJudge:'V28.71 render usa il pixel reale salvato come prova visiva primaria'})
+  });
+}
+function v2871RenderBrainProduct(key='', opts={}){
+  ensureDbShape(); const g=db.assistantBrain.globalProductMemory||{products:{}}; const rec=g.products[String(key||'').trim()];
+  if(!rec) return {ok:false,error:'product_not_found'};
+  try{ v2842EnsureObjectFolder(rec); v2842ApplyOwnerOverrides(rec); v2840AttachMemoryCard(rec,{}); }catch(_){ }
+  const card=rec.memoryCard||v2840BuildMemoryCard(rec,{}); const render=v2871GenerateVirtualRender(card,rec,opts||{}); const reasoning=v2871BuildHumanReasoning(card,rec,{});
+  try{ rec.virtualRenderV2871=render; rec.humanReasoningV2871=reasoning; rec.virtualRenderV2870=render; rec.humanReasoningV2870=reasoning; rec.virtualRenderV2868=render; rec.humanReasoningV2868=reasoning; rec.virtualRenderV2867=render; rec.humanReasoningV2867=reasoning; if(rec.memoryCard){ rec.memoryCard.virtualRenderV2871=render; rec.memoryCard.humanReasoningV2871=reasoning; rec.memoryCard.virtualRenderV2870=render; rec.memoryCard.humanReasoningV2870=reasoning; rec.memoryCard.virtualRenderV2868=render; rec.memoryCard.humanReasoningV2868=reasoning; rec.memoryCard.virtualRenderV2867=render; rec.memoryCard.humanReasoningV2867=reasoning; } }catch(_){ }
+  return {ok:true,version:V2871_VERSION,key:rec.key||key,title:rec.productName||card.identity?.productName||'Prodotto',render,reasoning,fields:v2840PublicProductBrainDetail(rec).fields};
+}
+(function(){
+  try{ v2867RenderSpec=v2871RenderSpec; v2867VirtualSvg=v2871VirtualSvg; v2867GenerateVirtualRender=v2871GenerateVirtualRender; v2867BuildHumanReasoning=v2871BuildHumanReasoning; v2867RenderBrainProduct=v2871RenderBrainProduct; }catch(_){ }
+  try{ v2868RenderSpec=v2871RenderSpec; v2868VirtualSvg=v2871VirtualSvg; v2868GenerateVirtualRender=v2871GenerateVirtualRender; v2868BuildHumanReasoning=v2871BuildHumanReasoning; v2868RenderBrainProduct=v2871RenderBrainProduct; }catch(_){ }
+  try{ v2870RenderSpec=v2871RenderSpec; v2870VirtualSvg=v2871VirtualSvg; v2870GenerateVirtualRender=v2871GenerateVirtualRender; v2870BuildHumanReasoning=v2871BuildHumanReasoning; v2870RenderBrainProduct=v2871RenderBrainProduct; }catch(_){ }
+  try{
+    if(typeof v2840BuildMemoryCard==='function' && !global.__v2871CardWrapped){
+      const prev=v2840BuildMemoryCard;
+      v2840BuildMemoryCard=function(record={}, confirmed={}){ const card=prev.call(this,record,confirmed)||{}; try{ card.humanReasoningV2871=v2871BuildHumanReasoning(card,record,confirmed); card.virtualRenderV2871=v2871GenerateVirtualRender(card,record,{background:'transparent'}); card.humanReasoningV2870=card.humanReasoningV2871; card.virtualRenderV2870=card.virtualRenderV2871; card.humanReasoningV2868=card.humanReasoningV2871; card.virtualRenderV2868=card.virtualRenderV2871; card.humanReasoningV2867=card.humanReasoningV2871; card.virtualRenderV2867=card.virtualRenderV2871; }catch(_){} return card; };
+      global.__v2871CardWrapped=true;
+    }
+  }catch(_){ }
+  try{
+    if(typeof publicServerBrainV2840==='function' && !global.__v2871ServerBrainWrapped){
+      const prev=publicServerBrainV2840;
+      publicServerBrainV2840=function(opts={}){ try{ Object.values(db.assistantBrain?.globalProductMemory?.products||{}).forEach(r=>{ v2842EnsureObjectFolder(r); const card=v2840AttachMemoryCard(r,{}); if(card){ r.humanReasoningV2871=v2871BuildHumanReasoning(card,r,{}); r.virtualRenderV2871=v2871GenerateVirtualRender(card,r,{background:'transparent'}); r.humanReasoningV2870=r.humanReasoningV2871; r.virtualRenderV2870=r.virtualRenderV2871; r.humanReasoningV2868=r.humanReasoningV2871; r.virtualRenderV2868=r.virtualRenderV2871; r.humanReasoningV2867=r.humanReasoningV2871; r.virtualRenderV2867=r.virtualRenderV2871; } }); }catch(_){} const out=prev.call(this,opts||{}); out.version='V28.71 PRO MASTER Real Pixel Twin'; out.reasoningBusV2871={active:true,policy:'render real-pixel = foto reale/API come texture + sagoma semantica + valori titolare',renderEngine:'V28.71 REAL PIXEL TWIN mobile-safe',humanUnderstanding:'il render deve sembrare quanto più reale possibile e mostrare il pixel che il server ha imparato'}; return out; };
+      global.__v2871ServerBrainWrapped=true;
+    }
+  }catch(_){ }
+  try{ const prev=preflightSnapshotV98; if(typeof prev==='function'&&!global.__v2871PreflightWrapped){ preflightSnapshotV98=function(){ const s=prev.call(this)||{}; s.version='V28.71'; s.brain=Object.assign({},s.brain||{},{version:'V28.71',realPixelTwin:'active',renderUsesRealPhotos:'active',mobileSafeRender:'strong'}); return s; }; global.__v2871PreflightWrapped=true; } }catch(_){ }
+  console.log('[Spesa Pronta] V28.71 PRO MASTER Real Pixel Twin active');
+})();
