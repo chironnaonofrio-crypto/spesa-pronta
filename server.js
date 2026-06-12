@@ -4004,7 +4004,7 @@ const server = http.createServer(async (req,res)=>{
       const dataUrl=String(model.glbDataUrl||model.glb||model.modelDataUrl||'');
       const parsed=(typeof v3191DecodeDataUrl==='function')?v3191DecodeDataUrl(dataUrl):null;
       if(!parsed||!parsed.buffer){
-        return send(res,404,{ok:false,error:'glb_not_found',message:'GLB reale non trovato in memoria. Premi Render 360° 3D dopo worker V33.7.'});
+        return send(res,404,{ok:false,error:'glb_not_found',message:'GLB reale non trovato in memoria. Premi Render 360° 3D dopo worker V33.4.'});
       }
       res.writeHead(200,{
         'Content-Type':'model/gltf-binary',
@@ -9851,8 +9851,8 @@ async function v3100GpuVisionHealth(){
   try{
     const r=await fetch(`${cfg.url}${cfg.healthPath}`,{headers:{'Authorization':`Bearer ${cfg.token}`,'X-Vision-Token':cfg.token},signal:ctrl.signal});
     let data={}; try{data=await r.json()}catch{data={raw:await r.text().catch(()=> '')}}
-    return {ok:r.ok,enabled:true,version:'V31.10.9_V33.7_render_debug_bridge',config:v3100PublicConfig(),gpuResponse:data,status:r.status};
-  }catch(e){ return {ok:false,enabled:true,version:'V31.10.9_V33.7_render_debug_bridge',config:v3100PublicConfig(),error:String(e?.message||e)}; }
+    return {ok:r.ok,enabled:true,version:'V31.10.3_V33.4_balanced_bridge',config:v3100PublicConfig(),gpuResponse:data,status:r.status};
+  }catch(e){ return {ok:false,enabled:true,version:'V31.10.3_V33.4_balanced_bridge',config:v3100PublicConfig(),error:String(e?.message||e)}; }
   finally{ clearTimeout(t); }
 }
 function v3100SlimGpuPayload(data={}){
@@ -10223,58 +10223,9 @@ async function v3160ResolvePreferredPhoto(key='',want='front'){
   const fetched=await v3100FetchImageBuffer(src,12000); if(fetched) return Object.assign({record:rec,photo,source:photo.kind||photo.source||'preferred_photo_url',filename:`${key}-${want}.jpg`},fetched);
   return {error:'photo_not_downloadable'};
 }
-async function v31108LooksLikeStudioRender(dataUrl=''){
-  const sharp=await v2864Sharp();
-  const out={ok:false,reason:'invalid_image',whiteRatio:0,opaqueRatio:0,darkEdgeRatio:1,width:0,height:0};
-  if(!sharp||!/^data:image\//i.test(String(dataUrl||''))) return out;
-  try{
-    const buf=v2864DataUrlBuffer(dataUrl); if(!buf){ out.reason='decode_failed'; return out; }
-    const img=sharp(buf,{failOn:'none'}).rotate().resize({width:720,height:720,fit:'inside',withoutEnlargement:true}).ensureAlpha();
-    const {data,info}=await img.raw().toBuffer({resolveWithObject:true}); const w=Number(info.width||0), h=Number(info.height||0); out.width=w; out.height=h; if(!w||!h){ out.reason='empty_dims'; return out; }
-    let white=0, opaque=0, darkEdge=0, edgePx=0;
-    for(let y=0;y<h;y++){
-      for(let x=0;x<w;x++){
-        const i=(y*w+x)*4, r=data[i], g=data[i+1], b=data[i+2], a=data[i+3];
-        const lum=(0.2126*r+0.7152*g+0.0722*b); const sat=Math.max(r,g,b)-Math.min(r,g,b);
-        if(a>28) opaque++;
-        if(lum>238 && sat<20) white++;
-        if((x===0||y===0||x===w-1||y===h-1)) { edgePx++; if(lum<232) darkEdge++; }
-      }
-    }
-    const total=w*h;
-    out.whiteRatio=Number((white/Math.max(1,total)).toFixed(4));
-    out.opaqueRatio=Number((opaque/Math.max(1,total)).toFixed(4));
-    out.darkEdgeRatio=Number((darkEdge/Math.max(1,edgePx)).toFixed(4));
-    if(out.whiteRatio<=.55) out.reason='background_not_studio_white';
-    else if(out.opaqueRatio>=.72) out.reason='too_much_scene_or_full_photo';
-    else if(out.darkEdgeRatio>=.08) out.reason='dark_edges_scene_photo';
-    else { out.ok=true; out.reason='studio_render_ok'; }
-    return out;
-  }catch(e){ out.reason=String(e?.message||'analyze_failed'); return out; }
-}
-
 async function v3160BuildRender2D(productDataUrl='',rec={}){
   const sharp=await v2864Sharp(); if(!sharp||!/^data:image\//i.test(String(productDataUrl||''))) return '';
-  try{
-    const buf=v2864DataUrlBuffer(productDataUrl); if(!buf) return '';
-    const cleanBuf=await v31102SanitizeTransparentProductBuffer(buf);
-    const prod0=await sharp(cleanBuf,{failOn:'none'})
-      .rotate()
-      .ensureAlpha()
-      .trim({background:{r:0,g:0,b:0,alpha:0},threshold:8})
-      .resize({height:790,width:650,fit:'inside',withoutEnlargement:true})
-      .png().toBuffer();
-    const meta=await sharp(prod0,{failOn:'none'}).metadata();
-    const pw=Number(meta.width||1), ph=Number(meta.height||1);
-    const canvasW=900, canvasH=1100;
-    const left=Math.max(0,Math.round((canvasW-pw)/2));
-    const top=Math.max(0,Math.round(110+(canvasH-230-ph)/2));
-    const canvas=await sharp({create:{width:canvasW,height:canvasH,channels:4,background:{r:255,g:255,b:255,alpha:1}}})
-      .composite([{input:prod0,left,top}])
-      .jpeg({quality:92,mozjpeg:true})
-      .toBuffer();
-    return v3130DataUrlFromBuffer(canvas,'image/jpeg');
-  }catch(_){ return productDataUrl; }
+  try{ const buf=v2864DataUrlBuffer(productDataUrl); if(!buf) return ''; const cleanBuf=await v31102SanitizeTransparentProductBuffer(buf); const prod0=await sharp(cleanBuf,{failOn:'none'}).rotate().ensureAlpha().trim({background:{r:0,g:0,b:0,alpha:0},threshold:8}).resize({height:790,width:650,fit:'inside',withoutEnlargement:true}).png().toBuffer(); const meta=await sharp(prod0,{failOn:'none'}).metadata(); const pw=Number(meta.width||1), ph=Number(meta.height||1); const canvasW=900, canvasH=1100; const left=Math.max(0,Math.round((canvasW-pw)/2)); const top=Math.max(0,Math.round(110+(canvasH-230-ph)/2)); const shadow=await sharp(prod0,{failOn:'none'}).ensureAlpha().blur(16).modulate({brightness:.16}).png().toBuffer(); const canvas=await sharp({create:{width:canvasW,height:canvasH,channels:4,background:{r:255,g:255,b:255,alpha:1}}}).composite([{input:shadow,left:left+12,top:top+28},{input:prod0,left,top}]).jpeg({quality:90,mozjpeg:true}).toBuffer(); return v3130DataUrlFromBuffer(canvas,'image/jpeg'); }catch(_){ return productDataUrl; }
 }
 async function v3160ExtractLabelFromBuffer(buffer,mime='image/jpeg',rec={}){
   const sharp=await v2864Sharp(); if(!sharp||!buffer) return null;
@@ -10296,68 +10247,13 @@ async function v3160ExtractLabelFromBuffer(buffer,mime='image/jpeg',rec={}){
   }catch(_){ return null; }
 }
 async function v3160RenderPro2D(key='',opts={}){
-  const rec=v3160Rec(key); if(!rec) return {ok:false,error:'product_not_found'};
-  const existing=rec.objectFolder?.gpuVisionV31||rec.gpuVisionV31||{};
-  const freshRender=!!(existing?.images?.renderPro2D && /31\.10\.8|31\.10\.7|31\.10\.6|33\.7|33\.6|photoreal|pixel|edge|holefix/i.test(String([existing.version,existing.engine,existing.renderPipelineVersion,existing.profilePolicy].filter(Boolean).join(' '))));
-  if(!opts.force && freshRender) return {ok:true,title:'Render PRO dalla memoria',message:'Render PRO già presente: non ho rigenerato.',cached:true,savedGpuVision:existing,gpuVision:existing};
+  const rec=v3160Rec(key); if(!rec) return {ok:false,error:'product_not_found'}; const existing=rec.objectFolder?.gpuVisionV31||rec.gpuVisionV31||{}; const freshRender=!!(existing?.images?.renderPro2D && /31\.10\.3|33\.4|balanced|silhouette/i.test(String([existing.version,existing.engine,existing.renderPipelineVersion,existing.profilePolicy].filter(Boolean).join(' ')))); if(!opts.force && freshRender) return {ok:true,title:'Render PRO dalla memoria',message:'Render PRO V31.10/V33.1 già presente: non ho rigenerato.',cached:true,savedGpuVision:existing,gpuVision:existing};
   const resolved=await v3160ResolvePreferredPhoto(key,'front'); if(resolved.error) return {ok:false,error:resolved.error,message:'Serve una foto profilo/frontale valida per generare il render PRO.'};
   let payload=null; const call=await v3100CallGpuVision(resolved.buffer,resolved.mime,'render-pro',resolved.filename); if(call.ok&&call.data) payload=call.data;
-  if(!payload||!payload.ok){
-    const d=v3160DataUrlForBuffer(resolved.buffer,resolved.mime);
-    payload={ok:true,version:'V31.8_local_fallback',product:{confidence:.55,shape:{family:'render_from_profile_photo'}},images:{productTransparent:d,productWhite:d},message:'GPU non ha prodotto render valido; uso base controllata per studio render.'};
-  }
-  const refined=await v3130RefineGpuPayload(payload,rec);
-  const imgs=Object.assign({},payload.images||{},refined.images||{});
-  const sourceCut=imgs.productTransparent||imgs.productWhite||v3160DataUrlForBuffer(resolved.buffer,resolved.mime);
-  const candidate=imgs.renderPro2D||imgs.renderPro||'';
-  const candidateCheck=await v31108LooksLikeStudioRender(candidate);
-  const sourceCheck=await v31108LooksLikeStudioRender(sourceCut);
-  const debugRenderPro={
-    action:'render_pro_2d',
-    at:Date.now(),
-    resolvedSource:resolved.source||'unknown',
-    resolvedFilename:resolved.filename||'',
-    gpuCallOk:!!(call&&call.ok),
-    payloadOk:!!(payload&&payload.ok),
-    payloadVersion:String(payload?.version||''),
-    candidatePresent:!!candidate,
-    candidateAccepted:!!candidateCheck.ok,
-    candidateCheck,
-    sourceCheck,
-    fallbackUsed:false,
-    fallbackReason:'',
-    finalSource:'',
-    note:''
-  };
-  if(!candidateCheck.ok){
-    const rebuilt=await v3160BuildRender2D(sourceCut,rec);
-    imgs.renderPro2D=rebuilt||candidate||sourceCut;
-    imgs.renderPro=imgs.renderPro2D;
-    debugRenderPro.fallbackUsed=true;
-    debugRenderPro.fallbackReason=String(candidateCheck.reason||'candidate_not_ok');
-    debugRenderPro.finalSource=rebuilt?'local_whitebg_rebuild':(candidate?'gpu_candidate_kept_because_rebuild_failed':'source_cut_fallback');
-    debugRenderPro.note='La GPU non ha prodotto un render 2D giudicato abbastanza studio/umano. Ho provato il rebuild locale su sfondo bianco.';
-    payload.message='Render GPU non abbastanza pulito/umano: ho rigenerato un render studio 2D controllato.';
-  }else{
-    imgs.renderPro2D=candidate;
-    imgs.renderPro=candidate;
-    debugRenderPro.finalSource='gpu_candidate';
-    debugRenderPro.note='Render GPU accettato dal controllo studio/white-background.';
-  }
-  payload.images=imgs;
-  payload.debugRenderPro=debugRenderPro;
-  payload.labelBox=refined.labelBox||payload.labelBox||null;
-  payload.render360=refined.render360||payload.render360||null;
-  payload.teacherOpenAI=payload.teacherOpenAI||{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: render PRO creato da foto profilo/frontale + GPU/server.'};
-  const saved=await v3100PersistGpuVision(key,payload,'render_pro_2d',resolved);
-  if(saved){
-    saved.version='31.10.9-v33.7-render-debug-console';
-    saved.renderPipelineVersion='v31_10_9_rendertruth_debug_console';
-    saved.profilePolicy='manual_owner_only';
-    saved.images=Object.assign({},saved.images||{},imgs);
-    saved.model3D=saved.model3D||saved.render360||{};
-  }
-  return {ok:true,title:'Render PRO 2D creato',message:payload.message||'Creato dalla foto profilo/frontale. Non ho cambiato foto profilo.',savedGpuVision:saved,gpuVision:payload,source:resolved.source};
+  if(!payload||!payload.ok){ const d=v3160DataUrlForBuffer(resolved.buffer,resolved.mime); payload={ok:true,version:'V31.7_local_fallback',product:{confidence:.55,shape:{family:'render_from_profile_photo'}},images:{productTransparent:d,productWhite:d},message:'GPU non ha prodotto render; uso foto profilo come base controllata.'}; }
+  const refined=await v3130RefineGpuPayload(payload,rec); const imgs=Object.assign({},payload.images||{},refined.images||{}); imgs.renderPro2D=imgs.renderPro||imgs.renderPro2D||await v3160BuildRender2D(imgs.productTransparent||imgs.productWhite||v3160DataUrlForBuffer(resolved.buffer,resolved.mime),rec); payload.images=imgs; payload.labelBox=refined.labelBox||payload.labelBox||null; payload.render360=refined.render360||payload.render360||null; payload.teacherOpenAI=payload.teacherOpenAI||{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: render PRO creato da foto profilo/frontale + GPU/server.'};
+  const saved=await v3100PersistGpuVision(key,payload,'render_pro_2d',resolved); if(saved){ saved.version='31.10.3-v33.4-balanced-silhouette'; saved.renderPipelineVersion='v31_10_3_balanced_silhouette_safe'; saved.profilePolicy='manual_owner_only'; saved.images=Object.assign({},saved.images||{},imgs); saved.model3D=saved.model3D||saved.render360||{}; }
+  return {ok:true,title:'Render PRO 2D creato',message:'Creato dalla foto profilo/frontale. Non ho cambiato foto profilo.',savedGpuVision:saved,gpuVision:payload,source:resolved.source};
 }
 async function v3160ExtractLabelOnly(key='',opts={}){
   const rec=v3160Rec(key);
@@ -10412,9 +10308,9 @@ async function v3160ExtractLabelOnly(key='',opts={}){
     if(src) best={dataUrl:src,confidence:gv.labelBox?.confidence||70,box:gv.labelBox||{},method:'v31_9_gpu_label_fallback'};
   }
   if(!best) return {ok:false,error:'label_not_found',message:'Non ho trovato una label chiara: carica una foto frontale/etichetta più vicina.'};
-  const current=Object.assign({}, existing||{ok:true,version:'31.10.9-v33.7-render-debug-console',images:{}});
+  const current=Object.assign({}, existing||{ok:true,version:'31.10.3-v33.4-balanced-silhouette',images:{}});
   current.ok=true;
-  current.version='31.10.9-v33.7-render-debug-console';
+  current.version='31.10.3-v33.4-balanced-silhouette';
   current.renderPipelineVersion='v31_10_3_label_only_preserve';
   current.profilePolicy='manual_owner_only';
   current.images=Object.assign({},current.images||{},{labelOnly:best.dataUrl,labelCrop:best.dataUrl});
@@ -10477,8 +10373,8 @@ async function v3160BuildVirtual3D(key='',opts={}){
   const incomingProduct=Object.assign({}, payload.product||{});
   if(existing.labelBox){ oldProduct.labelBox=existing.labelBox; }
   if(oldProduct.labelBox){ incomingProduct.labelBox=oldProduct.labelBox; }
-  const current=Object.assign({}, existing, {ok:true,version:'33.7-real3d-v31.10.6',strictV33:true,renderPipelineVersion:'v31_10_3_real_glb_preserve_label',images:mergedImages,product:Object.assign({},oldProduct,incomingProduct),labelBox:existing.labelBox||oldProduct.labelBox||null,teacherOpenAI:{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: 3D reale creato dal worker RunPod V33.7.'}});
-  current.model3D={version:'33.7',at:Date.now(),mode:'real_glb_mesh',realMeshGlb:true,glbDataUrl:payload.render3d.glbDataUrl,glbEndpoint:v3191GpuModelUrl(key),engine:payload.render3d.engine||'TripoSR',front:mergedImages.productWhite||mergedImages.productTransparent||mergedImages.renderPro||'',frames:Array.isArray(payload.render3d.frames)?payload.render3d.frames.slice(0,8):[],note:payload.render3d.note||'GLB mesh reale generato da RunPod V33.7'};
+  const current=Object.assign({}, existing, {ok:true,version:'33.4-real3d-v31.10.3',strictV33:true,renderPipelineVersion:'v31_10_3_real_glb_preserve_label',images:mergedImages,product:Object.assign({},oldProduct,incomingProduct),labelBox:existing.labelBox||oldProduct.labelBox||null,teacherOpenAI:{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: 3D reale creato dal worker RunPod V33.4.'}});
+  current.model3D={version:'33.4',at:Date.now(),mode:'real_glb_mesh',realMeshGlb:true,glbDataUrl:payload.render3d.glbDataUrl,glbEndpoint:v3191GpuModelUrl(key),engine:payload.render3d.engine||'TripoSR',front:mergedImages.productWhite||mergedImages.productTransparent||mergedImages.renderPro||'',frames:Array.isArray(payload.render3d.frames)?payload.render3d.frames.slice(0,8):[],note:payload.render3d.note||'GLB mesh reale generato da RunPod V33.4'};
   current.render360=Object.assign({},current.model3D);
   const folder=v2842EnsureObjectFolder(rec);
   folder.gpuVisionV33=current; rec.gpuVisionV33=current;
@@ -10524,9 +10420,9 @@ async function v3100GpuVisionAnalyze({key='',imageDataUrl='',imageUrl='',mode='a
   finally{ if(!force) global.__spesaGpuVisionLocks.delete(lockKey); }
 }
 try{ const prevFolder=v2842PublicObjectFolder; if(typeof prevFolder==='function'&&!global.__v3100GpuFolderWrapped){ v2842PublicObjectFolder=function(record={}){ const out=prevFolder.call(this,record)||{}; out.gpuVisionV31=(record.objectFolder&&record.objectFolder.gpuVisionV31)||record.gpuVisionV31||null; return out; }; global.__v3100GpuFolderWrapped=true; } }catch(_){ }
-try{ const prevBrain=publicServerBrainV2840; if(typeof prevBrain==='function'&&!global.__v3100BrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prevBrain.call(this,opts||{})||{}; out.version='V31.10.9 GPU Vision V33.7 Render Debug Console'; out.gpuVisionV31=v3100PublicConfig(); return out; }; global.__v3100BrainWrapped=true; } }catch(_){ }
-try{ const prevPreflight=preflightSnapshotV98; if(typeof prevPreflight==='function'&&!global.__v3100PreflightWrapped){ preflightSnapshotV98=function(){ const s=prevPreflight.call(this)||{}; s.version='V31.10.9'; s.gpuVisionV31=v3100PublicConfig(); return s; }; global.__v3100PreflightWrapped=true; } }catch(_){ }
-console.log('[Spesa Pronta] V31.10.9 GPU Vision V33.7 Render Debug Console active');
+try{ const prevBrain=publicServerBrainV2840; if(typeof prevBrain==='function'&&!global.__v3100BrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prevBrain.call(this,opts||{})||{}; out.version='V31.10.3 GPU Vision V33.4 Balanced Render Fix'; out.gpuVisionV31=v3100PublicConfig(); return out; }; global.__v3100BrainWrapped=true; } }catch(_){ }
+try{ const prevPreflight=preflightSnapshotV98; if(typeof prevPreflight==='function'&&!global.__v3100PreflightWrapped){ preflightSnapshotV98=function(){ const s=prevPreflight.call(this)||{}; s.version='V31.10.3'; s.gpuVisionV31=v3100PublicConfig(); return s; }; global.__v3100PreflightWrapped=true; } }catch(_){ }
+console.log('[Spesa Pronta] V31.10.3 GPU Vision V33.4 Balanced Render Fix active');
 
 
 // =============================================================
@@ -10549,7 +10445,7 @@ console.log('[Spesa Pronta] V31.10.9 GPU Vision V33.7 Render Debug Console activ
       const prev=preflightSnapshotV98;
       preflightSnapshotV98=function(){
         const s=prev.call(this)||{};
-        s.version='V31.10.9';
+        s.version='V31.10.3';
         s.ramSafeV314=spesaRamSafeHealth();
         s.checks=Array.isArray(s.checks)?s.checks:[];
         s.checks.push({id:'render_ram_safe',label:'Render RAM Safe',ok:!!SPESA_RAM_SAFE,message:SPESA_RAM_SAFE?`Modalità ${SPESA_MEMORY_MODE}: cache/foto/dataset alleggeriti`:'Modalità PRO locale: RAM Safe non forzato'});

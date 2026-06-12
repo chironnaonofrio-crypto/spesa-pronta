@@ -13,5 +13,5 @@
     "pg": "^8.13.1",
     "sharp": "^0.34.5"
   },
-  "spesaProntaBuild": "v31_10_5_pixel_lock_clean_render"
+  "spesaProntaBuild": "v31_10_3_balanced_render_fix"
 }
