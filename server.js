@@ -63,8 +63,10 @@ const SPESA_MAX_DIAGNOSTIC_EVENTS = Math.max(20, Math.min(250, Number(process.en
 const SPESA_MAX_MEMORY_CACHE = Math.max(40, Math.min(2000, Number(process.env.MAX_MEMORY_CACHE || process.env.SPESA_MAX_MEMORY_CACHE || (SPESA_RAM_SAFE ? 120 : 1800))));
 const SPESA_MAX_BARCODE_CACHE = Math.max(80, Math.min(5000, Number(process.env.MAX_BARCODE_CACHE || process.env.SPESA_MAX_BARCODE_CACHE || (SPESA_RAM_SAFE ? 400 : 1800))));
 const SPESA_MAX_GLOBAL_PRODUCTS = Math.max(120, Math.min(5000, Number(process.env.MAX_GLOBAL_PRODUCTS || process.env.SPESA_MAX_GLOBAL_PRODUCTS || (SPESA_RAM_SAFE ? 800 : 2500))));
-const SPESA_MAX_PRODUCT_PHOTOS = Math.max(0, Math.min(36, Number(process.env.MAX_PRODUCT_PHOTOS || process.env.SPESA_MAX_PRODUCT_PHOTOS || (SPESA_RAM_SAFE ? 2 : 36))));
+const SPESA_MAX_PRODUCT_PHOTOS = Math.max(6, Math.min(36, Number(process.env.MAX_PRODUCT_PHOTOS || process.env.SPESA_MAX_PRODUCT_PHOTOS || (SPESA_RAM_SAFE ? 8 : 36))));
 const SPESA_MAX_DATA_URL_CHARS = Math.max(0, Math.min(300000, Number(process.env.MAX_STORED_DATA_URL_CHARS || process.env.SPESA_MAX_DATA_URL_CHARS || (SPESA_RAM_SAFE ? 0 : 180000))));
+// V31.5.2: in modalità RAM-safe non salviamo le foto enormi, ma conserviamo preview leggere per non rompere galleria/profilo/render.
+const SPESA_MAX_THUMB_DATA_URL_CHARS = Math.max(20000, Math.min(300000, Number(process.env.MAX_STORED_THUMB_DATA_URL_CHARS || process.env.SPESA_MAX_THUMB_DATA_URL_CHARS || (SPESA_RAM_SAFE ? 140000 : 240000))));
 if(SPESA_RAM_SAFE){
   if(process.env.DISABLE_GOOGLE_HTML_SCRAPE === undefined) process.env.DISABLE_GOOGLE_HTML_SCRAPE = '1';
   if(process.env.GPU_VISION_ENABLED === undefined) process.env.GPU_VISION_ENABLED = 'false';
@@ -373,7 +375,10 @@ function spesaRamSafeString(v='', key=''){
   const s=String(v==null?'':v);
   const k=String(key||'').toLowerCase();
   if(spesaRamSafeIsDataUrl(s) || spesaRamSafeLooksBase64(s)){
-    if(SPESA_MAX_DATA_URL_CHARS<=0 || s.length>SPESA_MAX_DATA_URL_CHARS) return '';
+    // V31.5.2: se è una preview/thumb o un render leggero, conservarla anche con MAX_STORED_DATA_URL_CHARS=0.
+    const previewKey=/(thumb|thumbdataurl|preview|profile|representative|renderpro|productwhite|labelcrop|labelcropdataurl|displayurl|imagedataurl)$/i.test(k);
+    const limit=previewKey ? SPESA_MAX_THUMB_DATA_URL_CHARS : SPESA_MAX_DATA_URL_CHARS;
+    if(limit<=0 || s.length>limit) return '';
     return s;
   }
   if(/url$|imageurl|pageurl|sourceurl|externalurl/.test(k)) return s.slice(0,1200);
@@ -402,7 +407,11 @@ function spesaRamSafeCompactAny(value, key='', depth=0){
         if(safe) out[k]=safe;
         continue;
       }
-      if(SPESA_RAM_SAFE && /(imageDataUrl|displayUrl)$/i.test(k) && typeof v==='string' && spesaRamSafeIsDataUrl(v)) continue;
+      if(SPESA_RAM_SAFE && /(imageDataUrl|displayUrl)$/i.test(k) && typeof v==='string' && spesaRamSafeIsDataUrl(v)){
+        const safe=spesaRamSafeString(v,k);
+        if(safe) out[k]=safe;
+        continue;
+      }
       const safe=spesaRamSafeCompactAny(v,k,depth+1);
       if(safe!==undefined && safe!=='' && safe!==null) out[k]=safe;
     }
@@ -427,7 +436,7 @@ function spesaRamSafeCompactDb(reason='runtime'){
   if(reason==='ensureDbShape' && global.__spesaRamSafeLastCompactAt && now-global.__spesaRamSafeLastCompactAt<15000) return {ok:true,skipped:true,throttled:true};
   global.__spesaRamSafeLastCompactAt=now;
   global.__spesaRamSafeCompacting=true;
-  const stats={reason,removedProducts:0,knowledgeEntries:0,barcodeEntries:0,mode:SPESA_MEMORY_MODE,limits:{diagnosticEvents:SPESA_MAX_DIAGNOSTIC_EVENTS,memoryCache:SPESA_MAX_MEMORY_CACHE,barcodeCache:SPESA_MAX_BARCODE_CACHE,globalProducts:SPESA_MAX_GLOBAL_PRODUCTS,productPhotos:SPESA_MAX_PRODUCT_PHOTOS,dataUrlChars:SPESA_MAX_DATA_URL_CHARS}};
+  const stats={reason,removedProducts:0,knowledgeEntries:0,barcodeEntries:0,mode:SPESA_MEMORY_MODE,limits:{diagnosticEvents:SPESA_MAX_DIAGNOSTIC_EVENTS,memoryCache:SPESA_MAX_MEMORY_CACHE,barcodeCache:SPESA_MAX_BARCODE_CACHE,globalProducts:SPESA_MAX_GLOBAL_PRODUCTS,productPhotos:SPESA_MAX_PRODUCT_PHOTOS,dataUrlChars:SPESA_MAX_DATA_URL_CHARS, thumbDataUrlChars:SPESA_MAX_THUMB_DATA_URL_CHARS}};
   try{
     const brain=db.assistantBrain;
     brain.learningAudit=Array.isArray(brain.learningAudit)?brain.learningAudit.slice(0,SPESA_MAX_DIAGNOSTIC_EVENTS):[];
@@ -487,7 +496,7 @@ function spesaRamSafeHealth(){
     seedLazy:!!getVisionSeedMemory().lazy,
     buildId:global.__SPESA_PRONTA_BUILD_ID||'V31.5-RENDER-BRAIN-BUGFIX',
     memory:spesaRamSafeMemoryMb(),
-    limits:{diagnosticEvents:SPESA_MAX_DIAGNOSTIC_EVENTS,memoryCache:SPESA_MAX_MEMORY_CACHE,barcodeCache:SPESA_MAX_BARCODE_CACHE,globalProducts:SPESA_MAX_GLOBAL_PRODUCTS,productPhotos:SPESA_MAX_PRODUCT_PHOTOS,dataUrlChars:SPESA_MAX_DATA_URL_CHARS},
+    limits:{diagnosticEvents:SPESA_MAX_DIAGNOSTIC_EVENTS,memoryCache:SPESA_MAX_MEMORY_CACHE,barcodeCache:SPESA_MAX_BARCODE_CACHE,globalProducts:SPESA_MAX_GLOBAL_PRODUCTS,productPhotos:SPESA_MAX_PRODUCT_PHOTOS,dataUrlChars:SPESA_MAX_DATA_URL_CHARS, thumbDataUrlChars:SPESA_MAX_THUMB_DATA_URL_CHARS},
     counts:{globalProducts:Object.keys(gpm.products||{}).length,knowledgeCache:Object.keys(kc.entries||{}).length,barcodeProducts:Object.keys(bb.products||{}).length,learningAudit:(brain.learningAudit||[]).length,households:Object.keys(db?.households||{}).length},
     lastCompact:brain.ramSafeV314||null,
     disabledHeavy:{googleHtmlScrape:String(process.env.DISABLE_GOOGLE_HTML_SCRAPE||'')==='1',gpuVisionEnabled:String(process.env.GPU_VISION_ENABLED||'').toLowerCase()==='true'}
@@ -934,8 +943,8 @@ function v2840CategoryEmoji(category=''){
 function v2840ProfilePhoto(record={}, confirmed={}){
   const representative=v2842BestRepresentativePhoto(record);
   const title=v2840CleanString(record.productName||confirmed.productName||'Prodotto',80);
-  if(representative && (representative.dataUrl || representative.externalUrl)){
-    return {type:'user_representative_photo', imageUrl:representative.dataUrl||representative.externalUrl, thumbDataUri:representative.thumbDataUrl||representative.dataUrl||representative.externalUrl, photoId:representative.id||'', emoji:v2840CategoryEmoji(record.category||confirmed.category||''), title, brand:v2840CleanString(record.brand||confirmed.brand||'',48), category:v2840CleanString(record.category||confirmed.category||'',50), colors:v2840List(record.colors, confirmed.colors).slice(0,4), note:'Foto profilo reale scelta dal server tra le foto fornite dagli utenti'};
+  if(representative && (representative.dataUrl || representative.thumbDataUrl || representative.externalUrl)){
+    return {type:'user_representative_photo', imageUrl:representative.dataUrl||representative.thumbDataUrl||representative.externalUrl, thumbDataUri:representative.thumbDataUrl||representative.dataUrl||representative.externalUrl, photoId:representative.id||'', emoji:v2840CategoryEmoji(record.category||confirmed.category||''), title, brand:v2840CleanString(record.brand||confirmed.brand||'',48), category:v2840CleanString(record.category||confirmed.category||'',50), colors:v2840List(record.colors, confirmed.colors).slice(0,4), note:'Foto profilo reale scelta dal server tra le foto fornite dagli utenti'};
   }
   const brand=v2840CleanString(record.brand||confirmed.brand||'',48);
   const category=v2840CleanString(record.category||confirmed.category||'',50);
@@ -1110,17 +1119,17 @@ function v2842MergeObjectFolder(record={}, confirmed={}){
     folder.visualSignatures=folder.visualSignatures.slice(0,18);
   }
   const manualRep=folder.representativePhotoId && folder.photos.find(p=>p.id===folder.representativePhotoId);
-  const best=manualRep || folder.photos.find(p=>p.kind==='product_front' && (p.dataUrl||p.externalUrl)) || folder.photos.find(p=>p.dataUrl||p.externalUrl);
+  const best=manualRep || folder.photos.find(p=>p.kind==='product_front' && (p.dataUrl||p.thumbDataUrl||p.externalUrl)) || folder.photos.find(p=>p.dataUrl||p.thumbDataUrl||p.externalUrl);
   if(best){ folder.representativePhotoId=best.id; folder.representativePhoto=Object.assign({}, best); }
   folder.photoCount=folder.photos.length;
-  folder.hasRealProfilePhoto=!!(folder.representativePhoto?.dataUrl || folder.representativePhoto?.externalUrl);
+  folder.hasRealProfilePhoto=!!(folder.representativePhoto?.dataUrl || folder.representativePhoto?.thumbDataUrl || folder.representativePhoto?.externalUrl);
   return folder;
 }
 function v2842BestRepresentativePhoto(record={}){
   const f=record.objectFolder||{};
-  if(f.representativePhoto && (f.representativePhoto.dataUrl||f.representativePhoto.externalUrl)) return f.representativePhoto;
+  if(f.representativePhoto && (f.representativePhoto.dataUrl||f.representativePhoto.thumbDataUrl||f.representativePhoto.externalUrl)) return f.representativePhoto;
   const photos=Array.isArray(f.photos)?f.photos:[];
-  return photos.find(p=>p.id===f.representativePhotoId && (p.dataUrl||p.externalUrl)) || photos.find(p=>p.kind==='product_front' && (p.dataUrl||p.externalUrl)) || photos.find(p=>p.dataUrl||p.externalUrl) || null;
+  return photos.find(p=>p.id===f.representativePhotoId && (p.dataUrl||p.thumbDataUrl||p.externalUrl)) || photos.find(p=>p.kind==='product_front' && (p.dataUrl||p.thumbDataUrl||p.externalUrl)) || photos.find(p=>p.dataUrl||p.thumbDataUrl||p.externalUrl) || null;
 }
 function v2842PublicObjectFolder(record={}){
   const f=record.objectFolder||{};
@@ -1249,10 +1258,12 @@ function v2842UpdateOwnerOverride(key='', updates={}, actor=''){
     const f=v2842EnsureObjectFolder(record);
     const selected=f.photos.find(p=>p.id===updates.representativePhotoId);
     if(selected){
+      if(typeof v3152IsProfileForbiddenPhoto==='function' && v3152IsProfileForbiddenPhoto(selected)) return {ok:false,error:'photo_not_allowed_as_profile',message:'Questa immagine è etichetta/barcode/scadenza/crop tecnico: non può diventare foto profilo prodotto.'};
+      if(typeof v3152PhotoSrc==='function' && !v3152PhotoSrc(selected)) return {ok:false,error:'photo_preview_missing',message:'Anteprima immagine mancante: rigenera il render o carica una foto corretta.'};
       f.representativePhotoId=updates.representativePhotoId;
       f.representativePhoto=Object.assign({}, selected);
       f.profilePhotoLockedByOwner=true;
-      f.hasRealProfilePhoto=!!(selected.dataUrl||selected.externalUrl);
+      f.hasRealProfilePhoto=!!(selected.dataUrl||selected.thumbDataUrl||selected.externalUrl);
       record.profilePhoto=Object.assign({}, selected);
       record.ownerOverrides.representativePhotoId=updates.representativePhotoId;
       record.ownerOverrides.profilePhotoLockedByOwner=true;
@@ -1382,7 +1393,42 @@ function v2840AttachMemoryCard(record={}, confirmed={}){
     return null;
   }
 }
+
+function v3152PhotoSrc(photo={}){ return String((photo&&typeof photo==='object')?(photo.thumbDataUrl||photo.dataUrl||photo.externalUrl||photo.imageUrl||photo.url||''):(photo||'')); }
+function v3152IsProfileForbiddenPhoto(photo={}){
+  const blob=String([photo.kind,photo.source,photo.id,photo.visibleEvidence,photo.detectedText].filter(Boolean).join(' ')).toLowerCase();
+  return /label|etichetta|ingredient|barcode|ean|expiry|scadenza|crop/.test(blob) && !/render_pro|product_white|product_transparent|product_front|owner_profile/.test(blob);
+}
+function v3152RepairObjectFolderImages(record={}){
+  try{
+    const f=record.objectFolder||{};
+    f.photos=Array.isArray(f.photos)?f.photos:[];
+    for(const p of f.photos){
+      if(p && typeof p==='object'){
+        if(!p.thumbDataUrl && p.dataUrl && String(p.dataUrl).length<=SPESA_MAX_THUMB_DATA_URL_CHARS) p.thumbDataUrl=p.dataUrl;
+        p.previewAvailable=!!v3152PhotoSrc(p);
+      }
+    }
+    const rep=f.representativePhotoId?f.photos.find(p=>String(p.id||'')===String(f.representativePhotoId||'')):null;
+    const badRep=rep && (v3152IsProfileForbiddenPhoto(rep) || !v3152PhotoSrc(rep));
+    const badStored=f.representativePhoto && (v3152IsProfileForbiddenPhoto(f.representativePhoto) || !v3152PhotoSrc(f.representativePhoto));
+    if(badRep || badStored){
+      f.representativePhotoId='';
+      f.representativePhoto=null;
+      f.profilePhotoLockedByOwner=false;
+      f.hasRealProfilePhoto=false;
+      if(record.profilePhoto && (v3152IsProfileForbiddenPhoto(record.profilePhoto)||!v3152PhotoSrc(record.profilePhoto))) record.profilePhoto=null;
+      if(record.ownerOverrides){ record.ownerOverrides.profilePhotoLockedByOwner=false; record.ownerOverrides.representativePhotoId=''; }
+      record.imageRepairV3152={at:Date.now(),reason:'bad_or_missing_profile_preview_cleared',policy:'profilo manuale, niente label/barcode/scadenza come profilo'};
+    }else{
+      f.hasRealProfilePhoto=!!(f.representativePhotoId && f.representativePhoto && v3152PhotoSrc(f.representativePhoto));
+    }
+    f.photoCount=f.photos.length;
+  }catch(_){ }
+}
+
 function v2840PublicProductBrainDetail(record={}){
+  try{ v3152RepairObjectFolderImages(record); }catch(_){}
   const card=record.memoryCard||v2840BuildMemoryCard(record,{});
   return {
     key:record.key||card.key||'',
@@ -9819,8 +9865,8 @@ async function v3130BuildStudioRender(productDataUrl='',labelDataUrl='',rec={}){
     const prod=await sharp(v2864DataUrlBuffer(productDataUrl),{failOn:'none'}).rotate().ensureAlpha().resize({height:900,width:760,fit:'inside',withoutEnlargement:true}).png().toBuffer();
     const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1450" viewBox="0 0 1200 1450"><defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#f1f7ff"/></linearGradient><filter id="shadow"><feDropShadow dx="0" dy="36" stdDeviation="24" flood-color="#0b2545" flood-opacity=".16"/></filter><linearGradient id="pill" x1="0" x2="1"><stop stop-color="#f6d54a"/><stop offset="1" stop-color="#244596"/></linearGradient></defs><rect width="1200" height="1450" rx="54" fill="url(#bg)"/><rect x="70" y="60" width="1060" height="1328" rx="44" fill="#fff" stroke="#d7e7f8" stroke-width="3"/><text x="600" y="122" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="38" font-weight="1000" fill="#10233f">Render da GPU · prodotto ricostruito</text><text x="600" y="165" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="900" fill="#60748e">pixel reali + reference certe + memoria server</text><ellipse cx="600" cy="1070" rx="275" ry="42" fill="#09233f" opacity=".10"/><rect x="150" y="1164" width="900" height="124" rx="32" fill="#f7fbff" stroke="#dce9f7"/><text x="600" y="1220" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="34" font-weight="1000" fill="#10233f">${brand}${brand?' · ':''}${name}</text><text x="600" y="1262" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="900" fill="#60748e">${fmt}${fmt&&cat?' · ':''}${cat}</text><rect x="215" y="1314" width="770" height="66" rx="28" fill="url(#pill)" opacity=".96"/><text x="600" y="1356" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="1000" fill="#fff">salvabile come foto profilo prodotto</text></svg>`;
     const composite=[{input:prod,gravity:'north',top:195}];
-    const out=await sharp(Buffer.from(svg)).composite(composite).png({compressionLevel:8}).toBuffer();
-    return v3130DataUrlFromBuffer(out,'image/png');
+    const out=await sharp(Buffer.from(svg)).composite(composite).resize({width:760,withoutEnlargement:true}).jpeg({quality:84,mozjpeg:true}).toBuffer();
+    return v3130DataUrlFromBuffer(out,'image/jpeg');
   }catch(_){ return ''; }
 }
 async function v3130RefineGpuPayload(payload={},rec={}){
@@ -9889,7 +9935,7 @@ async function v3100PersistGpuVision(key='', payload={}, mode='analyze', source=
     folder.photos=folder.photos.slice(0,Math.max(6, Number(process.env.MAX_PRODUCT_PHOTOS||12)||12));
     folder.photoCount=folder.photos.length;
     // V31.5: MAI cambiare automaticamente la foto profilo da analisi/render GPU.
-    folder.hasRealProfilePhoto=!!(folder.representativePhotoId && folder.representativePhoto);
+    folder.hasRealProfilePhoto=!!(folder.representativePhotoId && folder.representativePhoto && ((folder.representativePhoto.dataUrl||folder.representativePhoto.thumbDataUrl||folder.representativePhoto.externalUrl)));
     if(Array.isArray(refined.referenceImages)&&refined.referenceImages.length){ folder.referenceImagesV3000=refined.referenceImages.slice(0,8); folder.referenceCandidatesV3000=refined.referenceImages.slice(0,8); }
     if(refined.render360){ folder.render360V3000=refined.render360; rec.render360V3000=refined.render360; }
   }catch(_){ }

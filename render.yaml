@@ -38,3 +38,7 @@ services:
         value: 2
       - key: MAX_STORED_DATA_URL_CHARS
         value: 0
+
+# V31.5.2: conserva anteprime leggere anche in RAM-safe (non foto enormi)
+MAX_STORED_THUMB_DATA_URL_CHARS=140000
+MAX_PRODUCT_PHOTOS=8

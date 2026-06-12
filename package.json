@@ -13,5 +13,5 @@
     "pg": "^8.13.1",
     "sharp": "^0.34.5"
   },
-  "spesaProntaBuild": "v31_5_1_npm_registry_fix_3151"
+  "spesaProntaBuild": "v31_5_2_image_preview_restore_3152"
 }

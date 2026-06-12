@@ -1,0 +1,4 @@
+V31.5.2 Image Preview Restore
+- RAM-safe mantiene anteprime leggere
+- niente foto profilo da label/barcode/scadenza
+- render/galleria non mostrano più icone rotte
