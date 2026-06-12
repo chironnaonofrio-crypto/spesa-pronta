@@ -226,7 +226,7 @@
           <h1>Cervello Server</h1>
           <p class="subtitle">Memoria prodotti · foto reali · valori titolare · ricerca precisa</p>
         </div>
-        <span class="build" id="buildBadge">V31.10.5</span>
+        <span class="build" id="buildBadge">V31.10.6</span>
       </div>
     </header>
 
@@ -395,11 +395,11 @@
     const isReal3D=!!(model.realMeshGlb && model.glbDataUrl);
     const frames=Array.isArray(model.frames)?model.frames:[];
     const id=f.identity||{};
-    const gpuSummary=gpu&&gpu.ok?`<div class="gpuBox"><h4><span>⚡ GPU Vision V31.10.5 · V33.4.2 ACQUISIZIONE 3D</span><small>${esc(gpu.version||'V33 richiesto')}</small></h4><div class="gpuFacts"><span>${gpuFresh&&renderSrc&&renderSrc!==fallback?'render 2D pronto':'render da creare'}</span><span>${labelSrc?'etichetta solo-label pronta':'etichetta da estrarre'}</span><span>${isReal3D?'GLB reale pronto':'3D reale da creare'}</span><span>profilo: solo manuale</span></div></div>`:`<div class="gpuBox"><h4><span>⚡ GPU Vision V31.10</span><small>modalità severa</small></h4><div class="gpuFacts"><span class="warn">Premi Render PRO / Etichetta / Render 360° 3D. Uso V33.4.2: render 2D realistico, acquisizione prodotto 3D, GLB reale.</span></div></div>`;
+    const gpuSummary=gpu&&gpu.ok?`<div class="gpuBox"><h4><span>⚡ GPU Vision V31.10.6 · V33.4.3 VIDEO LIVE 3D</span><small>${esc(gpu.version||'V33 richiesto')}</small></h4><div class="gpuFacts"><span>${gpuFresh&&renderSrc&&renderSrc!==fallback?'render 2D pronto':'render da creare'}</span><span>${labelSrc?'etichetta solo-label pronta':'etichetta da estrarre'}</span><span>${isReal3D?'GLB reale pronto':'3D reale da creare'}</span><span>profilo: solo manuale</span></div></div>`:`<div class="gpuBox"><h4><span>⚡ GPU Vision V31.10</span><small>modalità severa</small></h4><div class="gpuFacts"><span class="warn">Premi Render PRO / Etichetta / Render 360° 3D. Uso V33.4.3: live video guidata, assistente vocale, frame intelligenti, GLB reale.</span></div></div>`;
     const real3dSrc=(model.glbEndpoint||(`/api/gpu-vision/model-3d?key=${encodeURIComponent(String(product.key||''))}`)); const real3dHtml=isReal3D?`<model-viewer class="real3dViewer" src="${esc(real3dSrc)}" poster="${esc(renderSrc&&renderSrc!==fallback?renderSrc:'')}" camera-controls touch-action="pan-y" auto-rotate rotation-per-second="24deg" shadow-intensity="1.25" exposure="1.05" camera-orbit="45deg 68deg 145%" field-of-view="32deg" interaction-prompt="auto" ar ar-modes="webxr scene-viewer quick-look"></model-viewer><div class="renderActions"><a class="ghost" href="${esc(real3dSrc)}" target="_blank" rel="noreferrer">Apri modello 3D</a><a class="ghost" href="${esc(real3dSrc)}" download="spesa-pronta-prodotto.glb">Scarica GLB</a></div><div class="v30Facts"><span class="ok">GLB reale</span><span>${esc(model.engine||'TripoSR')}</span><span>${esc(model.note||'mesh generata da RunPod V33.4')}</span></div>`:(frames.length?`<div class="pro3dStage"><img class="pro3dFrameImg" id="gpu3dFrame" src="${esc(frames[0])}" alt="Frame V33"></div><textarea id="gpu3dFramesJson" hidden readonly>${esc(JSON.stringify(frames))}</textarea><div class="pro3dControls"><input id="gpu3dRange" type="range" min="0" max="${frames.length-1}" value="0"><div class="gpu360Hint" id="gpu3dLabel">Frame GPU: 1/${frames.length}</div></div><div class="v30Facts"><span class="warn">frame senza GLB</span><span>premi Render 360° 3D dopo upgrade V33 completo</span></div>`:`<div class="real3dEmpty">Nessun 3D reale pronto.<br>Premi “Render 360° 3D”. Se RunPod V33 non genera GLB, vedrai un errore chiaro: non mostro più il finto 3D piatto.</div>`);
-    return `<div class="section"><h3>🧊 Render AI · GPU Vision V31.10.5 ACQUISIZIONE 3D</h3>
+    return `<div class="section"><h3>🧊 Render AI · GPU Vision V31.10.6 ACQUISIZIONE 3D</h3>
       <div class="v30Actions"><button class="primary" id="btnGpuRenderPro">Render PRO 2D</button><button class="primary" id="btnGpuLabelOnly">Etichetta</button><button class="primary" id="btnGpu3DRender">Render 360° 3D</button><button class="primary" id="btnAcquireProduct3D">ACQUISISCI PRODOTTO X 3D</button><button class="ghost" data-open-photos="1">Apri tab Foto</button><button class="ghost" id="btnGpuHealth">Test GPU</button></div>
-      <div class="v30Info">V31.10.5: Render 2D più realistico, contorni rifiniti, etichetta frontale protetta, manico migliorato e ombra minima. Nuovo flusso: acquisizione prodotto per 3D.</div>${gpuSummary}<div class="v30Card" style="margin-bottom:12px"><h4><span>🤖 Assistente SPESAPRONTA GPU · acquisizione 3D</span><small>live guidata</small></h4><div class="v30Facts"><span>1 frontale</span><span>2 lato</span><span>3 retro</span><span>4 etichetta</span><span>5 barcode</span></div><div class="empty" style="text-align:left">Scansiona il soggetto prodotto a 360°. Il cervello salva dimensioni visive, colori, sagoma, etichette e barcode; poi crea un GLB ruotabile. Se mancano lato/retro, caricali nella tab Foto prima di acquisire.</div></div>
+      <div class="v30Info">V31.10.6: acquisizione 3D video intelligente con live camera, frame automatici, voce naturale, coverage 3D e cleanup dei frame temporanei.</div>${gpuSummary}<div class="v30Card" style="margin-bottom:12px"><h4><span>🤖 Assistente SPESAPRONTA GPU · acquisizione 3D</span><small>live guidata</small></h4><div class="v30Facts"><span>live video</span><span>frame automatici</span><span>voce naturale</span><span>coverage 3D</span><span>cleanup temporanei</span></div><div class="empty" style="text-align:left">Premi il pulsante e gira lentamente il prodotto davanti alla camera. La GPU cattura automaticamente frontale, lati, retro, top/base, etichetta e barcode quando i frame sono buoni. I frame temporanei vengono cancellati dopo il build.</div></div>
       <div class="v30Grid">
         <div class="v30Card"><h4><span>Render PRO 2D</span><small>profilo/frontale</small></h4><div class="v30Stage"><img class="v30Img" id="v30OfficialRenderImg" src="${esc(renderSrc)}" data-fallback-src="${esc(fallback)}" alt="Render PRO"></div><div class="renderActions"><button class="ghost" id="btnGpuSaveGallery">Salva foto in galleria</button><button class="primary" id="btnGpuSetProfile">Imposta come foto profilo</button></div><div class="v30Facts"><span>salvataggio galleria ≠ profilo</span><span>profilo solo manuale</span></div></div>
         <div class="v30Card"><h4><span>Etichetta articolo</span><small>label</small></h4><div class="v30Stage">${labelSrc?`<img class="v30Img" src="${esc(labelSrc)}" alt="Etichetta articolo">`:'<div class="empty">Premi Etichetta: cerco solo la label tra le foto articolo.</div>'}</div><div class="v30Facts"><span>${labelSrc?'solo etichetta rilevata':'non ancora rilevata'}</span><span>${esc(labelMethod||'V33.4 label')}</span></div></div>
@@ -482,6 +482,99 @@
   }
 
 
+
+  let acq3d={stream:null,timer:null,sessionId:'',frameIndex:0,busy:false,lastSpeak:'',lastSpeakAt:0,lastStatus:null,voiceOn:true};
+  function acq3dVoice(){
+    try{
+      const voices=window.speechSynthesis?.getVoices?.()||[];
+      return voices.find(v=>/it/i.test(v.lang)&&/(google|microsoft|elsa|isabella|alice|luca|natural|neural)/i.test(v.name)) || voices.find(v=>/it/i.test(v.lang)) || voices[0] || null;
+    }catch(_){return null;}
+  }
+  function acq3dSpeak(text='',force=false){
+    try{
+      if(!acq3d.voiceOn || !text || !('speechSynthesis' in window)) return;
+      const now=Date.now();
+      if(!force && acq3d.lastSpeak===text && now-acq3d.lastSpeakAt<4500) return;
+      acq3d.lastSpeak=text; acq3d.lastSpeakAt=now;
+      window.speechSynthesis.cancel();
+      const u=new SpeechSynthesisUtterance(text);
+      const v=acq3dVoice(); if(v) u.voice=v;
+      u.lang='it-IT'; u.rate=.96; u.pitch=1.02; u.volume=1;
+      window.speechSynthesis.speak(u);
+    }catch(_){ }
+  }
+  function acq3dHtml(){
+    return `<div id="acq3dOverlay" style="position:fixed;inset:0;z-index:99999;background:rgba(5,16,32,.82);backdrop-filter:blur(10px);display:grid;place-items:center;padding:14px"><div style="width:min(980px,100%);max-height:96vh;overflow:auto;background:#f8fbff;border:1px solid #cfe0f7;border-radius:28px;box-shadow:0 28px 90px rgba(0,0,0,.35);padding:14px"><div style="display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:10px"><div><h2 style="margin:0;font-size:22px">☄️ Assistente SPESAPRONTA GPU</h2><p style="margin:4px 0 0;color:#5b6e86;font-weight:800">Acquisizione 3D video intelligente · voce naturale · frame automatici</p></div><button id="acq3dClose" class="ghost">Chiudi</button></div><div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(280px,.8fr);gap:12px"><div style="background:#071426;border-radius:24px;overflow:hidden;position:relative;min-height:360px"><video id="acq3dVideo" playsinline autoplay muted style="width:100%;height:100%;min-height:360px;object-fit:cover;display:block"></video><canvas id="acq3dCanvas" hidden></canvas><div id="acq3dOverlayHint" style="position:absolute;left:14px;right:14px;bottom:14px;background:rgba(255,255,255,.92);border-radius:18px;padding:12px 14px;font-weight:1000;color:#0e2541">Inquadra il prodotto intero, poi ruotalo lentamente.</div></div><div style="display:grid;gap:10px"><div style="background:#fff;border:1px solid #d9e8fb;border-radius:22px;padding:12px"><b>Copertura 3D</b><div style="height:14px;background:#eaf2fb;border-radius:999px;overflow:hidden;margin:8px 0"><div id="acq3dBar" style="height:100%;width:0%;background:linear-gradient(90deg,#16a085,#58d68d);border-radius:999px"></div></div><div id="acq3dPercent" style="font-weight:1000">0%</div></div><div id="acq3dChecklist" style="background:#fff;border:1px solid #d9e8fb;border-radius:22px;padding:12px;display:grid;gap:6px;font-weight:850"></div><div style="background:#fff;border:1px solid #d9e8fb;border-radius:22px;padding:12px"><b>Istruzione</b><p id="acq3dInstruction" style="margin:8px 0 0;color:#213a57;font-weight:900">Preparo la camera…</p></div><div style="display:flex;flex-wrap:wrap;gap:8px"><button class="primary" id="acq3dBuild" disabled>Genera 3D</button><button class="ghost" id="acq3dPause">Pausa</button><button class="ghost" id="acq3dVoice">Voce ON</button><button class="danger" id="acq3dCancel">Annulla</button></div><details style="background:#fff;border:1px solid #d9e8fb;border-radius:18px;padding:10px"><summary style="font-weight:1000">Console debug acquisizione</summary><pre id="acq3dDebug" style="white-space:pre-wrap;font-size:12px;max-height:210px;overflow:auto"></pre></details></div></div></div></div>`;
+  }
+  function acq3dRenderStatus(data={}){
+    acq3d.lastStatus=data;
+    const pct=Number(data.coveragePercent||0);
+    const bar=$('acq3dBar'), pc=$('acq3dPercent'), ins=$('acq3dInstruction'), hint=$('acq3dOverlayHint'), dbg=$('acq3dDebug'), build=$('acq3dBuild');
+    if(bar) bar.style.width=Math.max(0,Math.min(100,pct))+'%';
+    if(pc) pc.textContent=pct+'%';
+    const txt=data.nextInstruction||data.lastInstruction||'Ruota lentamente il prodotto.';
+    if(ins) ins.textContent=txt;
+    if(hint) hint.textContent=txt;
+    if(build) build.disabled=!(data.readyFor3D||pct>=72);
+    const cv=new Set(data.capturedViews||[]), cp=new Set(data.capturedParts||[]);
+    const rows=[['front','Frontale',cv.has('front')],['rightSide','Lato destro',cv.has('rightSide')],['back','Retro',cv.has('back')],['leftSide','Lato sinistro',cv.has('leftSide')],['top','Tappo / coperchio / top',cv.has('top')||cp.has('cap')||cp.has('lidOrTop')],['bottom','Base',cv.has('bottom')||cp.has('base')],['frontLabel','Etichetta',cp.has('frontLabel')],['barcode','Barcode',cp.has('barcode')],['handleHole','Manico / foro',cp.has('handleHole')||!String(data.productFamily||'').includes('handle')]];
+    const box=$('acq3dChecklist'); if(box) box.innerHTML=rows.map(r=>`<div>${r[2]?'✅':'⏳'} ${esc(r[1])}</div>`).join('');
+    if(dbg) dbg.textContent=JSON.stringify(data,null,2);
+    if(txt) acq3dSpeak(txt,false);
+  }
+  function acq3dStopTimer(){ if(acq3d.timer){ clearInterval(acq3d.timer); acq3d.timer=null; } }
+  function acq3dStopStream(){ try{ acq3d.stream?.getTracks?.().forEach(t=>t.stop()); }catch(_){ } acq3d.stream=null; }
+  async function acq3dClose(cancel=true){
+    acq3dStopTimer(); acq3dStopStream();
+    try{ window.speechSynthesis?.cancel?.(); }catch(_){ }
+    const s=getSettings();
+    if(cancel && acq3d.sessionId){ try{ await fetchJson('/api/gpu-vision/acquire-3d/cancel',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+s.token},body:JSON.stringify({householdId:s.householdId,sessionId:acq3d.sessionId}),cache:'no-store'}); }catch(_){ } }
+    document.getElementById('acq3dOverlay')?.remove(); acq3d.sessionId=''; acq3d.frameIndex=0; acq3d.busy=false;
+  }
+  async function acq3dCaptureFrame(){
+    if(acq3d.busy || !acq3d.sessionId) return;
+    const video=$('acq3dVideo'), canvas=$('acq3dCanvas'); if(!video||!canvas||!video.videoWidth) return;
+    acq3d.busy=true;
+    try{
+      const maxW=760; const scale=Math.min(1,maxW/video.videoWidth); canvas.width=Math.max(1,Math.round(video.videoWidth*scale)); canvas.height=Math.max(1,Math.round(video.videoHeight*scale));
+      const ctx=canvas.getContext('2d',{willReadFrequently:false}); ctx.drawImage(video,0,0,canvas.width,canvas.height);
+      const frameDataUrl=canvas.toDataURL('image/jpeg',.70);
+      const s=getSettings();
+      const r=await fetchJson('/api/gpu-vision/acquire-3d/frame',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+s.token},body:JSON.stringify({householdId:s.householdId,sessionId:acq3d.sessionId,frameIndex:acq3d.frameIndex++,frameDataUrl}),cache:'no-store'});
+      const data=r.data||{}; if(r.ok&&data.ok) acq3dRenderStatus(data); else acq3dRenderStatus({coveragePercent:0,lastInstruction:data.message||data.error||'Errore frame GPU',error:data});
+    }catch(e){ acq3dRenderStatus({coveragePercent:0,lastInstruction:e.message||String(e),error:String(e)}); }
+    finally{ acq3d.busy=false; }
+  }
+  async function acq3dBuild(){
+    const s=getSettings(); const notice=$('notice'); acq3dStopTimer();
+    if(notice){notice.className='notice warn';notice.innerHTML='<span>☄️</span><div><b>Genero 3D da acquisizione live…</b><span>Uso i frame migliori e poi cancello i temporanei.</span></div>';}
+    acq3dSpeak('Dati sufficienti. Genero il modello 3D e pulisco i frame temporanei.', true);
+    try{
+      const r=await fetchJson('/api/gpu-vision/acquire-3d/build',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+s.token},body:JSON.stringify({householdId:s.householdId,sessionId:acq3d.sessionId}),cache:'no-store'});
+      const data=r.data||{};
+      if(r.ok&&data.ok){ if(notice){notice.className='notice ok';notice.innerHTML=`<span>✅</span><div><b>${esc(data.title||'3D generato')}</b><span>${esc(data.message||'Modello 3D pronto.')}</span></div>`;} await acq3dClose(false); await load(); const p=currentProduct(); if(p){state.selectedKey=p.key;state.tab='render';applyFilter();} }
+      else { acq3dRenderStatus(Object.assign({},acq3d.lastStatus||{},{lastInstruction:data.message||data.error||'Build 3D non riuscita',buildError:data})); }
+    }catch(e){ acq3dRenderStatus(Object.assign({},acq3d.lastStatus||{},{lastInstruction:e.message||String(e),buildError:String(e)})); }
+  }
+  async function openAcquire3DLive(){
+    const p=currentProduct(); const s=getSettings(); if(!p){alert('Seleziona un prodotto');return;}
+    await acq3dClose(false).catch(()=>{});
+    document.body.insertAdjacentHTML('beforeend', acq3dHtml());
+    $('acq3dClose')?.addEventListener('click',()=>acq3dClose(true));
+    $('acq3dCancel')?.addEventListener('click',()=>acq3dClose(true));
+    $('acq3dBuild')?.addEventListener('click',acq3dBuild);
+    $('acq3dVoice')?.addEventListener('click',()=>{acq3d.voiceOn=!acq3d.voiceOn; $('acq3dVoice').textContent=acq3d.voiceOn?'Voce ON':'Voce OFF'; if(acq3d.voiceOn) acq3dSpeak('Voce assistente attiva. Ruota lentamente il prodotto.',true);});
+    $('acq3dPause')?.addEventListener('click',()=>{ if(acq3d.timer){acq3dStopTimer(); $('acq3dPause').textContent='Riprendi'; acq3dSpeak('Acquisizione in pausa.',true);} else {acq3d.timer=setInterval(acq3dCaptureFrame,900); $('acq3dPause').textContent='Pausa'; acq3dSpeak('Riprendo acquisizione. Ruota lentamente.',true);} });
+    try{
+      const start=await fetchJson('/api/gpu-vision/acquire-3d/start',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+s.token},body:JSON.stringify({householdId:s.householdId,key:p.key,mode:'video_live'}),cache:'no-store'});
+      if(!start.ok||!start.data?.ok) throw new Error(start.data?.message||start.data?.error||'start_failed');
+      acq3d.sessionId=start.data.sessionId; acq3d.frameIndex=0; acq3dRenderStatus(start.data.status||start.data);
+      acq3d.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
+      const video=$('acq3dVideo'); video.srcObject=acq3d.stream; await video.play();
+      acq3dSpeak('Inquadra il prodotto intero. Ruotalo lentamente: catturo io i frame migliori.', true);
+      acq3d.timer=setInterval(acq3dCaptureFrame,900);
+    }catch(e){ acq3dRenderStatus({coveragePercent:0,lastInstruction:'Camera o sessione non avviata: '+(e.message||String(e)),error:String(e)}); acq3dSpeak('Non riesco ad avviare la camera o la sessione GPU.',true); }
+  }
 
   async function gpuVisionHealth(){
     const s=getSettings(); const notice=$('notice');
@@ -584,11 +677,11 @@
     d.querySelector('#btnV30OpenOfficial')?.addEventListener('click',()=>{const src=(d.querySelector('#v30OfficialRenderImg')?.src)||(currentProduct()?.fields?.objectFolder?.officialRenderV3000?.officialDataUrl)||(currentProduct()?.fields?.objectFolder?.officialRenderV3000?.studioDataUrl)||'';const w=window.open('about:blank','_blank');if(w){w.document.write('<title>Render ufficiale V30</title><body style="margin:0;background:#f4f8ff;display:grid;place-items:center;min-height:100vh"><img style="max-width:96vw;max-height:96vh;object-fit:contain;border-radius:22px" src="'+String(src).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"></body>');}});
     d.querySelector('#btnV30CopySources')?.addEventListener('click',()=>copyText(JSON.stringify(currentProduct()?.fields?.objectFolder?.referenceImagesV3000||currentProduct()?.fields?.objectFolder?.referenceCandidatesV3000||[],null,2),'Fonti render copiate ✅'));
     d.querySelector('#btnV30TestGoogle')?.addEventListener('click',v30TestGoogleApi);
-    d.querySelector('#btnV302ForceMarker')?.addEventListener('click',()=>alert('V31.10.5 attiva ✅ V33.4.2 render reale + acquisizione prodotto 3D + GLB'));
+    d.querySelector('#btnV302ForceMarker')?.addEventListener('click',()=>alert('V31.10.6 attiva ✅ V33.4.3 live video 3D + assistente vocale + GLB'));
     d.querySelector('#btnGpuRenderPro')?.addEventListener('click',()=>gpuVisionProAction('render-pro',false));
     d.querySelector('#btnGpuLabelOnly')?.addEventListener('click',()=>gpuVisionProAction('label',false));
     d.querySelector('#btnGpu3DRender')?.addEventListener('click',()=>gpuVisionProAction('render-3d',false));
-    d.querySelector('#btnAcquireProduct3D')?.addEventListener('click',()=>gpuVisionProAction('render-3d',true));
+    d.querySelector('#btnAcquireProduct3D')?.addEventListener('click',openAcquire3DLive);
     d.querySelectorAll('[data-rot-src]').forEach(btn=>btn.addEventListener('click',()=>{ const main=d.querySelector('#gpu360Main'); const label=d.querySelector('#gpu360Label'); if(main){ main.src=btn.dataset.rotSrc||main.src; } if(label){ label.textContent='Vista attuale: '+(btn.dataset.rotLabel||'Vista'); }}));
     d.querySelectorAll('[data-save-gpu-src]').forEach(btn=>btn.addEventListener('click',()=>{ const src=btn.getAttribute('data-save-gpu-src')||''; if(!src){alert('Immagine GPU non disponibile');return;} saveOwnerUpdate(/^https?:\/\//i.test(src)?{profilePhotoUrl:src}:{profilePhotoDataUrl:src},'Foto profilo prodotto aggiornata dal render GPU ✅'); }));
     d.querySelector('#btnSaveGpuProfileMain')?.addEventListener('click',()=>{ const src=d.querySelector('#gpuRenderMain')?.src||''; if(!src){alert('Render GPU non disponibile');return;} saveOwnerUpdate(/^https?:\/\//i.test(src)?{profilePhotoUrl:src}:{profilePhotoDataUrl:src},'Render GPU impostato come foto profilo ✅'); });

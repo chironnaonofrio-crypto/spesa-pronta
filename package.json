@@ -13,5 +13,5 @@
     "pg": "^8.13.1",
     "sharp": "^0.34.5"
   },
-  "spesaProntaBuild": "v31_10_5_real2d_3d_acquisition"
+  "spesaProntaBuild": "v31_10_6_video_live_3d_voice_acquisition"
 }

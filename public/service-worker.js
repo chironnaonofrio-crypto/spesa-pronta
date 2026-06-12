@@ -1,5 +1,5 @@
-const CACHE_NAME='spesa-pronta-v31-10-5-real2d-3d-acquisition';
-const ASSETS=['./','./index.html','./assets/styles.css?v=31105','./assets/app.v27-48-premium-mega-vision.js?v=31105','./assets/app.js?v=31105','./assets/vision-seed-memory.json','./clear-cache.html','./debug.html','./server-brain.html?v=31105'];
+const CACHE_NAME='spesa-pronta-v31-10-6-video-live-3d-voice-acquisition';
+const ASSETS=['./','./index.html','./assets/styles.css?v=31106','./assets/app.v27-48-premium-mega-vision.js?v=31106','./assets/app.js?v=31106','./assets/vision-seed-memory.json','./clear-cache.html','./debug.html','./server-brain.html?v=31106'];
 self.addEventListener('install',event=>{self.skipWaiting();event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(ASSETS)).catch(()=>{}));});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))));self.clients.claim();});
 self.addEventListener('fetch',event=>{const req=event.request;if(req.method!=='GET')return;const url=new URL(req.url);if(url.pathname.includes('/api/'))return;event.respondWith(fetch(req).catch(()=>caches.match(req).then(r=>r||caches.match('./index.html'))));});
