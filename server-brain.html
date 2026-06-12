@@ -195,6 +195,11 @@
     /* V30 Reference Render Engine */
     .v30Actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px}.v30Import{display:grid;grid-template-columns:1fr auto;gap:8px;margin:8px 0 12px}.v30Import input{border:1px solid var(--line);border-radius:16px;padding:12px;font:inherit;font-weight:850;min-width:0;background:#fbfdff}.v30Info{border:1px solid #cfe5ff;background:linear-gradient(180deg,#f7fbff,#edf6ff);border-radius:18px;padding:12px;color:#31506f;font-weight:900;line-height:1.38;margin-bottom:12px}.v30Grid{display:grid;grid-template-columns:1.1fr .9fr;gap:12px}.v30Card{background:linear-gradient(180deg,#fff,#f3f9ff);border:1px solid #d9e8fb;border-radius:22px;padding:10px;box-shadow:0 12px 26px rgba(10,43,86,.06);min-width:0}.v30Card h4{margin:0 0 9px;font-size:1rem;color:#10233f;display:flex;align-items:center;justify-content:space-between;gap:8px}.v30Card small{color:#60748e;font-weight:1000}.v30Stage{display:grid;place-items:center;min-height:260px;border-radius:18px;background:#fff;border:1px solid #dce9f7;overflow:hidden;padding:8px}.v30Img{display:block;width:100%;max-width:460px;max-height:58vh;object-fit:contain;border-radius:16px;background:#fff;box-shadow:0 14px 34px rgba(7,27,50,.10)}.v30Facts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.v30Facts span{border:1px solid #d9e8fb;background:#f6fbff;border-radius:999px;padding:6px 9px;font-size:.74rem;font-weight:1000;color:#16427d}.v30Facts .ok{background:#edfff6;border-color:#baf2d5;color:#0b7e48}.v30Facts .warn{background:#fff8e7;border-color:#f3d89c;color:#7b5500}.v30RefGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px}.v30RefCard{border:1px solid #d9e8fb;background:#fbfdff;border-radius:18px;padding:8px;display:grid;gap:6px}.v30RefCard img{width:100%;aspect-ratio:1/1;border-radius:14px;object-fit:contain;background:#fff}.v30RefCard b{font-size:.78rem;line-height:1.1}.v30RefCard small{font-size:.7rem;color:#60748e}.v30Twin{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.v30Slot{border:1px solid #d9e8fb;border-radius:18px;background:#fbfdff;min-height:210px;display:grid;place-items:center;text-align:center;padding:8px}.v30Slot img{width:100%;max-height:220px;object-fit:contain}.v30Slot b{display:block;font-size:.8rem;margin-bottom:6px}.v30Slot span{font-weight:1000;color:#8a6400}@media(max-width:680px){.v30Actions,.v30Import,.v30Grid{grid-template-columns:1fr}.v30Twin{grid-template-columns:1fr}.v30Stage{min-height:220px}.v30Img{max-height:48vh}.v30Card{border-radius:18px;padding:9px}}
 
+
+    /* V31 GPU Vision Bridge */
+    .gpuBox{border:1px solid #bfead2;background:linear-gradient(180deg,#effff6,#f7fbff);border-radius:20px;padding:12px;margin:12px 0;color:#123b2b;box-shadow:0 10px 24px rgba(18,191,114,.08)}
+    .gpuBox h4{margin:0 0 8px;font-size:1rem;display:flex;align-items:center;justify-content:space-between;gap:8px}.gpuBox small{font-weight:1000;color:#17734d}.gpuGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:10px}.gpuShot{background:#fff;border:1px solid #d8efe3;border-radius:16px;padding:8px;display:grid;gap:6px}.gpuShot img{width:100%;max-height:180px;object-fit:contain;border-radius:12px;background:#fff}.gpuFacts{display:flex;gap:6px;flex-wrap:wrap}.gpuFacts span{border:1px solid #c9ead8;background:#fff;border-radius:999px;padding:6px 9px;font-size:.74rem;font-weight:1000;color:#116442}.gpuFacts .warn{border-color:#f3d89c;color:#7b5500;background:#fff8e7}.gpuActions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}.gpuActions button{width:100%}@media(max-width:680px){.gpuActions{grid-template-columns:1fr}.gpuGrid{grid-template-columns:1fr}}
+
 </style>
 </head>
 <body>
@@ -206,7 +211,7 @@
           <h1>Cervello Server</h1>
           <p class="subtitle">Memoria prodotti · foto reali · valori titolare · ricerca precisa</p>
         </div>
-        <span class="build" id="buildBadge">V30.4</span>
+        <span class="build" id="buildBadge">V31.0</span>
       </div>
     </header>
 
@@ -242,7 +247,7 @@
       <div class="actions">
         <button class="ghost" id="btnCopy">Copia report</button>
         <button class="danger" id="btnCopyErrors">Copia console</button>
-        <button class="darkbtn" id="btnScrollSelected">Vai al dettaglio</button>
+        <button class="darkbtn" id="btnScrollSelected">Vai al dettaglio</button><button class="primary" id="btnGpuHealth">Test GPU Vision</button>
       </div>
     </section>
 
@@ -371,12 +376,17 @@
     const front=r360.front||officialSrc, side=r360.side||'', back=r360.back||'';
     const id=f.identity||{};
     const q=official.quality||{};
+    const gpu=folder.gpuVisionV31||f.gpuVisionV31||{};
+    const gpuImgs=gpu.images||{};
+    const gpuShape=gpu.product?.shape||gpu.shape||{};
+    const gpuColors=gpu.product?.dominantColors||gpu.dominantColors||[];
+    const gpuHtml=gpu&&gpu.ok?`<div class="gpuBox"><h4><span>⚡ GPU Vision V31</span><small>${esc(gpu.version||'31.0')}</small></h4><div class="gpuFacts"><span>confidence ${esc(gpu.product?.confidence||gpu.confidence||'—')}</span><span>${esc(gpuShape.family||'forma letta')}</span><span>${esc((gpuColors||[]).slice(0,5).join(' '))}</span></div><div class="gpuGrid">${gpuImgs.productTransparent?`<div class="gpuShot"><b>Prodotto trasparente</b><img src="${esc(gpuImgs.productTransparent)}" alt="GPU prodotto trasparente"></div>`:''}${gpuImgs.productWhite?`<div class="gpuShot"><b>Sfondo bianco</b><img src="${esc(gpuImgs.productWhite)}" alt="GPU sfondo bianco"></div>`:''}${gpuImgs.labelCrop?`<div class="gpuShot"><b>Crop etichetta</b><img src="${esc(gpuImgs.labelCrop)}" alt="GPU crop etichetta"></div>`:''}</div></div>`:`<div class="gpuBox"><h4><span>⚡ GPU Vision V31</span><small>non ancora usata</small></h4><div class="gpuFacts"><span class="warn">Premi Analizza con GPU per salvare crop prodotto/etichetta</span></div></div>`;
     const candidatesHtml=refs.length?`<div class="v30RefGrid">${refs.slice(0,8).map(r=>`<div class="v30RefCard"><img src="${esc(srcOf(r)||fallback)}" data-fallback-src="${esc(fallback)}" alt="reference"><b>${esc(r.productName||r.title||'Reference')}</b><small>${esc(r.brand||'')} ${r.source?'· '+esc(r.source):''}</small><small>score ${esc(r.score||'—')}</small><button class="ghost mini" data-v30-use-ref="${esc(r.imageUrl||'')}">Usa come render</button></div>`).join('')}</div>`:'<div class="empty">Nessuna reference salvata. Premi “Cerca render online” o incolla l’URL immagine trovata su Google Immagini.</div>';
     const slot=(title,src,miss)=>`<div class="v30Slot"><div><b>${esc(title)}</b>${src?`<img src="${esc(src)}" alt="${esc(title)}">`:`<span>${esc(miss)}</span>`}</div></div>`;
     return `<div class="section"><h3>🧊 Render AI · V30.4 Auto Web Harvester</h3>
-      <div class="v30Actions"><button class="primary" id="btnV30SearchRender">Cerca render online</button><button class="ghost" id="btnV30OpenOfficial">Apri render grande</button><button class="ghost" data-open-photos="1">Apri tab Foto</button><button class="ghost" id="btnV30CopySources">Copia fonti render</button><button class="ghost" id="btnV30TestGoogle">Test Google API</button><button class="ghost" id="btnV302ForceMarker">Build V30.4</button></div>
+      <div class="v30Actions"><button class="primary" id="btnV30SearchRender">Cerca render online</button><button class="ghost" id="btnV30OpenOfficial">Apri render grande</button><button class="ghost" data-open-photos="1">Apri tab Foto</button><button class="ghost" id="btnV30CopySources">Copia fonti render</button><button class="ghost" id="btnV30TestGoogle">Test Google API</button><button class="ghost" id="btnV302ForceMarker">Build V31.0</button><button class="primary" id="btnGpuAnalyzeProduct">Analizza con GPU</button><button class="ghost" id="btnGpuRenderProduct">Render da GPU</button></div>
       <div class="v30Import"><input id="v30ImportUrl" placeholder="Incolla URL immagine prodotto da Google/sito"><button class="primary" id="btnV30ImportUrl">Importa URL</button></div>
-      <div class="v30Info">V30.4 AUTO: Google JSON API può essere bloccata, quindi il server prova automaticamente anche un harvester leggero da Google Immagini HTML e fonti prodotto. Nessun proxy/captcha: se Google blocca, passa a Open Facts, pagine prodotto e URL manuale.</div>
+      <div class="v30Info">V31.0 BRIDGE: oltre a render online/Open Facts, ora questo articolo può essere analizzato dal cervello GPU privato RunPod. La GPU restituisce crop prodotto, sfondo bianco, crop etichetta, colori dominanti e forma.</div>${gpuHtml} 
       <div class="v30Grid">
         <div class="v30Card"><h4><span>Render ufficiale prodotto</span><small id="v30OfficialStatus">${esc(q.level||'da generare')}</small></h4><div class="v30Stage"><img class="v30Img" id="v30OfficialRenderImg" src="${esc(officialSrc)}" data-fallback-src="${esc(fallback)}" alt="Render ufficiale"></div><div class="v30Facts" id="v30OfficialFacts"><span class="${officialSrc!==fallback?'ok':'warn'}">${esc(q.message||'premi Cerca render online o Importa URL')}</span>${q.score?`<span>score ${esc(q.score)}</span>`:''}<span>${esc(official.mode||official.renderMode||'reference_cleaned')}</span></div></div>
         <div class="v30Card"><h4><span>Reference reali trovate</span><small id="v30ReferenceStatus">${refs.length?refs.length+' fonti':'da cercare'}</small></h4><div id="v30ReferenceList">${candidatesHtml}</div><div class="v30Facts"><span>Open Facts automatico</span><span>Google Immagini automatico leggero</span><span>zero token OpenAI</span></div></div>
@@ -459,6 +469,36 @@
   }
 
 
+
+  async function gpuVisionHealth(){
+    const s=getSettings(); const notice=$('notice');
+    if(notice){notice.className='notice warn';notice.innerHTML='<span>⚡</span><div><b>Controllo GPU Vision…</b><span>Verifico RunPod tramite server Render.</span></div>';}
+    try{
+      const r=await fetchJson(`/api/gpu-vision/health?householdId=${encodeURIComponent(s.householdId||'')}`,{headers:{Authorization:'Bearer '+s.token},cache:'no-store'});
+      const data=r.data||{};
+      if(notice){notice.className=data.ok?'notice ok':'notice bad';notice.innerHTML=`<span>⚡</span><div><b>GPU Vision ${data.ok?'online':'non pronta'}</b><span>${esc(JSON.stringify({enabled:data.enabled,version:data.gpuResponse?.version||data.version,cuda:data.gpuResponse?.cuda,gpu:data.gpuResponse?.gpu,config:data.config},null,0))}</span></div>`;}
+      alert(JSON.stringify(data,null,2));
+    }catch(e){ if(notice){notice.className='notice bad';notice.innerHTML=`<span>⚠️</span><div><b>Errore GPU Vision</b><span>${esc(e.message||String(e))}</span></div>`;} }
+  }
+  async function gpuVisionAnalyzeSelected(mode='analyze'){
+    const p=currentProduct(); const s=getSettings(); if(!p){alert('Seleziona un prodotto');return;}
+    const notice=$('notice'); if(notice){notice.className='notice warn';notice.innerHTML=`<span>⚡</span><div><b>${mode==='render'?'Render':'Analisi'} GPU in corso…</b><span>Invio foto master al cervello RunPod.</span></div>`;}
+    try{
+      const url=mode==='render'?'/api/gpu-vision/render':'/api/gpu-vision/analyze';
+      const r=await fetchJson(url,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+s.token},body:JSON.stringify({householdId:s.householdId,key:p.key}),cache:'no-store'});
+      const data=r.data||{};
+      if(data.ok){
+        p.fields.objectFolder=p.fields.objectFolder||{};
+        p.fields.objectFolder.gpuVisionV31=data.savedGpuVision||data.gpuVision||data;
+        if(notice){notice.className='notice ok';notice.innerHTML='<span>⚡</span><div><b>GPU Vision completata.</b><span>Crop prodotto, etichetta e colori salvati nel cervello server.</span></div>';}
+        await load(); state.selectedKey=p.key; state.tab='render'; applyFilter();
+      }else{
+        if(notice){notice.className='notice bad';notice.innerHTML=`<span>⚠️</span><div><b>GPU Vision non riuscita</b><span>${esc(data.reason||data.error||'errore')}</span></div>`;}
+        alert(JSON.stringify(data,null,2));
+      }
+    }catch(e){ if(notice){notice.className='notice bad';notice.innerHTML=`<span>⚠️</span><div><b>Errore chiamata GPU</b><span>${esc(e.message||String(e))}</span></div>`;} }
+  }
+
   function renderJson(f){return `<div class="section"><h3>🧬 JSON completo scheda</h3><div class="json">${esc(redact(JSON.stringify(f,null,2)))}</div></div>`}
   function renderDetail(){const p=currentProduct();const d=$('detail');if(!p){d.innerHTML='<div class="detailBody"><div class="empty">Nessun dettaglio disponibile.</div></div>';return;}const f=p.fields||{};const src=profileSrc(p.profilePhoto);d.innerHTML=`<div class="detailTop"><img class="photo" src="${esc(src)}" alt=""><div><h2>${esc(p.title||'Prodotto')}</h2><p class="detailMeta">${esc(p.brand||'—')} · ${esc(p.format||'—')} · ${esc(p.category||'—')}</p><div class="chips"><span class="chip ${chipClass(p.reliability)}">Affidabilità ${esc(p.reliability||'bassa')}</span><span class="chip ${chipClass(p.completeness?.percent)}">Completo ${p.completeness?.percent||0}%</span>${f.ownerOverrides?.enabled?'<span class="chip lock">Valori titolare</span>':''}${f.objectFolder?.hasRealProfilePhoto?'<span class="chip ok">Foto reale</span>':'<span class="chip warn">Foto profilo da migliorare</span>'}</div><div class="actions" style="margin-top:10px"><button class="ghost mini" data-open-photos="1">📸 Cambia foto articolo</button></div></div></div><div class="tabs"><button class="tab ${state.tab==='overview'?'active':''}" data-tab="overview">Panoramica</button><button class="tab ${state.tab==='edit'?'active':''}" data-tab="edit">Modifica</button><button class="tab ${state.tab==='photos'?'active':''}" data-tab="photos">Foto</button><button class="tab ${state.tab==='render'?'active':''}" data-tab="render">Render AI</button><button class="tab ${state.tab==='data'?'active':''}" data-tab="data">Dati</button><button class="tab ${state.tab==='sources'?'active':''}" data-tab="sources">Fonti API</button><button class="tab ${state.tab==='json'?'active':''}" data-tab="json">JSON</button></div><div class="detailBody" id="detailBody"></div>`;
     const body=$('detailBody');
@@ -485,7 +525,9 @@
     d.querySelector('#btnV30OpenOfficial')?.addEventListener('click',()=>{const src=(d.querySelector('#v30OfficialRenderImg')?.src)||(currentProduct()?.fields?.objectFolder?.officialRenderV3000?.officialDataUrl)||(currentProduct()?.fields?.objectFolder?.officialRenderV3000?.studioDataUrl)||'';const w=window.open('about:blank','_blank');if(w){w.document.write('<title>Render ufficiale V30</title><body style="margin:0;background:#f4f8ff;display:grid;place-items:center;min-height:100vh"><img style="max-width:96vw;max-height:96vh;object-fit:contain;border-radius:22px" src="'+String(src).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"></body>');}});
     d.querySelector('#btnV30CopySources')?.addEventListener('click',()=>copyText(JSON.stringify(currentProduct()?.fields?.objectFolder?.referenceImagesV3000||currentProduct()?.fields?.objectFolder?.referenceCandidatesV3000||[],null,2),'Fonti render copiate ✅'));
     d.querySelector('#btnV30TestGoogle')?.addEventListener('click',v30TestGoogleApi);
-    d.querySelector('#btnV302ForceMarker')?.addEventListener('click',()=>alert('V30.3 attiva ✅ Google 403 gestito + bug Sharp left/top corretto')); 
+    d.querySelector('#btnV302ForceMarker')?.addEventListener('click',()=>alert('V31.0 attiva ✅ GPU Vision Bridge + RunPod pronto'));
+    d.querySelector('#btnGpuAnalyzeProduct')?.addEventListener('click',()=>gpuVisionAnalyzeSelected('analyze'));
+    d.querySelector('#btnGpuRenderProduct')?.addEventListener('click',()=>gpuVisionAnalyzeSelected('render')); 
     if(state.tab==='render'){ v30BindReferenceButtons(); }
     d.querySelector('#btnRenderTransparent')?.addEventListener('click',()=>refreshVirtualRender('transparent'));
     d.querySelector('#btnRenderWhite')?.addEventListener('click',()=>refreshVirtualRender('white'));
@@ -570,7 +612,7 @@
 
   async function saveOwnerUpdate(updates,msg){const s=getSettings();const p=currentProduct();if(!p){alert('Seleziona un prodotto');return;}const ownerToken=getOwnerToken();const payload={householdId:s.householdId,key:p.key,updates,ownerToken};const endpoints=[`${apiBase()}/ai/server-brain/update`,`/api/ai/server-brain/update`];for(const url of endpoints){try{const headers={'Content-Type':'application/json',Authorization:'Bearer '+s.token};if(ownerToken) headers['X-Owner-Token']=ownerToken;const r=await fetchJson(url,{method:'POST',headers,body:JSON.stringify(payload)});if(r.ok&&r.data?.ok){$('notice').className='notice ok';$('notice').innerHTML=`<span>✅</span><div><b>${esc(msg||'Aggiornato')}</b><span> Rileggo la memoria server…</span></div>`;const keep=p.key;await load();state.selectedKey=keep;applyFilter();return;}logErr('owner-update-failed',{url,status:r.status,body:r.data});}catch(e){logErr('owner-update-error',{url,error:e.message||String(e)});}}alert('Salvataggio non riuscito. Copia errori e mandameli.');render();}
   async function copyText(txt,msg){try{await navigator.clipboard.writeText(redact(txt));alert(msg||'Copiato ✅')}catch{const ta=document.createElement('textarea');ta.value=redact(txt);document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();alert(msg||'Copiato ✅')}}
-  let searchTimer=null;$('search').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(applyFilter,80);});$('search').addEventListener('keydown',e=>{if(e.key==='Enter')applyFilter();});$('deepSearch').addEventListener('change',e=>{state.includeDeep=!!e.target.checked;applyFilter();});$('ownerToken').value=getOwnerToken();$('ownerToken').addEventListener('input',e=>setOwnerToken(e.target.value));$('btnRefresh').onclick=load;$('btnClearSearch').onclick=()=>{$('search').value='';$('deepSearch').checked=false;state.includeDeep=false;applyFilter();};$('btnCopy').onclick=()=>copyText(JSON.stringify(state.brain||{},null,2),'Report cervello copiato ✅');$('btnCopyErrors').onclick=()=>copyText(JSON.stringify({realServerErrors:state.brain?.errors||[],learningCorrections:state.brain?.corrections||[],guardEvents:state.brain?.guardEvents||[],clientErrors:state.clientErrors,diagnosticCounts:state.brain?.diagnosticCountsV2869||null},null,2),'Console diagnostica copiata ✅');$('btnScrollSelected').onclick=()=>document.getElementById('detail')?.scrollIntoView({behavior:'smooth',block:'start'});
+  let searchTimer=null;$('search').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(applyFilter,80);});$('search').addEventListener('keydown',e=>{if(e.key==='Enter')applyFilter();});$('deepSearch').addEventListener('change',e=>{state.includeDeep=!!e.target.checked;applyFilter();});$('ownerToken').value=getOwnerToken();$('ownerToken').addEventListener('input',e=>setOwnerToken(e.target.value));$('btnRefresh').onclick=load;$('btnClearSearch').onclick=()=>{$('search').value='';$('deepSearch').checked=false;state.includeDeep=false;applyFilter();};$('btnCopy').onclick=()=>copyText(JSON.stringify(state.brain||{},null,2),'Report cervello copiato ✅');$('btnCopyErrors').onclick=()=>copyText(JSON.stringify({realServerErrors:state.brain?.errors||[],learningCorrections:state.brain?.corrections||[],guardEvents:state.brain?.guardEvents||[],clientErrors:state.clientErrors,diagnosticCounts:state.brain?.diagnosticCountsV2869||null},null,2),'Console diagnostica copiata ✅');$('btnScrollSelected').onclick=()=>document.getElementById('detail')?.scrollIntoView({behavior:'smooth',block:'start'}); if($('btnGpuHealth')) $('btnGpuHealth').onclick=gpuVisionHealth;
   renderClientErrors();load();
 })();
 </script>

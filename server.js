@@ -3754,6 +3754,26 @@ const server = http.createServer(async (req,res)=>{
       return send(res,200,result);
     }
 
+
+    if((req.method === 'GET' || req.method === 'POST') && (pathName === '/api/gpu-vision/health' || pathName === '/gpu-vision/health')) {
+      const auth=v3100AuthHousehold(req,url,body);
+      if(auth.error) return send(res, auth.error.status, auth.error.body);
+      const result=await v3100GpuVisionHealth();
+      return send(res,200,result);
+    }
+
+    if(req.method === 'POST' && (pathName === '/api/gpu-vision/analyze' || pathName === '/gpu-vision/analyze' || pathName === '/api/gpu-vision/render' || pathName === '/gpu-vision/render')) {
+      const auth=v3100AuthHousehold(req,url,body);
+      if(auth.error) return send(res, auth.error.status, auth.error.body);
+      const key=String(body.key||url.searchParams.get('key')||'').trim();
+      const imageDataUrl=String(body.imageDataUrl||body.dataUrl||body.image||'').trim();
+      const imageUrl=String(body.imageUrl||body.url||'').trim();
+      const mode=pathName.includes('/render')?'render':'analyze';
+      const result=await v3100GpuVisionAnalyze({key,imageDataUrl,imageUrl,mode,householdId:auth.householdId||'',actor:'server_brain'});
+      if(result.ok) await saveDb().catch(()=>{});
+      return send(res,200,result);
+    }
+
     if((req.method === 'GET' || req.method === 'POST') && (pathName === '/api/ai/server-brain/photo-render' || pathName === '/ai/server-brain/photo-render')) {
       const householdId=String(body.householdId||url.searchParams.get('householdId')||'').trim();
       const bearer=(req.headers.authorization||'').replace(/^Bearer\s+/,'').trim();
@@ -9410,3 +9430,139 @@ try{ v3010GoogleCseTest=v3040GoogleCseTest; }catch(_){ }
   console.log('[Spesa Pronta] V30.4 Auto Web Harvester active');
 })();
 (function(){ try{ global.__SPESA_PRONTA_BUILD_ID='V30.4-AUTO-WEB-HARVESTER-3040-1781218800'; console.log('[Spesa Pronta] V30.4-AUTO-WEB-HARVESTER-3040-1781218800 active'); }catch(_){} })();
+
+
+// =============================================================
+// V31.0 GPU Vision Bridge · Spesa Vision Brain RunPod
+// Collega Render al cervello GPU privato: health, analyze, render.
+// =============================================================
+function v3100GpuConfig(){
+  const enabled=String(process.env.GPU_VISION_ENABLED||'').toLowerCase()==='true';
+  const url=String(process.env.GPU_VISION_URL||'').replace(/\/+$/,'').trim();
+  const token=String(process.env.GPU_VISION_TOKEN||'').trim();
+  const timeoutMs=Number(process.env.GPU_VISION_TIMEOUT_MS||45000);
+  return {
+    enabled,
+    url,
+    token,
+    timeoutMs:Number.isFinite(timeoutMs)&&timeoutMs>1000?timeoutMs:45000,
+    analyzePath:String(process.env.GPU_VISION_ANALYZE_PATH||'/analyze-product'),
+    renderPath:String(process.env.GPU_VISION_RENDER_PATH||'/render-product'),
+    healthPath:String(process.env.GPU_VISION_HEALTH_PATH||'/health'),
+    version:String(process.env.GPU_VISION_VERSION||'31.0')
+  };
+}
+function v3100PublicConfig(){ const c=v3100GpuConfig(); return {enabled:c.enabled,urlConfigured:!!c.url,tokenConfigured:!!c.token,timeoutMs:c.timeoutMs,version:c.version,paths:{health:c.healthPath,analyze:c.analyzePath,render:c.renderPath},urlMasked:c.url?c.url.replace(/https?:\/\//,'').replace(/^(.{6}).+(-\d+\.proxy\.runpod\.net)$/,'$1…$2'):''}; }
+function v3100AuthHousehold(req,url,body={}){
+  const householdId=String(body.householdId||url.searchParams.get('householdId')||'').trim();
+  const bearer=String(req.headers.authorization||'').replace(/^Bearer\s+/,'').trim();
+  const h=(householdId && db.households[householdId] && db.households[householdId].token===bearer) ? db.households[householdId] : null;
+  if(!h) return {error:{status:401,body:{ok:false,error:'unauthorized_household',message:'Accesso negato: serve account cloud valido'}}};
+  return {householdId,household:h};
+}
+function v3100DataUrlParts(dataUrl=''){
+  const s=String(dataUrl||'').trim();
+  const m=s.match(/^data:([^;,]+)?(?:;charset=[^;,]+)?;base64,(.+)$/i);
+  if(!m) return null;
+  try{ return {mime:m[1]||'image/jpeg', buffer:Buffer.from(m[2],'base64')}; }catch(_){ return null; }
+}
+async function v3100FetchImageBuffer(imageUrl='', timeoutMs=12000){
+  imageUrl=String(imageUrl||'').trim();
+  if(!/^https?:\/\//i.test(imageUrl)) return null;
+  const ctrl=new AbortController(); const t=setTimeout(()=>ctrl.abort(), timeoutMs);
+  try{
+    const r=await fetch(imageUrl,{headers:{'user-agent':'Spesa-Pronta-GPU-Bridge/31.0','accept':'image/*,*/*;q=0.8'},signal:ctrl.signal});
+    if(!r.ok) return null;
+    const ab=await r.arrayBuffer();
+    const ct=String(r.headers.get('content-type')||'image/jpeg').split(';')[0]||'image/jpeg';
+    return {mime:ct, buffer:Buffer.from(ab)};
+  }catch(_){ return null; } finally { clearTimeout(t); }
+}
+async function v3100ResolveImageSource({key='',imageDataUrl='',imageUrl=''}={}){
+  let parts=v3100DataUrlParts(imageDataUrl);
+  if(parts) return Object.assign({source:'direct_data_url',filename:'product.jpg'},parts);
+  if(imageUrl){
+    const fetched=await v3100FetchImageBuffer(imageUrl);
+    if(fetched) return Object.assign({source:'direct_image_url',filename:'product.jpg'},fetched);
+  }
+  if(key){
+    const rec=db.assistantBrain?.globalProductMemory?.products?.[key];
+    if(!rec) return {error:'product_not_found'};
+    let p=null;
+    try{ if(typeof v2879PickRenderPhoto==='function') p=v2879PickRenderPhoto(rec); }catch(_){ }
+    if(!p){
+      const f=rec.objectFolder||{}; const photos=Array.isArray(f.photos)?f.photos:[];
+      p=f.representativePhoto||rec.profilePhoto||photos.find(x=>x.dataUrl||x.externalUrl)||null;
+    }
+    if(!p) return {error:'no_product_photo'};
+    parts=v3100DataUrlParts(p.dataUrl||p.thumbDataUrl||p.fullDataUrl||p.originalDataUrl||'');
+    if(parts) return Object.assign({source:p.kind||p.source||'object_folder_photo',filename:`${key||'product'}.jpg`,record:rec,photo:p},parts);
+    const external=p.externalUrl||p.imageUrl||p.url||'';
+    const fetched=await v3100FetchImageBuffer(external);
+    if(fetched) return Object.assign({source:'object_folder_external_photo',filename:`${key||'product'}.jpg`,record:rec,photo:p},fetched);
+    return {error:'photo_not_downloadable'};
+  }
+  return {error:'missing_image'};
+}
+async function v3100CallGpuVision(buffer,mime='image/jpeg',mode='analyze',filename='product.jpg'){
+  const cfg=v3100GpuConfig();
+  if(!cfg.enabled) return {ok:false,reason:'gpu_disabled',config:v3100PublicConfig()};
+  if(!cfg.url || !cfg.token) return {ok:false,reason:'gpu_not_configured',config:v3100PublicConfig()};
+  if(typeof FormData==='undefined' || typeof Blob==='undefined') return {ok:false,reason:'node_formdata_unavailable'};
+  const ctrl=new AbortController(); const t=setTimeout(()=>ctrl.abort(), cfg.timeoutMs);
+  try{
+    const form=new FormData();
+    form.append('image', new Blob([buffer],{type:mime||'image/jpeg'}), filename||'product.jpg');
+    const path=mode==='render'?cfg.renderPath:cfg.analyzePath;
+    const r=await fetch(`${cfg.url}${path}`,{method:'POST',headers:{'Authorization':`Bearer ${cfg.token}`,'X-Vision-Token':cfg.token},body:form,signal:ctrl.signal});
+    const text=await r.text(); let data=null; try{data=JSON.parse(text)}catch{data={raw:text.slice(0,500)}}
+    if(!r.ok) return {ok:false,reason:'gpu_http_error',status:r.status,data,config:v3100PublicConfig()};
+    return {ok:true,status:r.status,data,config:v3100PublicConfig()};
+  }catch(e){ return {ok:false,reason:e?.name==='AbortError'?'gpu_timeout':'gpu_fetch_error',error:String(e?.message||e),config:v3100PublicConfig()}; }
+  finally{ clearTimeout(t); }
+}
+async function v3100GpuVisionHealth(){
+  const cfg=v3100GpuConfig();
+  if(!cfg.enabled) return {ok:false,enabled:false,config:v3100PublicConfig(),message:'GPU Vision disabilitata'};
+  if(!cfg.url) return {ok:false,enabled:true,config:v3100PublicConfig(),message:'GPU_VISION_URL mancante'};
+  const ctrl=new AbortController(); const t=setTimeout(()=>ctrl.abort(), Math.min(cfg.timeoutMs,15000));
+  try{
+    const r=await fetch(`${cfg.url}${cfg.healthPath}`,{headers:{'Authorization':`Bearer ${cfg.token}`,'X-Vision-Token':cfg.token},signal:ctrl.signal});
+    let data={}; try{data=await r.json()}catch{data={raw:await r.text().catch(()=> '')}}
+    return {ok:r.ok,enabled:true,version:'V31.0_bridge',config:v3100PublicConfig(),gpuResponse:data,status:r.status};
+  }catch(e){ return {ok:false,enabled:true,version:'V31.0_bridge',config:v3100PublicConfig(),error:String(e?.message||e)}; }
+  finally{ clearTimeout(t); }
+}
+function v3100SlimGpuPayload(data={}){
+  return {ok:!!data.ok,version:data.version||'',message:data.message||'',product:data.product||null,images:data.images||{},paths:data.paths||{},at:Date.now()};
+}
+function v3100PersistGpuVision(key='', payload={}, mode='analyze'){
+  if(!key || !payload || !payload.ok) return null;
+  const rec=db.assistantBrain?.globalProductMemory?.products?.[key]; if(!rec) return null;
+  const slim=v3100SlimGpuPayload(payload);
+  rec.gpuVisionV31=Object.assign({}, slim, {mode, engine:'runpod_spesa_vision_brain_v31'});
+  rec.updatedAt=Date.now();
+  try{
+    const folder=v2842EnsureObjectFolder(rec); folder.gpuVisionV31=rec.gpuVisionV31; folder.updatedAt=Date.now();
+    const imgs=payload.images||{};
+    const add=(kind,dataUrl,score)=>{ if(!dataUrl||!String(dataUrl).startsWith('data:image')) return; folder.photos=Array.isArray(folder.photos)?folder.photos:[]; const id='gpu_'+kind+'_'+hashStable(String(dataUrl).slice(0,300)).slice(0,14); folder.photos=folder.photos.filter(p=>p.id!==id); folder.photos.unshift({id,kind:'gpu_'+kind,source:'gpu_vision_v31',at:Date.now(),dataUrl,thumbDataUrl:dataUrl,score,bytes:String(dataUrl).length,visibleEvidence:['GPU Vision V31',kind],colors:payload.product?.dominantColors||[]}); };
+    add('product_transparent',imgs.productTransparent,98); add('product_white',imgs.productWhite,95); add('label_crop',imgs.labelCrop,92);
+    folder.photos=folder.photos.slice(0,30); folder.photoCount=folder.photos.length; if(!folder.representativePhoto && imgs.productWhite){ folder.representativePhoto=folder.photos[0]; folder.representativePhotoId=folder.photos[0]?.id||''; folder.hasRealProfilePhoto=true; }
+  }catch(_){ }
+  try{ v2840AttachMemoryCard(rec,{}); }catch(_){ }
+  updateGlobalLearningAudit({type:'gpu-vision-v31-saved', key, productName:rec.productName||'', brand:rec.brand||'', mode, confidence:payload.product?.confidence||null});
+  return rec.gpuVisionV31;
+}
+async function v3100GpuVisionAnalyze({key='',imageDataUrl='',imageUrl='',mode='analyze'}={}){
+  const resolved=await v3100ResolveImageSource({key,imageDataUrl,imageUrl});
+  if(resolved.error) return {ok:false,reason:resolved.error,config:v3100PublicConfig()};
+  const call=await v3100CallGpuVision(resolved.buffer,resolved.mime,mode,resolved.filename);
+  if(!call.ok) return call;
+  const payload=call.data||{};
+  const saved=key?v3100PersistGpuVision(key,payload,mode):null;
+  return {ok:!!payload.ok,version:'V31.0_bridge',mode,source:resolved.source,gpuVision:payload,savedGpuVision:saved,config:v3100PublicConfig()};
+}
+try{ const prevFolder=v2842PublicObjectFolder; if(typeof prevFolder==='function'&&!global.__v3100GpuFolderWrapped){ v2842PublicObjectFolder=function(record={}){ const out=prevFolder.call(this,record)||{}; out.gpuVisionV31=(record.objectFolder&&record.objectFolder.gpuVisionV31)||record.gpuVisionV31||null; return out; }; global.__v3100GpuFolderWrapped=true; } }catch(_){ }
+try{ const prevBrain=publicServerBrainV2840; if(typeof prevBrain==='function'&&!global.__v3100BrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prevBrain.call(this,opts||{})||{}; out.version='V31.0 GPU Vision Bridge'; out.gpuVisionV31=v3100PublicConfig(); return out; }; global.__v3100BrainWrapped=true; } }catch(_){ }
+try{ const prevPreflight=preflightSnapshotV98; if(typeof prevPreflight==='function'&&!global.__v3100PreflightWrapped){ preflightSnapshotV98=function(){ const s=prevPreflight.call(this)||{}; s.version='V31.0'; s.gpuVisionV31=v3100PublicConfig(); return s; }; global.__v3100PreflightWrapped=true; } }catch(_){ }
+console.log('[Spesa Pronta] V31.0 GPU Vision Bridge active');
