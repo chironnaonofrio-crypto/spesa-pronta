@@ -9851,8 +9851,8 @@ async function v3100GpuVisionHealth(){
   try{
     const r=await fetch(`${cfg.url}${cfg.healthPath}`,{headers:{'Authorization':`Bearer ${cfg.token}`,'X-Vision-Token':cfg.token},signal:ctrl.signal});
     let data={}; try{data=await r.json()}catch{data={raw:await r.text().catch(()=> '')}}
-    return {ok:r.ok,enabled:true,version:'V31.10.8_V33.7_photoreal_bridge',config:v3100PublicConfig(),gpuResponse:data,status:r.status};
-  }catch(e){ return {ok:false,enabled:true,version:'V31.10.8_V33.7_photoreal_bridge',config:v3100PublicConfig(),error:String(e?.message||e)}; }
+    return {ok:r.ok,enabled:true,version:'V31.10.9_V33.7_render_debug_bridge',config:v3100PublicConfig(),gpuResponse:data,status:r.status};
+  }catch(e){ return {ok:false,enabled:true,version:'V31.10.9_V33.7_render_debug_bridge',config:v3100PublicConfig(),error:String(e?.message||e)}; }
   finally{ clearTimeout(t); }
 }
 function v3100SlimGpuPayload(data={}){
@@ -10224,11 +10224,13 @@ async function v3160ResolvePreferredPhoto(key='',want='front'){
   return {error:'photo_not_downloadable'};
 }
 async function v31108LooksLikeStudioRender(dataUrl=''){
-  const sharp=await v2864Sharp(); if(!sharp||!/^data:image\//i.test(String(dataUrl||''))) return false;
+  const sharp=await v2864Sharp();
+  const out={ok:false,reason:'invalid_image',whiteRatio:0,opaqueRatio:0,darkEdgeRatio:1,width:0,height:0};
+  if(!sharp||!/^data:image\//i.test(String(dataUrl||''))) return out;
   try{
-    const buf=v2864DataUrlBuffer(dataUrl); if(!buf) return false;
+    const buf=v2864DataUrlBuffer(dataUrl); if(!buf){ out.reason='decode_failed'; return out; }
     const img=sharp(buf,{failOn:'none'}).rotate().resize({width:720,height:720,fit:'inside',withoutEnlargement:true}).ensureAlpha();
-    const {data,info}=await img.raw().toBuffer({resolveWithObject:true}); const w=Number(info.width||0), h=Number(info.height||0); if(!w||!h) return false;
+    const {data,info}=await img.raw().toBuffer({resolveWithObject:true}); const w=Number(info.width||0), h=Number(info.height||0); out.width=w; out.height=h; if(!w||!h){ out.reason='empty_dims'; return out; }
     let white=0, opaque=0, darkEdge=0, edgePx=0;
     for(let y=0;y<h;y++){
       for(let x=0;x<w;x++){
@@ -10240,11 +10242,15 @@ async function v31108LooksLikeStudioRender(dataUrl=''){
       }
     }
     const total=w*h;
-    const whiteRatio=white/Math.max(1,total);
-    const opaqueRatio=opaque/Math.max(1,total);
-    const darkEdgeRatio=darkEdge/Math.max(1,edgePx);
-    return whiteRatio>.55 && opaqueRatio<.72 && darkEdgeRatio<.08;
-  }catch(_){ return false; }
+    out.whiteRatio=Number((white/Math.max(1,total)).toFixed(4));
+    out.opaqueRatio=Number((opaque/Math.max(1,total)).toFixed(4));
+    out.darkEdgeRatio=Number((darkEdge/Math.max(1,edgePx)).toFixed(4));
+    if(out.whiteRatio<=.55) out.reason='background_not_studio_white';
+    else if(out.opaqueRatio>=.72) out.reason='too_much_scene_or_full_photo';
+    else if(out.darkEdgeRatio>=.08) out.reason='dark_edges_scene_photo';
+    else { out.ok=true; out.reason='studio_render_ok'; }
+    return out;
+  }catch(e){ out.reason=String(e?.message||'analyze_failed'); return out; }
 }
 
 async function v3160BuildRender2D(productDataUrl='',rec={}){
@@ -10304,24 +10310,49 @@ async function v3160RenderPro2D(key='',opts={}){
   const imgs=Object.assign({},payload.images||{},refined.images||{});
   const sourceCut=imgs.productTransparent||imgs.productWhite||v3160DataUrlForBuffer(resolved.buffer,resolved.mime);
   const candidate=imgs.renderPro2D||imgs.renderPro||'';
-  const candidateOk=await v31108LooksLikeStudioRender(candidate);
-  if(!candidateOk){
+  const candidateCheck=await v31108LooksLikeStudioRender(candidate);
+  const sourceCheck=await v31108LooksLikeStudioRender(sourceCut);
+  const debugRenderPro={
+    action:'render_pro_2d',
+    at:Date.now(),
+    resolvedSource:resolved.source||'unknown',
+    resolvedFilename:resolved.filename||'',
+    gpuCallOk:!!(call&&call.ok),
+    payloadOk:!!(payload&&payload.ok),
+    payloadVersion:String(payload?.version||''),
+    candidatePresent:!!candidate,
+    candidateAccepted:!!candidateCheck.ok,
+    candidateCheck,
+    sourceCheck,
+    fallbackUsed:false,
+    fallbackReason:'',
+    finalSource:'',
+    note:''
+  };
+  if(!candidateCheck.ok){
     const rebuilt=await v3160BuildRender2D(sourceCut,rec);
     imgs.renderPro2D=rebuilt||candidate||sourceCut;
     imgs.renderPro=imgs.renderPro2D;
+    debugRenderPro.fallbackUsed=true;
+    debugRenderPro.fallbackReason=String(candidateCheck.reason||'candidate_not_ok');
+    debugRenderPro.finalSource=rebuilt?'local_whitebg_rebuild':(candidate?'gpu_candidate_kept_because_rebuild_failed':'source_cut_fallback');
+    debugRenderPro.note='La GPU non ha prodotto un render 2D giudicato abbastanza studio/umano. Ho provato il rebuild locale su sfondo bianco.';
     payload.message='Render GPU non abbastanza pulito/umano: ho rigenerato un render studio 2D controllato.';
   }else{
     imgs.renderPro2D=candidate;
     imgs.renderPro=candidate;
+    debugRenderPro.finalSource='gpu_candidate';
+    debugRenderPro.note='Render GPU accettato dal controllo studio/white-background.';
   }
   payload.images=imgs;
+  payload.debugRenderPro=debugRenderPro;
   payload.labelBox=refined.labelBox||payload.labelBox||null;
   payload.render360=refined.render360||payload.render360||null;
   payload.teacherOpenAI=payload.teacherOpenAI||{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: render PRO creato da foto profilo/frontale + GPU/server.'};
   const saved=await v3100PersistGpuVision(key,payload,'render_pro_2d',resolved);
   if(saved){
-    saved.version='31.10.8-v33.7-rendertruth';
-    saved.renderPipelineVersion='v31_10_8_rendertruth_whitebg_gate';
+    saved.version='31.10.9-v33.7-render-debug-console';
+    saved.renderPipelineVersion='v31_10_9_rendertruth_debug_console';
     saved.profilePolicy='manual_owner_only';
     saved.images=Object.assign({},saved.images||{},imgs);
     saved.model3D=saved.model3D||saved.render360||{};
@@ -10381,9 +10412,9 @@ async function v3160ExtractLabelOnly(key='',opts={}){
     if(src) best={dataUrl:src,confidence:gv.labelBox?.confidence||70,box:gv.labelBox||{},method:'v31_9_gpu_label_fallback'};
   }
   if(!best) return {ok:false,error:'label_not_found',message:'Non ho trovato una label chiara: carica una foto frontale/etichetta più vicina.'};
-  const current=Object.assign({}, existing||{ok:true,version:'31.10.8-v33.7-rendertruth',images:{}});
+  const current=Object.assign({}, existing||{ok:true,version:'31.10.9-v33.7-render-debug-console',images:{}});
   current.ok=true;
-  current.version='31.10.8-v33.7-rendertruth';
+  current.version='31.10.9-v33.7-render-debug-console';
   current.renderPipelineVersion='v31_10_3_label_only_preserve';
   current.profilePolicy='manual_owner_only';
   current.images=Object.assign({},current.images||{},{labelOnly:best.dataUrl,labelCrop:best.dataUrl});
@@ -10493,9 +10524,9 @@ async function v3100GpuVisionAnalyze({key='',imageDataUrl='',imageUrl='',mode='a
   finally{ if(!force) global.__spesaGpuVisionLocks.delete(lockKey); }
 }
 try{ const prevFolder=v2842PublicObjectFolder; if(typeof prevFolder==='function'&&!global.__v3100GpuFolderWrapped){ v2842PublicObjectFolder=function(record={}){ const out=prevFolder.call(this,record)||{}; out.gpuVisionV31=(record.objectFolder&&record.objectFolder.gpuVisionV31)||record.gpuVisionV31||null; return out; }; global.__v3100GpuFolderWrapped=true; } }catch(_){ }
-try{ const prevBrain=publicServerBrainV2840; if(typeof prevBrain==='function'&&!global.__v3100BrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prevBrain.call(this,opts||{})||{}; out.version='V31.10.8 GPU Vision V33.7 Photoreal Edge Hole Fix'; out.gpuVisionV31=v3100PublicConfig(); return out; }; global.__v3100BrainWrapped=true; } }catch(_){ }
-try{ const prevPreflight=preflightSnapshotV98; if(typeof prevPreflight==='function'&&!global.__v3100PreflightWrapped){ preflightSnapshotV98=function(){ const s=prevPreflight.call(this)||{}; s.version='V31.10.8'; s.gpuVisionV31=v3100PublicConfig(); return s; }; global.__v3100PreflightWrapped=true; } }catch(_){ }
-console.log('[Spesa Pronta] V31.10.8 GPU Vision V33.7 Photoreal Edge Hole Fix active');
+try{ const prevBrain=publicServerBrainV2840; if(typeof prevBrain==='function'&&!global.__v3100BrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prevBrain.call(this,opts||{})||{}; out.version='V31.10.9 GPU Vision V33.7 Render Debug Console'; out.gpuVisionV31=v3100PublicConfig(); return out; }; global.__v3100BrainWrapped=true; } }catch(_){ }
+try{ const prevPreflight=preflightSnapshotV98; if(typeof prevPreflight==='function'&&!global.__v3100PreflightWrapped){ preflightSnapshotV98=function(){ const s=prevPreflight.call(this)||{}; s.version='V31.10.9'; s.gpuVisionV31=v3100PublicConfig(); return s; }; global.__v3100PreflightWrapped=true; } }catch(_){ }
+console.log('[Spesa Pronta] V31.10.9 GPU Vision V33.7 Render Debug Console active');
 
 
 // =============================================================
@@ -10518,7 +10549,7 @@ console.log('[Spesa Pronta] V31.10.8 GPU Vision V33.7 Photoreal Edge Hole Fix ac
       const prev=preflightSnapshotV98;
       preflightSnapshotV98=function(){
         const s=prev.call(this)||{};
-        s.version='V31.10.8';
+        s.version='V31.10.9';
         s.ramSafeV314=spesaRamSafeHealth();
         s.checks=Array.isArray(s.checks)?s.checks:[];
         s.checks.push({id:'render_ram_safe',label:'Render RAM Safe',ok:!!SPESA_RAM_SAFE,message:SPESA_RAM_SAFE?`Modalità ${SPESA_MEMORY_MODE}: cache/foto/dataset alleggeriti`:'Modalità PRO locale: RAM Safe non forzato'});
