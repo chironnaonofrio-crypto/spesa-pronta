@@ -9536,19 +9536,97 @@ async function v3100GpuVisionHealth(){
 function v3100SlimGpuPayload(data={}){
   return {ok:!!data.ok,version:data.version||'',message:data.message||'',product:data.product||null,images:data.images||{},paths:data.paths||{},at:Date.now()};
 }
-function v3100PersistGpuVision(key='', payload={}, mode='analyze'){
+function v3110DataUrlFromBuffer(buf,mime='image/png'){ return buf?`data:${mime};base64,${Buffer.from(buf).toString('base64')}`:''; }
+function v3110MaskFromRgba(data,w,h){
+  const mask=new Uint8Array(w*h);
+  for(let i=0;i<w*h;i++){
+    const j=i*4, a=data[j+3], lum=v2864Lum(data[j],data[j+1],data[j+2]), sat=v2864Sat(data[j],data[j+1],data[j+2]);
+    if(a>24 && (lum<245 || sat>.03)) mask[i]=1;
+  }
+  return mask;
+}
+function v3110SafeLabelBox(w,h){
+  return {minX:Math.round(w*.18),minY:Math.round(h*.32),maxX:Math.round(w*.82),maxY:Math.round(h*.74),confidence:55,method:'v31_safe_label_box'};
+}
+async function v3110RefineGpuImages(payload={},rec={}){
+  const out={images:Object.assign({},payload.images||{}),labelBox:null,referenceImages:[],render360:null};
+  const sharp=await v2864Sharp();
+  const src=String(out.images.productTransparent||out.images.productWhite||'');
+  if(sharp && /^data:image\//i.test(src)){
+    try{
+      const buf=v2864DataUrlBuffer(src);
+      const base=sharp(buf,{failOn:'none'}).rotate().ensureAlpha().resize({width:1000,height:1000,fit:'inside',withoutEnlargement:true});
+      const raw=await base.raw().toBuffer({resolveWithObject:true});
+      const w=raw.info.width,h=raw.info.height;
+      const mask=v3110MaskFromRgba(raw.data,w,h);
+      const cleaned=(typeof v2920CleanMainComponent==='function')?v2920CleanMainComponent(mask,w,h,{minX:0,minY:0,maxX:w-1,maxY:h-1}):{mask,box:{minX:0,minY:0,maxX:w-1,maxY:h-1}};
+      const rgba=Buffer.alloc(w*h*4);
+      for(let i=0;i<w*h;i++){
+        const j=i*4; rgba[j]=raw.data[j]; rgba[j+1]=raw.data[j+1]; rgba[j+2]=raw.data[j+2]; rgba[j+3]=cleaned.mask[i]?255:0;
+      }
+      const png=await sharp(rgba,{raw:{width:w,height:h,channels:4}}).trim({background:{r:0,g:0,b:0,alpha:0},threshold:6}).resize({height:920,fit:'inside',withoutEnlargement:true}).png({compressionLevel:8}).toBuffer();
+      const white=await sharp(png,{failOn:'none'}).flatten({background:'#ffffff'}).jpeg({quality:92,mozjpeg:true}).toBuffer();
+      out.images.productTransparent=v3110DataUrlFromBuffer(png,'image/png');
+      out.images.productWhite=v3110DataUrlFromBuffer(white,'image/jpeg');
+      try{
+        const prod=await sharp(png,{failOn:'none'}).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+        const pb={minX:0,minY:0,maxX:prod.info.width-1,maxY:prod.info.height-1};
+        const lb=(typeof v2920DetectLabelBox==='function')?v2920DetectLabelBox(prod.data,prod.info.width,prod.info.height,pb,rec):v3110SafeLabelBox(prod.info.width,prod.info.height);
+        const b=(typeof v2920BoxClamp==='function')?v2920BoxClamp(lb,prod.info.width,prod.info.height):lb;
+        const label=await sharp(png,{failOn:'none'}).extract({left:b.minX,top:b.minY,width:Math.max(1,b.maxX-b.minX+1),height:Math.max(1,b.maxY-b.minY+1)}).resize({width:760,height:360,fit:'inside',withoutEnlargement:true}).jpeg({quality:92,mozjpeg:true}).toBuffer();
+        out.images.labelCrop=v3110DataUrlFromBuffer(label,'image/jpeg');
+        out.labelBox={x:b.minX,y:b.minY,w:b.maxX-b.minX+1,h:b.maxY-b.minY+1,confidence:lb.confidence||72,method:lb.method||'v31_label_focus'};
+      }catch(_){ }
+    }catch(_){ }
+  }
+  try{
+    if(rec && typeof v30rrSearch==='function' && rec.__memoryKey){
+      const refRes=await v30rrSearch(rec.__memoryKey,{force:true});
+      const refs=Array.isArray(refRes?.references)?refRes.references.slice(0,16):[];
+      out.referenceImages=refs;
+      const pick=(kind)=>{
+        let best=null, bestScore=-1;
+        for(const r of refs){
+          const txt=[r.title,r.productName,r.brand,r.source,r.sourceLabel,r.url,r.pageUrl,r.imageUrl].filter(Boolean).join(' ').toLowerCase();
+          let score=Number(r.score||0);
+          if(kind==='back') score += /(retro|back|rear|dietro)/.test(txt)?120:0;
+          else if(kind==='side') score += /(lato|side|profil|profile)/.test(txt)?120:0;
+          else score += /(front|fronte|pack|packshot|product)/.test(txt)?40:10;
+          if(kind==='front' && /(retro|back|rear|lato|side)/.test(txt)) score -= 30;
+          if(score>bestScore){ bestScore=score; best=r; }
+        }
+        return best;
+      };
+      const frontSrc=String(out.images.productTransparent||out.images.productWhite||'');
+      const sideRef=pick('side'), backRef=pick('back');
+      out.render360={version:'V31.2',at:Date.now(),mode:(sideRef&&backRef)?'web_enriched_real360':(sideRef||backRef)?'web_enriched_partial':'front_only',front:frontSrc,side:sideRef?(sideRef.displayUrl||sideRef.imageDataUrl||sideRef.imageUrl||''):'',back:backRef?(backRef.displayUrl||backRef.imageDataUrl||backRef.imageUrl||''):'',referenceCount:refs.length,rotationReady:!!frontSrc,searchPolicy:'front gpu + lato/retro da internet se trovati'};
+      if(!out.render360.side && !out.render360.back) out.render360.note='Mancano ancora viste lato/retro: il cervello continuerà ad arricchire dalle reference quando disponibili.';
+    }
+  }catch(_){ }
+  return out;
+}
+async function v3100PersistGpuVision(key='', payload={}, mode='analyze'){
   if(!key || !payload || !payload.ok) return null;
   const rec=db.assistantBrain?.globalProductMemory?.products?.[key]; if(!rec) return null;
+  rec.__memoryKey=key;
   const slim=v3100SlimGpuPayload(payload);
-  rec.gpuVisionV31=Object.assign({}, slim, {mode, engine:'runpod_spesa_vision_brain_v31'});
+  const refined=await v3110RefineGpuImages(payload,rec);
+  if(refined.images) slim.images=refined.images;
+  if(refined.labelBox){ slim.labelBox=refined.labelBox; slim.product=Object.assign({},slim.product||{}, {labelBox:refined.labelBox,labelConfidence:refined.labelBox.confidence}); }
+  if(refined.render360) slim.render360=refined.render360;
+  rec.gpuVisionV31=Object.assign({}, slim, {mode, engine:'runpod_spesa_vision_brain_v31_2'});
   rec.updatedAt=Date.now();
   try{
     const folder=v2842EnsureObjectFolder(rec); folder.gpuVisionV31=rec.gpuVisionV31; folder.updatedAt=Date.now();
-    const imgs=payload.images||{};
+    const imgs=rec.gpuVisionV31.images||{};
     const add=(kind,dataUrl,score)=>{ if(!dataUrl||!String(dataUrl).startsWith('data:image')) return; folder.photos=Array.isArray(folder.photos)?folder.photos:[]; const id='gpu_'+kind+'_'+hashStable(String(dataUrl).slice(0,300)).slice(0,14); folder.photos=folder.photos.filter(p=>p.id!==id); folder.photos.unshift({id,kind:'gpu_'+kind,source:'gpu_vision_v31',at:Date.now(),dataUrl,thumbDataUrl:dataUrl,score,bytes:String(dataUrl).length,visibleEvidence:['GPU Vision V31',kind],colors:payload.product?.dominantColors||[]}); };
-    add('product_transparent',imgs.productTransparent,98); add('product_white',imgs.productWhite,95); add('label_crop',imgs.labelCrop,92);
-    folder.photos=folder.photos.slice(0,30); folder.photoCount=folder.photos.length; if(!folder.representativePhoto && imgs.productWhite){ folder.representativePhoto=folder.photos[0]; folder.representativePhotoId=folder.photos[0]?.id||''; folder.hasRealProfilePhoto=true; }
+    add('product_transparent',imgs.productTransparent,99); add('product_white',imgs.productWhite,96); add('label_crop',imgs.labelCrop,95);
+    folder.photos=folder.photos.slice(0,30); folder.photoCount=folder.photos.length;
+    if(imgs.productTransparent||imgs.productWhite){ folder.representativePhoto=folder.photos[0]||folder.representativePhoto; folder.representativePhotoId=folder.photos[0]?.id||folder.representativePhotoId||''; folder.hasRealProfilePhoto=true; }
+    if(Array.isArray(refined.referenceImages) && refined.referenceImages.length){ folder.referenceImagesV3000=refined.referenceImages; folder.referenceCandidatesV3000=refined.referenceImages; }
+    if(refined.render360){ folder.render360V3000=refined.render360; rec.render360V3000=refined.render360; }
   }catch(_){ }
+  try{ delete rec.__memoryKey; }catch(_){ }
   try{ v2840AttachMemoryCard(rec,{}); }catch(_){ }
   updateGlobalLearningAudit({type:'gpu-vision-v31-saved', key, productName:rec.productName||'', brand:rec.brand||'', mode, confidence:payload.product?.confidence||null});
   return rec.gpuVisionV31;
@@ -9559,7 +9637,7 @@ async function v3100GpuVisionAnalyze({key='',imageDataUrl='',imageUrl='',mode='a
   const call=await v3100CallGpuVision(resolved.buffer,resolved.mime,mode,resolved.filename);
   if(!call.ok) return call;
   const payload=call.data||{};
-  const saved=key?v3100PersistGpuVision(key,payload,mode):null;
+  const saved=key?await v3100PersistGpuVision(key,payload,mode):null;
   return {ok:!!payload.ok,version:'V31.0_bridge',mode,source:resolved.source,gpuVision:payload,savedGpuVision:saved,config:v3100PublicConfig()};
 }
 try{ const prevFolder=v2842PublicObjectFolder; if(typeof prevFolder==='function'&&!global.__v3100GpuFolderWrapped){ v2842PublicObjectFolder=function(record={}){ const out=prevFolder.call(this,record)||{}; out.gpuVisionV31=(record.objectFolder&&record.objectFolder.gpuVisionV31)||record.gpuVisionV31||null; return out; }; global.__v3100GpuFolderWrapped=true; } }catch(_){ }
