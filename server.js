@@ -9851,8 +9851,8 @@ async function v3100GpuVisionHealth(){
   try{
     const r=await fetch(`${cfg.url}${cfg.healthPath}`,{headers:{'Authorization':`Bearer ${cfg.token}`,'X-Vision-Token':cfg.token},signal:ctrl.signal});
     let data={}; try{data=await r.json()}catch{data={raw:await r.text().catch(()=> '')}}
-    return {ok:r.ok,enabled:true,version:'V31.10.3_V33.4_balanced_bridge',config:v3100PublicConfig(),gpuResponse:data,status:r.status};
-  }catch(e){ return {ok:false,enabled:true,version:'V31.10.3_V33.4_balanced_bridge',config:v3100PublicConfig(),error:String(e?.message||e)}; }
+    return {ok:r.ok,enabled:true,version:'V31.10.4_V33.4.1_refined_bridge',config:v3100PublicConfig(),gpuResponse:data,status:r.status};
+  }catch(e){ return {ok:false,enabled:true,version:'V31.10.4_V33.4.1_refined_bridge',config:v3100PublicConfig(),error:String(e?.message||e)}; }
   finally{ clearTimeout(t); }
 }
 function v3100SlimGpuPayload(data={}){
@@ -10025,15 +10025,16 @@ async function v3130BuildStudioRender(productDataUrl='',labelDataUrl='',rec={}){
   const sharp=await v2864Sharp(); if(!sharp||!/^data:image\//i.test(String(productDataUrl||''))) return '';
   try{
     const srcBuf=v2864DataUrlBuffer(productDataUrl); if(!srcBuf) return '';
-    const productBase=await sharp(srcBuf,{failOn:'none'}).rotate().ensureAlpha().trim({background:{r:0,g:0,b:0,alpha:0},threshold:8}).resize({height:805,width:660,fit:'inside',withoutEnlargement:true}).png({compressionLevel:8}).toBuffer();
+    const productBase=await sharp(srcBuf,{failOn:'none'}).rotate().ensureAlpha().trim({background:{r:0,g:0,b:0,alpha:0},threshold:8}).resize({height:815,width:665,fit:'inside',withoutEnlargement:true}).png({compressionLevel:8}).toBuffer();
     const meta=await sharp(productBase,{failOn:'none'}).metadata();
     const pw=Number(meta.width||1), ph=Number(meta.height||1);
     const canvasW=980, canvasH=1180;
     const left=Math.max(0,Math.round((canvasW-pw)/2));
-    const top=Math.max(0,Math.round(124+(canvasH-260-ph)/2));
-    const shadow=await sharp(productBase,{failOn:'none'}).ensureAlpha().blur(16).modulate({brightness:.15}).png().toBuffer();
-    const bgSvg=`<svg xmlns="http://www.w3.org/2000/svg" width="${canvasW}" height="${canvasH}" viewBox="0 0 ${canvasW} ${canvasH}"><defs><radialGradient id="g" cx="50%" cy="78%" r="62%"><stop stop-color="#eef5ff" offset="0"/><stop stop-color="#ffffff" offset=".48"/><stop stop-color="#f8fbff" offset="1"/></radialGradient></defs><rect width="100%" height="100%" rx="38" fill="url(#g)"/><ellipse cx="${canvasW/2}" cy="${top+ph+44}" rx="${Math.max(110,Math.round(pw*.36))}" ry="34" fill="#082a45" opacity=".09"/></svg>`;
-    const out=await sharp(Buffer.from(bgSvg)).composite([{input:shadow,left:left+12,top:top+28},{input:productBase,left,top}]).jpeg({quality:90,mozjpeg:true}).toBuffer();
+    const top=Math.max(0,Math.round(118+(canvasH-255-ph)/2));
+    const shadowW=Math.max(150,Math.round(pw*.56)), shadowH=Math.max(24,Math.round(pw*.10));
+    const shadowX=Math.round((canvasW-shadowW)/2), shadowY=Math.round(top+ph+10);
+    const bgSvg=`<svg xmlns="http://www.w3.org/2000/svg" width="${canvasW}" height="${canvasH}" viewBox="0 0 ${canvasW} ${canvasH}"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fbfcff" offset="0"/><stop stop-color="#ffffff" offset="1"/></linearGradient><filter id="blur" x="-40%" y="-80%" width="180%" height="260%"><feGaussianBlur stdDeviation="12"/></filter></defs><rect width="100%" height="100%" fill="url(#g)"/><ellipse cx="${Math.round(canvasW/2)}" cy="${Math.round(shadowY+shadowH/2)}" rx="${Math.round(shadowW/2)}" ry="${Math.round(shadowH/2)}" fill="#1b2838" opacity=".10" filter="url(#blur)"/></svg>`;
+    const out=await sharp(Buffer.from(bgSvg)).composite([{input:productBase,left,top}]).jpeg({quality:92,mozjpeg:true}).toBuffer();
     return v3130DataUrlFromBuffer(out,'image/jpeg');
   }catch(_){ return ''; }
 }
@@ -10082,7 +10083,7 @@ async function v3100PersistGpuVision(key='', payload={}, mode='analyze', source=
   if(source&&source.reference) slim.usedReference=source.reference;
   slim.teacherOpenAI=Object.assign({called:false,reason:'not_needed_for_cached_gpu_render',result:'Nessuna chiamata OpenAI: ho usato foto prodotto, GPU e fonti gratuite/API.'}, slim.teacherOpenAI||payload.teacherOpenAI||{});
   slim.barcodeCandidate=payload.product?.barcode||payload.barcode||payload.product?.ean||'';
-  rec.gpuVisionV31=Object.assign({}, slim, {mode, engine:'runpod_spesa_vision_brain_v31_5', profilePolicy:'manual_owner_only'});
+  rec.gpuVisionV31=Object.assign({}, slim, {mode, engine:'runpod_spesa_vision_brain_v31_5_refine', profilePolicy:'manual_owner_only'});
   rec.updatedAt=Date.now();
   try{
     const folder=v2842EnsureObjectFolder(rec); folder.gpuVisionV31=rec.gpuVisionV31; folder.updatedAt=Date.now();
@@ -10162,8 +10163,34 @@ async function v31102SanitizeTransparentProductBuffer(buf){
       if(cx<.56) score*=.45; if(cy>.78) score*=.6;
       if(!best||score>best.score) best={px,score};
     }
-    if(!best) return buf;
-    for(const q of best.px){ const j=q*4; data[j+3]=0; data[j]=255; data[j+1]=255; data[j+2]=255; }
+    if(best){ for(const q of best.px){ const j=q*4; data[j+3]=0; data[j]=255; data[j+1]=255; data[j+2]=255; } }
+    // Slightly widen the true handle hole and clear residual tiny blobs inside it.
+    const solid=new Uint8Array(n);
+    for(let i=0;i<n;i++) solid[i]=data[i*4+3]>18?1:0;
+    const holeSeen=new Uint8Array(n);
+    let bestHole=null;
+    for(let y=minY+1;y<maxY;y++) for(let x=minX+1;x<maxX;x++){
+      const idx=y*w+x; if(solid[idx]||holeSeen[idx]) continue;
+      const rx=(x-minX)/Math.max(1,bw), ry=(y-minY)/Math.max(1,bh);
+      if(rx<.54||rx>.92||ry<.14||ry>.70) continue;
+      const px=[]; let stack=[idx], area=0,minx=w,miny=h,maxx=0,maxy=0,sx=0,sy=0,touch=false; holeSeen[idx]=1;
+      while(stack.length){ const q=stack.pop(); px.push(q); const qx=q%w,qy=Math.floor(q/w); area++; sx+=qx; sy+=qy; if(qx<minx)minx=qx;if(qx>maxx)maxx=qx;if(qy<miny)miny=qy;if(qy>maxy)maxy=qy; if(qx<=minX||qx>=maxX||qy<=minY||qy>=maxY) touch=true;
+        for(const d of dirs){ const z=q+d; if(z<0||z>=n) continue; const zx=z%w; if(Math.abs(zx-qx)>1) continue; if(!solid[z]&&!holeSeen[z]){ holeSeen[z]=1; stack.push(z); } }
+      }
+      if(touch) continue; const cw=maxx-minx+1,ch=maxy-miny+1, aspect=cw/Math.max(1,ch), areaRatio=area/Math.max(1,bw*bh), cx=(sx/area-minX)/bw, cy=(sy/area-minY)/bh;
+      if(areaRatio<.003||areaRatio>.12) continue; if(aspect<.20||aspect>1.8) continue;
+      let score=area*(1.2-Math.abs(cx-.74)*1.5-Math.abs(cy-.36)*1.2);
+      if(!bestHole||score>bestHole.score) bestHole={px,score};
+    }
+    if(bestHole){
+      const grow=new Set(bestHole.px);
+      for(const q of bestHole.px){ const qx=q%w; for(const d of dirs){ const z=q+d; if(z<0||z>=n) continue; const zx=z%w; if(Math.abs(zx-qx)>1) continue; grow.add(z); } }
+      for(const q of grow){ const j=q*4; data[j+3]=0; data[j]=255; data[j+1]=255; data[j+2]=255; }
+    }
+    // Reduce dark fringe on semi-transparent edge pixels.
+    const edge=new Uint8Array(n);
+    for(let y=1;y<h-1;y++) for(let x=1;x<w-1;x++){ const i=y*w+x,a=data[i*4+3]; if(a<8||a>210) continue; let nearSolid=0, nearEmpty=0; for(const d of dirs){ const z=i+d, aa=data[z*4+3]; if(aa>180) nearSolid++; if(aa<12) nearEmpty++; } if(nearSolid&&nearEmpty) edge[i]=1; }
+    for(let i=0;i<n;i++){ if(!edge[i]) continue; const j=i*4, r=data[j],g=data[j+1],b=data[j+2]; const lum=v2864Lum(r,g,b); if(lum<94){ data[j]=Math.round(r*.28+base.r*.72); data[j+1]=Math.round(g*.28+base.g*.72); data[j+2]=Math.round(b*.28+base.b*.72); if(data[j+3]>165) data[j+3]=165; } }
     return await sharp(data,{raw:{width:w,height:h,channels:4}}).png({compressionLevel:8}).toBuffer();
   }catch(_){ return buf; }
 }
@@ -10225,7 +10252,7 @@ async function v3160ResolvePreferredPhoto(key='',want='front'){
 }
 async function v3160BuildRender2D(productDataUrl='',rec={}){
   const sharp=await v2864Sharp(); if(!sharp||!/^data:image\//i.test(String(productDataUrl||''))) return '';
-  try{ const buf=v2864DataUrlBuffer(productDataUrl); if(!buf) return ''; const cleanBuf=await v31102SanitizeTransparentProductBuffer(buf); const prod0=await sharp(cleanBuf,{failOn:'none'}).rotate().ensureAlpha().trim({background:{r:0,g:0,b:0,alpha:0},threshold:8}).resize({height:790,width:650,fit:'inside',withoutEnlargement:true}).png().toBuffer(); const meta=await sharp(prod0,{failOn:'none'}).metadata(); const pw=Number(meta.width||1), ph=Number(meta.height||1); const canvasW=900, canvasH=1100; const left=Math.max(0,Math.round((canvasW-pw)/2)); const top=Math.max(0,Math.round(110+(canvasH-230-ph)/2)); const shadow=await sharp(prod0,{failOn:'none'}).ensureAlpha().blur(16).modulate({brightness:.16}).png().toBuffer(); const canvas=await sharp({create:{width:canvasW,height:canvasH,channels:4,background:{r:255,g:255,b:255,alpha:1}}}).composite([{input:shadow,left:left+12,top:top+28},{input:prod0,left,top}]).jpeg({quality:90,mozjpeg:true}).toBuffer(); return v3130DataUrlFromBuffer(canvas,'image/jpeg'); }catch(_){ return productDataUrl; }
+  try{ const buf=v2864DataUrlBuffer(productDataUrl); if(!buf) return ''; const cleanBuf=await v31102SanitizeTransparentProductBuffer(buf); const prod0=await sharp(cleanBuf,{failOn:'none'}).rotate().ensureAlpha().trim({background:{r:0,g:0,b:0,alpha:0},threshold:8}).resize({height:800,width:655,fit:'inside',withoutEnlargement:true}).png().toBuffer(); const meta=await sharp(prod0,{failOn:'none'}).metadata(); const pw=Number(meta.width||1), ph=Number(meta.height||1); const canvasW=900, canvasH=1100; const left=Math.max(0,Math.round((canvasW-pw)/2)); const top=Math.max(0,Math.round(112+(canvasH-236-ph)/2)); const shadowW=Math.max(145,Math.round(pw*.56)), shadowH=Math.max(22,Math.round(pw*.10)); const shadowX=Math.round((canvasW-shadowW)/2), shadowY=Math.round(top+ph+8); const bgSvg=`<svg xmlns="http://www.w3.org/2000/svg" width="${canvasW}" height="${canvasH}" viewBox="0 0 ${canvasW} ${canvasH}"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fbfcff" offset="0"/><stop stop-color="#ffffff" offset="1"/></linearGradient><filter id="blur" x="-40%" y="-80%" width="180%" height="260%"><feGaussianBlur stdDeviation="11"/></filter></defs><rect width="100%" height="100%" fill="url(#g)"/><ellipse cx="${Math.round(canvasW/2)}" cy="${Math.round(shadowY+shadowH/2)}" rx="${Math.round(shadowW/2)}" ry="${Math.round(shadowH/2)}" fill="#172332" opacity=".10" filter="url(#blur)"/></svg>`; const canvas=await sharp(Buffer.from(bgSvg)).composite([{input:prod0,left,top}]).jpeg({quality:92,mozjpeg:true}).toBuffer(); return v3130DataUrlFromBuffer(canvas,'image/jpeg'); }catch(_){ return productDataUrl; }
 }
 async function v3160ExtractLabelFromBuffer(buffer,mime='image/jpeg',rec={}){
   const sharp=await v2864Sharp(); if(!sharp||!buffer) return null;
@@ -10252,7 +10279,7 @@ async function v3160RenderPro2D(key='',opts={}){
   let payload=null; const call=await v3100CallGpuVision(resolved.buffer,resolved.mime,'render-pro',resolved.filename); if(call.ok&&call.data) payload=call.data;
   if(!payload||!payload.ok){ const d=v3160DataUrlForBuffer(resolved.buffer,resolved.mime); payload={ok:true,version:'V31.7_local_fallback',product:{confidence:.55,shape:{family:'render_from_profile_photo'}},images:{productTransparent:d,productWhite:d},message:'GPU non ha prodotto render; uso foto profilo come base controllata.'}; }
   const refined=await v3130RefineGpuPayload(payload,rec); const imgs=Object.assign({},payload.images||{},refined.images||{}); imgs.renderPro2D=imgs.renderPro||imgs.renderPro2D||await v3160BuildRender2D(imgs.productTransparent||imgs.productWhite||v3160DataUrlForBuffer(resolved.buffer,resolved.mime),rec); payload.images=imgs; payload.labelBox=refined.labelBox||payload.labelBox||null; payload.render360=refined.render360||payload.render360||null; payload.teacherOpenAI=payload.teacherOpenAI||{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: render PRO creato da foto profilo/frontale + GPU/server.'};
-  const saved=await v3100PersistGpuVision(key,payload,'render_pro_2d',resolved); if(saved){ saved.version='31.10.3-v33.4-balanced-silhouette'; saved.renderPipelineVersion='v31_10_3_balanced_silhouette_safe'; saved.profilePolicy='manual_owner_only'; saved.images=Object.assign({},saved.images||{},imgs); saved.model3D=saved.model3D||saved.render360||{}; }
+  const saved=await v3100PersistGpuVision(key,payload,'render_pro_2d',resolved); if(saved){ saved.version='31.10.4-v33.4.1-contour-refine'; saved.renderPipelineVersion='v31_10_4_contour_refine_contact_shadow'; saved.profilePolicy='manual_owner_only'; saved.images=Object.assign({},saved.images||{},imgs); saved.model3D=saved.model3D||saved.render360||{}; }
   return {ok:true,title:'Render PRO 2D creato',message:'Creato dalla foto profilo/frontale. Non ho cambiato foto profilo.',savedGpuVision:saved,gpuVision:payload,source:resolved.source};
 }
 async function v3160ExtractLabelOnly(key='',opts={}){
@@ -10308,9 +10335,9 @@ async function v3160ExtractLabelOnly(key='',opts={}){
     if(src) best={dataUrl:src,confidence:gv.labelBox?.confidence||70,box:gv.labelBox||{},method:'v31_9_gpu_label_fallback'};
   }
   if(!best) return {ok:false,error:'label_not_found',message:'Non ho trovato una label chiara: carica una foto frontale/etichetta più vicina.'};
-  const current=Object.assign({}, existing||{ok:true,version:'31.10.3-v33.4-balanced-silhouette',images:{}});
+  const current=Object.assign({}, existing||{ok:true,version:'31.10.4-v33.4.1-contour-refine',images:{}});
   current.ok=true;
-  current.version='31.10.3-v33.4-balanced-silhouette';
+  current.version='31.10.4-v33.4.1-contour-refine';
   current.renderPipelineVersion='v31_10_3_label_only_preserve';
   current.profilePolicy='manual_owner_only';
   current.images=Object.assign({},current.images||{},{labelOnly:best.dataUrl,labelCrop:best.dataUrl});
@@ -10420,9 +10447,9 @@ async function v3100GpuVisionAnalyze({key='',imageDataUrl='',imageUrl='',mode='a
   finally{ if(!force) global.__spesaGpuVisionLocks.delete(lockKey); }
 }
 try{ const prevFolder=v2842PublicObjectFolder; if(typeof prevFolder==='function'&&!global.__v3100GpuFolderWrapped){ v2842PublicObjectFolder=function(record={}){ const out=prevFolder.call(this,record)||{}; out.gpuVisionV31=(record.objectFolder&&record.objectFolder.gpuVisionV31)||record.gpuVisionV31||null; return out; }; global.__v3100GpuFolderWrapped=true; } }catch(_){ }
-try{ const prevBrain=publicServerBrainV2840; if(typeof prevBrain==='function'&&!global.__v3100BrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prevBrain.call(this,opts||{})||{}; out.version='V31.10.3 GPU Vision V33.4 Balanced Render Fix'; out.gpuVisionV31=v3100PublicConfig(); return out; }; global.__v3100BrainWrapped=true; } }catch(_){ }
-try{ const prevPreflight=preflightSnapshotV98; if(typeof prevPreflight==='function'&&!global.__v3100PreflightWrapped){ preflightSnapshotV98=function(){ const s=prevPreflight.call(this)||{}; s.version='V31.10.3'; s.gpuVisionV31=v3100PublicConfig(); return s; }; global.__v3100PreflightWrapped=true; } }catch(_){ }
-console.log('[Spesa Pronta] V31.10.3 GPU Vision V33.4 Balanced Render Fix active');
+try{ const prevBrain=publicServerBrainV2840; if(typeof prevBrain==='function'&&!global.__v3100BrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prevBrain.call(this,opts||{})||{}; out.version='V31.10.4 GPU Vision V33.4.1 Contour Refine'; out.gpuVisionV31=v3100PublicConfig(); return out; }; global.__v3100BrainWrapped=true; } }catch(_){ }
+try{ const prevPreflight=preflightSnapshotV98; if(typeof prevPreflight==='function'&&!global.__v3100PreflightWrapped){ preflightSnapshotV98=function(){ const s=prevPreflight.call(this)||{}; s.version='V31.10.4'; s.gpuVisionV31=v3100PublicConfig(); return s; }; global.__v3100PreflightWrapped=true; } }catch(_){ }
+console.log('[Spesa Pronta] V31.10.4 GPU Vision V33.4.1 Contour Refine active');
 
 
 // =============================================================
@@ -10445,7 +10472,7 @@ console.log('[Spesa Pronta] V31.10.3 GPU Vision V33.4 Balanced Render Fix active
       const prev=preflightSnapshotV98;
       preflightSnapshotV98=function(){
         const s=prev.call(this)||{};
-        s.version='V31.10.3';
+        s.version='V31.10.4';
         s.ramSafeV314=spesaRamSafeHealth();
         s.checks=Array.isArray(s.checks)?s.checks:[];
         s.checks.push({id:'render_ram_safe',label:'Render RAM Safe',ok:!!SPESA_RAM_SAFE,message:SPESA_RAM_SAFE?`Modalità ${SPESA_MEMORY_MODE}: cache/foto/dataset alleggeriti`:'Modalità PRO locale: RAM Safe non forzato'});
