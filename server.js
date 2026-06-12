@@ -9829,8 +9829,8 @@ async function v3100GpuVisionHealth(){
   try{
     const r=await fetch(`${cfg.url}${cfg.healthPath}`,{headers:{'Authorization':`Bearer ${cfg.token}`,'X-Vision-Token':cfg.token},signal:ctrl.signal});
     let data={}; try{data=await r.json()}catch{data={raw:await r.text().catch(()=> '')}}
-    return {ok:r.ok,enabled:true,version:'V31.0_bridge',config:v3100PublicConfig(),gpuResponse:data,status:r.status};
-  }catch(e){ return {ok:false,enabled:true,version:'V31.0_bridge',config:v3100PublicConfig(),error:String(e?.message||e)}; }
+    return {ok:r.ok,enabled:true,version:'V31.8_V33_strict_bridge',config:v3100PublicConfig(),gpuResponse:data,status:r.status};
+  }catch(e){ return {ok:false,enabled:true,version:'V31.8_V33_strict_bridge',config:v3100PublicConfig(),error:String(e?.message||e)}; }
   finally{ clearTimeout(t); }
 }
 function v3100SlimGpuPayload(data={}){
@@ -10056,37 +10056,46 @@ async function v3160ExtractLabelOnly(key='',opts={}){
   const current=rec.objectFolder?.gpuVisionV31||rec.gpuVisionV31||{ok:true,version:'31.7',images:{}}; current.ok=true; current.version='31.7'; current.images=Object.assign({},current.images||{},{labelOnly:best.dataUrl,labelCrop:best.dataUrl}); current.labelBox=Object.assign({},best.box||{},{confidence:best.confidence,method:best.method}); if(best.barcode) current.barcodeCandidate=best.barcode; current.teacherOpenAI=current.teacherOpenAI||{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: etichetta estratta dalle foto articolo con GPU V32 se disponibile.'}; rec.gpuVisionV31=current; const folder2=v2842EnsureObjectFolder(rec); folder2.gpuVisionV31=current; folder2.updatedAt=Date.now(); rec.updatedAt=Date.now();
   return {ok:true,title:'Etichetta estratta',message:'Salvata solo label, senza usarla come foto profilo.',savedGpuVision:current,gpuVision:current,photoId:bestPhoto?.id||''};
 }
+
+function v3180IsRealV33Payload(payload={}){
+  return !!(payload && payload.ok && String(payload.version||'').includes('33') && payload.render3d && payload.render3d.realMeshGlb && payload.render3d.glbDataUrl);
+}
+function v3180ClearLegacyGpuRender(rec={}){
+  try{
+    const folder=v2842EnsureObjectFolder(rec);
+    if(folder.gpuVisionV31 && !String(folder.gpuVisionV31?.version||'').includes('33')) folder.gpuVisionV31={ok:false,version:'legacy_hidden',images:{},model3D:{},render360:{},message:'Legacy render nascosto: serve Render 360° 3D V33 reale.'};
+    if(rec.gpuVisionV31 && !String(rec.gpuVisionV31?.version||'').includes('33')) rec.gpuVisionV31=folder.gpuVisionV31;
+    delete folder.render360V3000; delete rec.render360V3000;
+  }catch(_){}
+}
+
 async function v3160BuildVirtual3D(key='',opts={}){
   const rec=v3160Rec(key); if(!rec) return {ok:false,error:'product_not_found'};
-  let current=rec.objectFolder?.gpuVisionV31||rec.gpuVisionV31||null;
+  v3180ClearLegacyGpuRender(rec);
   const frontResolved=await v3160ResolvePreferredPhoto(key,'front');
-  if(frontResolved.error) return {ok:false,error:frontResolved.error,message:'Serve una foto frontale/profilo per generare il 360° 3D.'};
+  if(frontResolved.error) return {ok:false,error:frontResolved.error,message:'Serve una foto frontale/profilo per generare il 3D reale.'};
   const backResolved=await v3160ResolvePreferredPhoto(key,'back');
-  let backOpts={}; let backDataUrl='';
+  let backOpts={};
   if(backResolved&&!backResolved.error&&backResolved.buffer&&(!frontResolved.photo||String(backResolved.photo?.id||'')!==String(frontResolved.photo?.id||''))){
     backOpts={backBuffer:backResolved.buffer,backMime:backResolved.mime,backFilename:`${key}-back.jpg`};
-    backDataUrl=v3160DataUrlForBuffer(backResolved.buffer,backResolved.mime);
   }
-  let payload=null; const call=await v3100CallGpuVision(frontResolved.buffer,frontResolved.mime,'render-3d',frontResolved.filename,backOpts);
-  if(call.ok&&call.data&&call.data.ok) payload=call.data;
-  if(!payload){
-    const front=current?.images?.renderPro2D||current?.images?.productTransparent||current?.images?.productWhite||v3160DataUrlForBuffer(frontResolved.buffer,frontResolved.mime);
-    payload={ok:true,version:'31.7_local_3d_fallback',images:{renderPro2D:front,productTransparent:front,backTransparent:backDataUrl},render3d:{kind:'local_front_back_virtual_card',realMeshGlb:false,frames:[],frameCount:0,note:'Fallback locale: il worker V32 non ha risposto a /render-3d.'},product:{shape:{family:'local_virtual_3d',hasBack:!!backDataUrl}},message:'Fallback 3D locale'};
+  const call=await v3100CallGpuVision(frontResolved.buffer,frontResolved.mime,'render-3d',frontResolved.filename,backOpts);
+  const payload=call?.data||{};
+  if(!call.ok || !payload.ok){
+    return {ok:false,error:'v33_worker_not_responding',message:'RunPod V33 non ha risposto al render 3D reale. Non mostro più fallback finti.',details:call,config:v3100PublicConfig()};
   }
-  const frames=Array.isArray(payload.render3d?.frames)?payload.render3d.frames.slice(0,18):[];
-  payload.render3d=Object.assign({},payload.render3d||{}, {frames, frameCount:frames.length});
-  current=current||{ok:true,version:'31.7',images:{}};
-  current.ok=true; current.version='31.7'; current.images=Object.assign({},current.images||{},payload.images||{});
-  if(payload.images?.renderPro && !current.images.renderPro2D) current.images.renderPro2D=payload.images.renderPro;
-  const front=current.images.renderPro2D||current.images.renderPro||current.images.productTransparent||current.images.productWhite||v3160DataUrlForBuffer(frontResolved.buffer,frontResolved.mime);
-  const back=payload.images?.backTransparent||backDataUrl||'';
-  current.model3D={version:'31.7',at:Date.now(),mode:back?'v32_depth_front_back_orbit':'v32_depth_front_orbit',front,back,frames,frameCount:frames.length,thickness:0.24,depthPx:84,rotationReady:!!front,realMeshGlb:!!payload.render3d?.realMeshGlb,kind:payload.render3d?.kind||'showroom_depth_orbit',searchPolicy:'RunPod V32: segmentazione + depth/normal + orbit frames da GPU'};
-  current.render360=Object.assign({},current.render360||{},current.model3D);
-  current.depthMap=payload.images?.depthMap||current.depthMap||''; current.normalMap=payload.images?.normalMap||current.normalMap||'';
-  current.product=Object.assign({},current.product||{},payload.product||{});
-  current.teacherOpenAI=current.teacherOpenAI||{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: 360° creato dal worker GPU V32.'};
-  rec.gpuVisionV31=current; const folder=v2842EnsureObjectFolder(rec); folder.gpuVisionV31=current; folder.render360V3000=current.model3D; rec.render360V3000=current.model3D; folder.updatedAt=Date.now(); rec.updatedAt=Date.now();
-  return {ok:true,title:'Render 360° 3D V32 creato',message:back?'Usato fronte + retro con worker GPU V32.':'Creato 3D V32 dal fronte; carica retro per migliorarlo.',savedGpuVision:current,gpuVision:current,path:call.path||''};
+  if(!v3180IsRealV33Payload(payload)){
+    return {ok:false,error:'real_glb_missing',message:'Il worker ha risposto ma non ha generato un GLB reale. Controlla che V33/TripoSR sia installato e che /render-3d restituisca realMeshGlb:true.',workerVersion:payload.version||'',render3d:payload.render3d||{},config:v3100PublicConfig()};
+  }
+  const current={ok:true,version:'33.0-real3d',strictV33:true,images:Object.assign({},payload.images||{}),product:Object.assign({},payload.product||{}),teacherOpenAI:{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: 3D reale creato dal worker RunPod V33.'}};
+  current.model3D={version:'33.0',at:Date.now(),mode:'real_glb_mesh',realMeshGlb:true,glbDataUrl:payload.render3d.glbDataUrl,engine:payload.render3d.engine||'TripoSR',front:current.images.renderPro||current.images.productTransparent||'',frames:Array.isArray(payload.render3d.frames)?payload.render3d.frames.slice(0,8):[],note:payload.render3d.note||'GLB mesh reale generato da RunPod V33'};
+  current.render360=Object.assign({},current.model3D);
+  const folder=v2842EnsureObjectFolder(rec);
+  folder.gpuVisionV33=current; rec.gpuVisionV33=current;
+  folder.gpuVisionV31=current; rec.gpuVisionV31=current;
+  folder.render360V3000=current.model3D; rec.render360V3000=current.model3D;
+  folder.updatedAt=Date.now(); rec.updatedAt=Date.now();
+  return {ok:true,title:'Render 360° 3D reale creato',message:'Creato GLB reale con worker RunPod V33. Nessun finto 3D piatto.',savedGpuVision:current,gpuVision:current,path:call.path||''};
 }
 async function v3160SaveGpuImageToGallery(key='',opts={}){
   const rec=v3160Rec(key); if(!rec) return {ok:false,error:'product_not_found'}; const gv=rec.objectFolder?.gpuVisionV31||rec.gpuVisionV31||{}; const imgs=gv.images||{}; const imageKey=String(opts.imageKey||'renderPro2D'); const dataUrl=String(opts.dataUrl||imgs[imageKey]||imgs.renderPro2D||imgs.renderPro||imgs.productTransparent||imgs.productWhite||''); if(!/^data:image\//i.test(dataUrl)) return {ok:false,error:'image_missing',message:'Render non disponibile: premi Render PRO prima di salvare in galleria.'};

@@ -1,0 +1,1 @@
+V31.8 REAL 3D STRICT: hides old fake 3D and shows only RunPod V33 GLB or explicit error.
