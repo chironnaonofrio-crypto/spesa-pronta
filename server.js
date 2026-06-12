@@ -9829,8 +9829,8 @@ async function v3100GpuVisionHealth(){
   try{
     const r=await fetch(`${cfg.url}${cfg.healthPath}`,{headers:{'Authorization':`Bearer ${cfg.token}`,'X-Vision-Token':cfg.token},signal:ctrl.signal});
     let data={}; try{data=await r.json()}catch{data={raw:await r.text().catch(()=> '')}}
-    return {ok:r.ok,enabled:true,version:'V31.9_V33_1_quality_bridge',config:v3100PublicConfig(),gpuResponse:data,status:r.status};
-  }catch(e){ return {ok:false,enabled:true,version:'V31.9_V33_1_quality_bridge',config:v3100PublicConfig(),error:String(e?.message||e)}; }
+    return {ok:r.ok,enabled:true,version:'V31.10_V33_2_premium_fix_bridge',config:v3100PublicConfig(),gpuResponse:data,status:r.status};
+  }catch(e){ return {ok:false,enabled:true,version:'V31.10_V33_2_premium_fix_bridge',config:v3100PublicConfig(),error:String(e?.message||e)}; }
   finally{ clearTimeout(t); }
 }
 function v3100SlimGpuPayload(data={}){
@@ -10038,28 +10038,92 @@ async function v3160ExtractLabelFromBuffer(buffer,mime='image/jpeg',rec={}){
   }catch(_){ return null; }
 }
 async function v3160RenderPro2D(key='',opts={}){
-  const rec=v3160Rec(key); if(!rec) return {ok:false,error:'product_not_found'}; const existing=rec.objectFolder?.gpuVisionV31||rec.gpuVisionV31||{}; const freshRender=!!(existing?.images?.renderPro2D && /31\.9|33\.1|quality/i.test(String([existing.version,existing.engine,existing.renderPipelineVersion,existing.profilePolicy].filter(Boolean).join(' ')))); if(!opts.force && freshRender) return {ok:true,title:'Render PRO dalla memoria',message:'Render PRO V31.9/V33.1 già presente: non ho rigenerato.',cached:true,savedGpuVision:existing,gpuVision:existing};
+  const rec=v3160Rec(key); if(!rec) return {ok:false,error:'product_not_found'}; const existing=rec.objectFolder?.gpuVisionV31||rec.gpuVisionV31||{}; const freshRender=!!(existing?.images?.renderPro2D && /31\.10|33\.2|premium-fix|quality/i.test(String([existing.version,existing.engine,existing.renderPipelineVersion,existing.profilePolicy].filter(Boolean).join(' ')))); if(!opts.force && freshRender) return {ok:true,title:'Render PRO dalla memoria',message:'Render PRO V31.10/V33.1 già presente: non ho rigenerato.',cached:true,savedGpuVision:existing,gpuVision:existing};
   const resolved=await v3160ResolvePreferredPhoto(key,'front'); if(resolved.error) return {ok:false,error:resolved.error,message:'Serve una foto profilo/frontale valida per generare il render PRO.'};
   let payload=null; const call=await v3100CallGpuVision(resolved.buffer,resolved.mime,'render-pro',resolved.filename); if(call.ok&&call.data) payload=call.data;
   if(!payload||!payload.ok){ const d=v3160DataUrlForBuffer(resolved.buffer,resolved.mime); payload={ok:true,version:'V31.7_local_fallback',product:{confidence:.55,shape:{family:'render_from_profile_photo'}},images:{productTransparent:d,productWhite:d},message:'GPU non ha prodotto render; uso foto profilo come base controllata.'}; }
   const refined=await v3130RefineGpuPayload(payload,rec); const imgs=Object.assign({},payload.images||{},refined.images||{}); imgs.renderPro2D=imgs.renderPro||imgs.renderPro2D||await v3160BuildRender2D(imgs.productTransparent||imgs.productWhite||v3160DataUrlForBuffer(resolved.buffer,resolved.mime),rec); payload.images=imgs; payload.labelBox=refined.labelBox||payload.labelBox||null; payload.render360=refined.render360||payload.render360||null; payload.teacherOpenAI=payload.teacherOpenAI||{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: render PRO creato da foto profilo/frontale + GPU/server.'};
-  const saved=await v3100PersistGpuVision(key,payload,'render_pro_2d',resolved); if(saved){ saved.version='31.9-v33.1-quality'; saved.renderPipelineVersion='v31_9_v33_1_quality_speed'; saved.profilePolicy='manual_owner_only'; saved.images=Object.assign({},saved.images||{},imgs); saved.model3D=saved.model3D||saved.render360||{}; }
+  const saved=await v3100PersistGpuVision(key,payload,'render_pro_2d',resolved); if(saved){ saved.version='31.10-v33.2-premium-fix'; saved.renderPipelineVersion='v31_10_v33_2_quality_speed'; saved.profilePolicy='manual_owner_only'; saved.images=Object.assign({},saved.images||{},imgs); saved.model3D=saved.model3D||saved.render360||{}; }
   return {ok:true,title:'Render PRO 2D creato',message:'Creato dalla foto profilo/frontale. Non ho cambiato foto profilo.',savedGpuVision:saved,gpuVision:payload,source:resolved.source};
 }
 async function v3160ExtractLabelOnly(key='',opts={}){
-  const rec=v3160Rec(key); if(!rec) return {ok:false,error:'product_not_found'}; const existing=rec.objectFolder?.gpuVisionV31||rec.gpuVisionV31||{}; const labelMethod=String(existing?.labelBox?.method||''); const freshLabel=!!((existing?.images?.labelOnly||existing?.images?.labelCrop) && /v33_1|v33|v31_9|anchor_component|label_only/i.test(labelMethod) && !/v31_3|legacy/i.test(labelMethod)); if(!opts.force && freshLabel) return {ok:true,title:'Etichetta dalla memoria',message:'Etichetta V31.9/V33.1 già presente.',cached:true,savedGpuVision:existing,gpuVision:existing};
-  const folder=v2842EnsureObjectFolder(rec); const photos=Array.isArray(folder.photos)?folder.photos:[]; const candidates=[]; if(folder.representativePhoto)candidates.push(folder.representativePhoto); for(const p of photos)candidates.push(p); if(rec.profilePhoto)candidates.push(rec.profilePhoto);
-  const clean=[]; const seen=new Set(); for(const p of candidates){ const src=v3160Src(p); if(!src||v3160IsDetailPhoto(p)) continue; const id=String(p.id||src.slice(0,80)); if(seen.has(id)) continue; seen.add(id); clean.push(p); } clean.sort((a,b)=>v3160PhotoScore(b,folder)-v3160PhotoScore(a,folder));
-  let best=null,bestPhoto=null; for(const p of clean.slice(0,5)){ let parts=v3100DataUrlParts(v3160Src(p)); if(!parts){ const f=await v3100FetchImageBuffer(v3160Src(p),10000); if(f) parts=f; } if(!parts) continue; let lab=null; try{ const gpuLab=await v3100CallGpuVision(parts.buffer,parts.mime,'label-pro',`${key}-label.jpg`); const gd=gpuLab?.data||{}; if(gpuLab.ok&&gd.ok&&gd.images?.labelCrop){ lab={dataUrl:gd.images.labelCrop,confidence:gd.labelBox?.confidence||gd.product?.labelBox?.confidence||92,box:gd.labelBox||gd.product?.labelBox||{},method:gd.labelBox?.method||'v32_gpu_label_pro',barcode:gd.barcode||gd.product?.barcode||null}; } }catch(_){} if(!lab) lab=await v3160ExtractLabelFromBuffer(parts.buffer,parts.mime,rec); if(lab && (!best || lab.confidence>best.confidence)){ best=lab; bestPhoto=p; } }
-  if(!best){ const r=await v3160RenderPro2D(key,{force:opts.force}); const gv=r.savedGpuVision||{}; const src=gv.images?.labelCrop||gv.images?.labelOnly||''; if(src) best={dataUrl:src,confidence:gv.labelBox?.confidence||70,box:gv.labelBox||{},method:'v31_7_gpu_label_fallback'}; }
+  const rec=v3160Rec(key);
+  if(!rec) return {ok:false,error:'product_not_found'};
+  const existing=rec.objectFolder?.gpuVisionV31||rec.gpuVisionV31||{};
+  const labelMethod=String(existing?.labelBox?.method||'');
+  const freshLabel=!!((existing?.images?.labelOnly||existing?.images?.labelCrop) && /v33_2|v31_10|label_only_product_mask|label_tight_score/i.test(labelMethod) && !/v31_3|legacy/i.test(labelMethod));
+  if(!opts.force && freshLabel){
+    return {ok:true,title:'Etichetta dalla memoria',message:'Etichetta V31.10/V33.1 già presente.',cached:true,savedGpuVision:existing,gpuVision:existing};
+  }
+  const folder=v2842EnsureObjectFolder(rec);
+  const candidates=[];
+  const existingImages=existing?.images||{};
+  const addSource=(id,src,score,note='')=>{ if(src) candidates.push({id,src,score,note}); };
+  addSource('gpu_label_crop', existingImages.labelCrop||existingImages.labelOnly, 1000, 'existing_gpu_label');
+  addSource('gpu_render_pro', existingImages.renderPro||existingImages.renderPro2D, 920, 'existing_gpu_render');
+  addSource('gpu_product_white', existingImages.productWhite, 900, 'existing_gpu_white');
+  addSource('gpu_product_transparent', existingImages.productTransparent, 860, 'existing_gpu_transparent');
+  const photos=Array.isArray(folder.photos)?folder.photos:[];
+  if(folder.representativePhoto) candidates.push({id:String(folder.representativePhoto.id||'representative'),photo:folder.representativePhoto,src:v3160Src(folder.representativePhoto),score:820,note:'representative'});
+  for(const p of photos){ candidates.push({id:String(p.id||''),photo:p,src:v3160Src(p),score:700+Math.min(120,Number(p.score||0)/5),note:String(p.kind||p.source||'photo')}); }
+  if(rec.profilePhoto) candidates.push({id:'profilePhoto',photo:rec.profilePhoto,src:v3160Src(rec.profilePhoto),score:760,note:'profile_photo'});
+  const clean=[]; const seen=new Set();
+  for(const c of candidates){ const src=String(c.src||''); if(!src) continue; if(c.photo && v3160IsDetailPhoto(c.photo)) continue; const dedupe=String(c.id||src.slice(0,120)); if(seen.has(dedupe)) continue; seen.add(dedupe); clean.push(c); }
+  clean.sort((a,b)=>(b.score||0)-(a.score||0));
+  let best=null,bestPhotoId='';
+  for(const c of clean.slice(0,6)){
+    let parts=v3100DataUrlParts(c.src);
+    if(!parts){ const f=await v3100FetchImageBuffer(c.src,10000); if(f) parts=f; }
+    if(!parts) continue;
+    let lab=null;
+    try{
+      const gpuLab=await v3100CallGpuVision(parts.buffer,parts.mime,'label-pro',`${key}-label.jpg`);
+      const gd=gpuLab?.data||{};
+      if(gpuLab.ok&&gd.ok&&gd.images?.labelCrop){
+        const box=gd.labelBox||gd.product?.labelBox||{};
+        let conf=Number(box.confidence||gd.product?.labelBox?.confidence||92)||92;
+        const bw=Math.max(1,Number(box.w||0)), bh=Math.max(1,Number(box.h||0));
+        const aspect=bw/bh;
+        if(/fallback/i.test(String(box.method||''))) conf-=14;
+        if(bw<80||bh<50) conf-=26;
+        if(aspect<0.55||aspect>4.6) conf-=18;
+        if((c.note||'').includes('existing_gpu_label')) conf+=8;
+        lab={dataUrl:gd.images.labelCrop,confidence:conf,box:box,method:box.method||'v33_1_label_only',barcode:gd.barcode||gd.product?.barcode||null};
+      }
+    }catch(_){ }
+    if(!lab) lab=await v3160ExtractLabelFromBuffer(parts.buffer,parts.mime,rec);
+    if(lab && (!best || Number(lab.confidence||0)>Number(best.confidence||0))){ best=lab; bestPhotoId=c.id||''; }
+  }
+  if(!best){
+    const r=await v3160RenderPro2D(key,{force:opts.force});
+    const gv=r.savedGpuVision||{};
+    const src=gv.images?.labelCrop||gv.images?.labelOnly||'';
+    if(src) best={dataUrl:src,confidence:gv.labelBox?.confidence||70,box:gv.labelBox||{},method:'v31_9_gpu_label_fallback'};
+  }
   if(!best) return {ok:false,error:'label_not_found',message:'Non ho trovato una label chiara: carica una foto frontale/etichetta più vicina.'};
-  const current=rec.objectFolder?.gpuVisionV31||rec.gpuVisionV31||{ok:true,version:'31.9-v33.1-quality',images:{}}; current.ok=true; current.version='31.9-v33.1-quality'; current.renderPipelineVersion='v31_9_label_only'; current.profilePolicy='manual_owner_only'; current.images=Object.assign({},current.images||{},{labelOnly:best.dataUrl,labelCrop:best.dataUrl}); current.labelBox=Object.assign({},best.box||{},{confidence:best.confidence,method:best.method}); if(best.barcode) current.barcodeCandidate=best.barcode; current.teacherOpenAI=current.teacherOpenAI||{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: etichetta estratta dalle foto articolo con GPU V32 se disponibile.'}; rec.gpuVisionV31=current; const folder2=v2842EnsureObjectFolder(rec); folder2.gpuVisionV31=current; folder2.updatedAt=Date.now(); rec.updatedAt=Date.now();
-  return {ok:true,title:'Etichetta estratta',message:'Salvata solo label, senza usarla come foto profilo.',savedGpuVision:current,gpuVision:current,photoId:bestPhoto?.id||''};
+  const current=Object.assign({}, existing||{ok:true,version:'31.10-v33.2-premium-fix',images:{}});
+  current.ok=true;
+  current.version='31.10-v33.2-premium-fix';
+  current.renderPipelineVersion='v31_10_label_only_preserve';
+  current.profilePolicy='manual_owner_only';
+  current.images=Object.assign({},current.images||{},{labelOnly:best.dataUrl,labelCrop:best.dataUrl});
+  current.labelBox=Object.assign({},best.box||{},{confidence:best.confidence,method:best.method});
+  if(best.barcode) current.barcodeCandidate=best.barcode;
+  current.teacherOpenAI=current.teacherOpenAI||{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: etichetta estratta dalle foto articolo con GPU/algoritmo locale.'};
+  rec.gpuVisionV31=current;
+  const folder2=v2842EnsureObjectFolder(rec); folder2.gpuVisionV31=current; folder2.updatedAt=Date.now(); rec.updatedAt=Date.now();
+  return {ok:true,title:'Etichetta estratta',message:'Salvata solo label, senza usarla come foto profilo.',savedGpuVision:current,gpuVision:current,photoId:bestPhotoId};
 }
 
 function v3180IsRealV33Payload(payload={}){
   return !!(payload && payload.ok && String(payload.version||'').includes('33') && payload.render3d && payload.render3d.realMeshGlb && payload.render3d.glbDataUrl);
 }
+function v3191DecodeDataUrl(dataUrl=''){
+  const m=String(dataUrl||'').match(/^data:([^;]+);base64,(.+)$/);
+  if(!m) return null;
+  try{ return {mime:m[1]||'application/octet-stream',buffer:Buffer.from(m[2],'base64')}; }catch(_){ return null; }
+}
+function v3191GpuModelUrl(key=''){ return `/api/gpu-vision/model-3d?key=${encodeURIComponent(String(key||''))}`; }
 function v3180ClearLegacyGpuRender(rec={}){
   try{
     const folder=v2842EnsureObjectFolder(rec);
@@ -10087,8 +10151,23 @@ async function v3160BuildVirtual3D(key='',opts={}){
   if(!v3180IsRealV33Payload(payload)){
     return {ok:false,error:'real_glb_missing',message:'Il worker ha risposto ma non ha generato un GLB reale. Controlla che V33/TripoSR sia installato e che /render-3d restituisca realMeshGlb:true.',workerVersion:payload.version||'',render3d:payload.render3d||{},config:v3100PublicConfig()};
   }
-  const current={ok:true,version:'33.1-real3d-v31.9',strictV33:true,renderPipelineVersion:'v31_9_real_glb_only',images:Object.assign({},payload.images||{}),product:Object.assign({},payload.product||{}),teacherOpenAI:{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: 3D reale creato dal worker RunPod V33.1.'}};
-  current.model3D={version:'33.0',at:Date.now(),mode:'real_glb_mesh',realMeshGlb:true,glbDataUrl:payload.render3d.glbDataUrl,engine:payload.render3d.engine||'TripoSR',front:current.images.renderPro||current.images.productTransparent||'',frames:Array.isArray(payload.render3d.frames)?payload.render3d.frames.slice(0,8):[],note:payload.render3d.note||'GLB mesh reale generato da RunPod V33'};
+  const existing=rec.objectFolder?.gpuVisionV31||rec.gpuVisionV31||{};
+  const oldImages=Object.assign({}, existing.images||{});
+  const incomingImages=Object.assign({}, payload.images||{});
+  // V31.10: Render 3D NON deve mai resettare/peggiorare l'etichetta già estratta.
+  const preservedLabelOnly = oldImages.labelOnly || '';
+  const preservedLabelCrop = oldImages.labelCrop || '';
+  delete incomingImages.labelOnly;
+  delete incomingImages.labelCrop;
+  const mergedImages=Object.assign({}, oldImages, incomingImages);
+  if(preservedLabelOnly) mergedImages.labelOnly=preservedLabelOnly;
+  if(preservedLabelCrop) mergedImages.labelCrop=preservedLabelCrop;
+  const oldProduct=Object.assign({}, existing.product||{});
+  const incomingProduct=Object.assign({}, payload.product||{});
+  if(existing.labelBox){ oldProduct.labelBox=existing.labelBox; }
+  if(oldProduct.labelBox){ incomingProduct.labelBox=oldProduct.labelBox; }
+  const current=Object.assign({}, existing, {ok:true,version:'33.2-real3d-v31.10',strictV33:true,renderPipelineVersion:'v31_10_real_glb_preserve_label',images:mergedImages,product:Object.assign({},oldProduct,incomingProduct),labelBox:existing.labelBox||oldProduct.labelBox||null,teacherOpenAI:{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: 3D reale creato dal worker RunPod V33.2.'}});
+  current.model3D={version:'33.2',at:Date.now(),mode:'real_glb_mesh',realMeshGlb:true,glbDataUrl:payload.render3d.glbDataUrl,glbEndpoint:v3191GpuModelUrl(key),engine:payload.render3d.engine||'TripoSR',front:mergedImages.productWhite||mergedImages.productTransparent||mergedImages.renderPro||'',frames:Array.isArray(payload.render3d.frames)?payload.render3d.frames.slice(0,8):[],note:payload.render3d.note||'GLB mesh reale generato da RunPod V33.2'};
   current.render360=Object.assign({},current.model3D);
   const folder=v2842EnsureObjectFolder(rec);
   folder.gpuVisionV33=current; rec.gpuVisionV33=current;
@@ -10134,9 +10213,9 @@ async function v3100GpuVisionAnalyze({key='',imageDataUrl='',imageUrl='',mode='a
   finally{ if(!force) global.__spesaGpuVisionLocks.delete(lockKey); }
 }
 try{ const prevFolder=v2842PublicObjectFolder; if(typeof prevFolder==='function'&&!global.__v3100GpuFolderWrapped){ v2842PublicObjectFolder=function(record={}){ const out=prevFolder.call(this,record)||{}; out.gpuVisionV31=(record.objectFolder&&record.objectFolder.gpuVisionV31)||record.gpuVisionV31||null; return out; }; global.__v3100GpuFolderWrapped=true; } }catch(_){ }
-try{ const prevBrain=publicServerBrainV2840; if(typeof prevBrain==='function'&&!global.__v3100BrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prevBrain.call(this,opts||{})||{}; out.version='V31.9 GPU Vision V33.1 Quality Bridge'; out.gpuVisionV31=v3100PublicConfig(); return out; }; global.__v3100BrainWrapped=true; } }catch(_){ }
-try{ const prevPreflight=preflightSnapshotV98; if(typeof prevPreflight==='function'&&!global.__v3100PreflightWrapped){ preflightSnapshotV98=function(){ const s=prevPreflight.call(this)||{}; s.version='V31.9'; s.gpuVisionV31=v3100PublicConfig(); return s; }; global.__v3100PreflightWrapped=true; } }catch(_){ }
-console.log('[Spesa Pronta] V31.9 GPU Vision V33.1 Quality Bridge active');
+try{ const prevBrain=publicServerBrainV2840; if(typeof prevBrain==='function'&&!global.__v3100BrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prevBrain.call(this,opts||{})||{}; out.version='V31.10 GPU Vision V33.2 Premium Fix Bridge'; out.gpuVisionV31=v3100PublicConfig(); return out; }; global.__v3100BrainWrapped=true; } }catch(_){ }
+try{ const prevPreflight=preflightSnapshotV98; if(typeof prevPreflight==='function'&&!global.__v3100PreflightWrapped){ preflightSnapshotV98=function(){ const s=prevPreflight.call(this)||{}; s.version='V31.10'; s.gpuVisionV31=v3100PublicConfig(); return s; }; global.__v3100PreflightWrapped=true; } }catch(_){ }
+console.log('[Spesa Pronta] V31.10 GPU Vision V33.2 Premium Fix Bridge active');
 
 
 // =============================================================
@@ -10159,7 +10238,7 @@ console.log('[Spesa Pronta] V31.9 GPU Vision V33.1 Quality Bridge active');
       const prev=preflightSnapshotV98;
       preflightSnapshotV98=function(){
         const s=prev.call(this)||{};
-        s.version='V31.9';
+        s.version='V31.10';
         s.ramSafeV314=spesaRamSafeHealth();
         s.checks=Array.isArray(s.checks)?s.checks:[];
         s.checks.push({id:'render_ram_safe',label:'Render RAM Safe',ok:!!SPESA_RAM_SAFE,message:SPESA_RAM_SAFE?`Modalità ${SPESA_MEMORY_MODE}: cache/foto/dataset alleggeriti`:'Modalità PRO locale: RAM Safe non forzato'});

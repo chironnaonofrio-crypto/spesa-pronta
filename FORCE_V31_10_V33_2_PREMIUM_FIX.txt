@@ -1,0 +1,1 @@
+V31.10 + RunPod V33.2: preserve label during 3D, hide stale wrong label, model-viewer GLB fallback links, pure render display.
