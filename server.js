@@ -4004,7 +4004,7 @@ const server = http.createServer(async (req,res)=>{
       const dataUrl=String(model.glbDataUrl||model.glb||model.modelDataUrl||'');
       const parsed=(typeof v3191DecodeDataUrl==='function')?v3191DecodeDataUrl(dataUrl):null;
       if(!parsed||!parsed.buffer){
-        return send(res,404,{ok:false,error:'glb_not_found',message:'GLB reale non trovato in memoria. Premi Render 360° 3D dopo worker V33.4.'});
+        return send(res,404,{ok:false,error:'glb_not_found',message:'GLB reale non trovato in memoria. Premi Render 360° 3D dopo worker V33.4.2.'});
       }
       res.writeHead(200,{
         'Content-Type':'model/gltf-binary',
@@ -9851,8 +9851,8 @@ async function v3100GpuVisionHealth(){
   try{
     const r=await fetch(`${cfg.url}${cfg.healthPath}`,{headers:{'Authorization':`Bearer ${cfg.token}`,'X-Vision-Token':cfg.token},signal:ctrl.signal});
     let data={}; try{data=await r.json()}catch{data={raw:await r.text().catch(()=> '')}}
-    return {ok:r.ok,enabled:true,version:'V31.10.4_V33.4.1_refined_bridge',config:v3100PublicConfig(),gpuResponse:data,status:r.status};
-  }catch(e){ return {ok:false,enabled:true,version:'V31.10.4_V33.4.1_refined_bridge',config:v3100PublicConfig(),error:String(e?.message||e)}; }
+    return {ok:r.ok,enabled:true,version:'V31.10.5_V33.4.2_3d_acquisition_bridge',config:v3100PublicConfig(),gpuResponse:data,status:r.status};
+  }catch(e){ return {ok:false,enabled:true,version:'V31.10.5_V33.4.2_3d_acquisition_bridge',config:v3100PublicConfig(),error:String(e?.message||e)}; }
   finally{ clearTimeout(t); }
 }
 function v3100SlimGpuPayload(data={}){
@@ -9984,14 +9984,15 @@ function v31103BalancedProductMaskFromRgba(data,w,h,rec={}){
         const rx=(c.localCx-box.minX)/Math.max(1,bw), ry=(c.localCy-box.minY)/Math.max(1,bh);
         if(areaRatio<.0012||areaRatio>.075) continue;
         if(aspect<.22||aspect>3.4) continue;
-        if(rx>.58&&ry>.24&&ry<.67&&c.minY>box.minY+bh*.18){ for(const q of c.pixels) keep[q]=0; }
+        // V31.10.5: remove only true upper-right handle artifacts. Never eat the front label.
+        if(rx>.67&&rx<.93&&ry>.18&&ry<.54&&c.minY>box.minY+bh*.14){ for(const q of c.pixels) keep[q]=0; }
       }
     }
     box=v31103BoxFromMask(keep,w,h);
     const padX=Math.round((box.maxX-box.minX+1)*.035), padY=Math.round((box.maxY-box.minY+1)*.045);
     box.minX=v2879Clamp(box.minX-padX,0,w-1); box.maxX=v2879Clamp(box.maxX+padX,0,w-1); box.minY=v2879Clamp(box.minY-padY,0,h-1); box.maxY=v2879Clamp(box.maxY+padY,0,h-1);
     for(let y=box.minY;y<=box.maxY;y++) for(let x=box.minX;x<=box.maxX;x++){ const idx=y*w+x; if(data[idx*4+3]>18 && alpha[idx]) keep[idx]=1; }
-    return {mask:keep,box,component:main,method:'v31_10_3_balanced_alpha_preserve'};
+    return {mask:keep,box,component:main,method:'v31_10_5_label_preserve_handle_refine'};
   }catch(_){ return v3130CleanProductMaskFromRgba(data,w,h,rec); }
 }
 function v3130DetectLabelBox(data,w,h,rec={}){
@@ -10025,7 +10026,7 @@ async function v3130BuildStudioRender(productDataUrl='',labelDataUrl='',rec={}){
   const sharp=await v2864Sharp(); if(!sharp||!/^data:image\//i.test(String(productDataUrl||''))) return '';
   try{
     const srcBuf=v2864DataUrlBuffer(productDataUrl); if(!srcBuf) return '';
-    const productBase=await sharp(srcBuf,{failOn:'none'}).rotate().ensureAlpha().trim({background:{r:0,g:0,b:0,alpha:0},threshold:8}).resize({height:815,width:665,fit:'inside',withoutEnlargement:true}).png({compressionLevel:8}).toBuffer();
+    const productBase=await sharp(srcBuf,{failOn:'none'}).rotate().ensureAlpha().trim({background:{r:0,g:0,b:0,alpha:0},threshold:8}).resize({height:820,width:670,fit:'inside',withoutEnlargement:true}).modulate({saturation:1.10,brightness:1.015}).sharpen({sigma:.55,m1:.45,m2:.95}).png({compressionLevel:8}).toBuffer();
     const meta=await sharp(productBase,{failOn:'none'}).metadata();
     const pw=Number(meta.width||1), ph=Number(meta.height||1);
     const canvasW=980, canvasH=1180;
@@ -10033,7 +10034,7 @@ async function v3130BuildStudioRender(productDataUrl='',labelDataUrl='',rec={}){
     const top=Math.max(0,Math.round(118+(canvasH-255-ph)/2));
     const shadowW=Math.max(150,Math.round(pw*.56)), shadowH=Math.max(24,Math.round(pw*.10));
     const shadowX=Math.round((canvasW-shadowW)/2), shadowY=Math.round(top+ph+10);
-    const bgSvg=`<svg xmlns="http://www.w3.org/2000/svg" width="${canvasW}" height="${canvasH}" viewBox="0 0 ${canvasW} ${canvasH}"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fbfcff" offset="0"/><stop stop-color="#ffffff" offset="1"/></linearGradient><filter id="blur" x="-40%" y="-80%" width="180%" height="260%"><feGaussianBlur stdDeviation="12"/></filter></defs><rect width="100%" height="100%" fill="url(#g)"/><ellipse cx="${Math.round(canvasW/2)}" cy="${Math.round(shadowY+shadowH/2)}" rx="${Math.round(shadowW/2)}" ry="${Math.round(shadowH/2)}" fill="#1b2838" opacity=".10" filter="url(#blur)"/></svg>`;
+    const bgSvg=`<svg xmlns="http://www.w3.org/2000/svg" width="${canvasW}" height="${canvasH}" viewBox="0 0 ${canvasW} ${canvasH}"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fbfcff" offset="0"/><stop stop-color="#ffffff" offset="1"/></linearGradient><filter id="blur" x="-40%" y="-80%" width="180%" height="260%"><feGaussianBlur stdDeviation="15"/></filter></defs><rect width="100%" height="100%" fill="url(#g)"/><ellipse cx="${Math.round(canvasW/2)}" cy="${Math.round(shadowY+shadowH/2)}" rx="${Math.round(shadowW/2)}" ry="${Math.round(shadowH/2)}" fill="#1b2838" opacity=".075" filter="url(#blur)"/></svg>`;
     const out=await sharp(Buffer.from(bgSvg)).composite([{input:productBase,left,top}]).jpeg({quality:92,mozjpeg:true}).toBuffer();
     return v3130DataUrlFromBuffer(out,'image/jpeg');
   }catch(_){ return ''; }
@@ -10158,6 +10159,8 @@ async function v31102SanitizeTransparentProductBuffer(buf){
       const cw=maxx-minx+1,ch=maxy-miny+1, aspect=cw/Math.max(1,ch), areaRatio=area/Math.max(1,bw*bh), cx=(sx/area-minX)/bw, cy=(sy/area-minY)/bh, surround=borderBody/Math.max(1,borderTot);
       if(areaRatio<0.003||areaRatio>0.16) continue;
       if(aspect<0.32||aspect>1.7) continue;
+      // Never treat lower/front label blocks as handle-hole cleanup.
+      if(cy>.58) continue;
       let score=area*(.9+surround*1.8);
       score*=1+(1-Math.min(1,Math.abs(cx-.73)*2.4+Math.abs(cy-.36)*1.8));
       if(cx<.56) score*=.45; if(cy>.78) score*=.6;
@@ -10172,7 +10175,7 @@ async function v31102SanitizeTransparentProductBuffer(buf){
     for(let y=minY+1;y<maxY;y++) for(let x=minX+1;x<maxX;x++){
       const idx=y*w+x; if(solid[idx]||holeSeen[idx]) continue;
       const rx=(x-minX)/Math.max(1,bw), ry=(y-minY)/Math.max(1,bh);
-      if(rx<.54||rx>.92||ry<.14||ry>.70) continue;
+      if(rx<.58||rx>.92||ry<.14||ry>.56) continue;
       const px=[]; let stack=[idx], area=0,minx=w,miny=h,maxx=0,maxy=0,sx=0,sy=0,touch=false; holeSeen[idx]=1;
       while(stack.length){ const q=stack.pop(); px.push(q); const qx=q%w,qy=Math.floor(q/w); area++; sx+=qx; sy+=qy; if(qx<minx)minx=qx;if(qx>maxx)maxx=qx;if(qy<miny)miny=qy;if(qy>maxy)maxy=qy; if(qx<=minX||qx>=maxX||qy<=minY||qy>=maxY) touch=true;
         for(const d of dirs){ const z=q+d; if(z<0||z>=n) continue; const zx=z%w; if(Math.abs(zx-qx)>1) continue; if(!solid[z]&&!holeSeen[z]){ holeSeen[z]=1; stack.push(z); } }
@@ -10252,7 +10255,7 @@ async function v3160ResolvePreferredPhoto(key='',want='front'){
 }
 async function v3160BuildRender2D(productDataUrl='',rec={}){
   const sharp=await v2864Sharp(); if(!sharp||!/^data:image\//i.test(String(productDataUrl||''))) return '';
-  try{ const buf=v2864DataUrlBuffer(productDataUrl); if(!buf) return ''; const cleanBuf=await v31102SanitizeTransparentProductBuffer(buf); const prod0=await sharp(cleanBuf,{failOn:'none'}).rotate().ensureAlpha().trim({background:{r:0,g:0,b:0,alpha:0},threshold:8}).resize({height:800,width:655,fit:'inside',withoutEnlargement:true}).png().toBuffer(); const meta=await sharp(prod0,{failOn:'none'}).metadata(); const pw=Number(meta.width||1), ph=Number(meta.height||1); const canvasW=900, canvasH=1100; const left=Math.max(0,Math.round((canvasW-pw)/2)); const top=Math.max(0,Math.round(112+(canvasH-236-ph)/2)); const shadowW=Math.max(145,Math.round(pw*.56)), shadowH=Math.max(22,Math.round(pw*.10)); const shadowX=Math.round((canvasW-shadowW)/2), shadowY=Math.round(top+ph+8); const bgSvg=`<svg xmlns="http://www.w3.org/2000/svg" width="${canvasW}" height="${canvasH}" viewBox="0 0 ${canvasW} ${canvasH}"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fbfcff" offset="0"/><stop stop-color="#ffffff" offset="1"/></linearGradient><filter id="blur" x="-40%" y="-80%" width="180%" height="260%"><feGaussianBlur stdDeviation="11"/></filter></defs><rect width="100%" height="100%" fill="url(#g)"/><ellipse cx="${Math.round(canvasW/2)}" cy="${Math.round(shadowY+shadowH/2)}" rx="${Math.round(shadowW/2)}" ry="${Math.round(shadowH/2)}" fill="#172332" opacity=".10" filter="url(#blur)"/></svg>`; const canvas=await sharp(Buffer.from(bgSvg)).composite([{input:prod0,left,top}]).jpeg({quality:92,mozjpeg:true}).toBuffer(); return v3130DataUrlFromBuffer(canvas,'image/jpeg'); }catch(_){ return productDataUrl; }
+  try{ const buf=v2864DataUrlBuffer(productDataUrl); if(!buf) return ''; const cleanBuf=await v31102SanitizeTransparentProductBuffer(buf); const prod0=await sharp(cleanBuf,{failOn:'none'}).rotate().ensureAlpha().trim({background:{r:0,g:0,b:0,alpha:0},threshold:8}).resize({height:810,width:665,fit:'inside',withoutEnlargement:true}).modulate({saturation:1.10,brightness:1.015}).sharpen({sigma:.55,m1:.45,m2:.95}).png().toBuffer(); const meta=await sharp(prod0,{failOn:'none'}).metadata(); const pw=Number(meta.width||1), ph=Number(meta.height||1); const canvasW=900, canvasH=1100; const left=Math.max(0,Math.round((canvasW-pw)/2)); const top=Math.max(0,Math.round(112+(canvasH-236-ph)/2)); const shadowW=Math.max(145,Math.round(pw*.56)), shadowH=Math.max(22,Math.round(pw*.10)); const shadowX=Math.round((canvasW-shadowW)/2), shadowY=Math.round(top+ph+8); const bgSvg=`<svg xmlns="http://www.w3.org/2000/svg" width="${canvasW}" height="${canvasH}" viewBox="0 0 ${canvasW} ${canvasH}"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fbfcff" offset="0"/><stop stop-color="#ffffff" offset="1"/></linearGradient><filter id="blur" x="-40%" y="-80%" width="180%" height="260%"><feGaussianBlur stdDeviation="15"/></filter></defs><rect width="100%" height="100%" fill="url(#g)"/><ellipse cx="${Math.round(canvasW/2)}" cy="${Math.round(shadowY+shadowH/2)}" rx="${Math.round(shadowW/2)}" ry="${Math.round(shadowH/2)}" fill="#172332" opacity=".075" filter="url(#blur)"/></svg>`; const canvas=await sharp(Buffer.from(bgSvg)).composite([{input:prod0,left,top}]).jpeg({quality:92,mozjpeg:true}).toBuffer(); return v3130DataUrlFromBuffer(canvas,'image/jpeg'); }catch(_){ return productDataUrl; }
 }
 async function v3160ExtractLabelFromBuffer(buffer,mime='image/jpeg',rec={}){
   const sharp=await v2864Sharp(); if(!sharp||!buffer) return null;
@@ -10279,7 +10282,7 @@ async function v3160RenderPro2D(key='',opts={}){
   let payload=null; const call=await v3100CallGpuVision(resolved.buffer,resolved.mime,'render-pro',resolved.filename); if(call.ok&&call.data) payload=call.data;
   if(!payload||!payload.ok){ const d=v3160DataUrlForBuffer(resolved.buffer,resolved.mime); payload={ok:true,version:'V31.7_local_fallback',product:{confidence:.55,shape:{family:'render_from_profile_photo'}},images:{productTransparent:d,productWhite:d},message:'GPU non ha prodotto render; uso foto profilo come base controllata.'}; }
   const refined=await v3130RefineGpuPayload(payload,rec); const imgs=Object.assign({},payload.images||{},refined.images||{}); imgs.renderPro2D=imgs.renderPro||imgs.renderPro2D||await v3160BuildRender2D(imgs.productTransparent||imgs.productWhite||v3160DataUrlForBuffer(resolved.buffer,resolved.mime),rec); payload.images=imgs; payload.labelBox=refined.labelBox||payload.labelBox||null; payload.render360=refined.render360||payload.render360||null; payload.teacherOpenAI=payload.teacherOpenAI||{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: render PRO creato da foto profilo/frontale + GPU/server.'};
-  const saved=await v3100PersistGpuVision(key,payload,'render_pro_2d',resolved); if(saved){ saved.version='31.10.4-v33.4.1-contour-refine'; saved.renderPipelineVersion='v31_10_4_contour_refine_contact_shadow'; saved.profilePolicy='manual_owner_only'; saved.images=Object.assign({},saved.images||{},imgs); saved.model3D=saved.model3D||saved.render360||{}; }
+  const saved=await v3100PersistGpuVision(key,payload,'render_pro_2d',resolved); if(saved){ saved.version='31.10.5-v33.4.2-3d-acquisition-refine'; saved.renderPipelineVersion='v31_10_5_real2d_3d_acquisition'; saved.profilePolicy='manual_owner_only'; saved.images=Object.assign({},saved.images||{},imgs); saved.model3D=saved.model3D||saved.render360||{}; }
   return {ok:true,title:'Render PRO 2D creato',message:'Creato dalla foto profilo/frontale. Non ho cambiato foto profilo.',savedGpuVision:saved,gpuVision:payload,source:resolved.source};
 }
 async function v3160ExtractLabelOnly(key='',opts={}){
@@ -10335,9 +10338,9 @@ async function v3160ExtractLabelOnly(key='',opts={}){
     if(src) best={dataUrl:src,confidence:gv.labelBox?.confidence||70,box:gv.labelBox||{},method:'v31_9_gpu_label_fallback'};
   }
   if(!best) return {ok:false,error:'label_not_found',message:'Non ho trovato una label chiara: carica una foto frontale/etichetta più vicina.'};
-  const current=Object.assign({}, existing||{ok:true,version:'31.10.4-v33.4.1-contour-refine',images:{}});
+  const current=Object.assign({}, existing||{ok:true,version:'31.10.5-v33.4.2-3d-acquisition-refine',images:{}});
   current.ok=true;
-  current.version='31.10.4-v33.4.1-contour-refine';
+  current.version='31.10.5-v33.4.2-3d-acquisition-refine';
   current.renderPipelineVersion='v31_10_3_label_only_preserve';
   current.profilePolicy='manual_owner_only';
   current.images=Object.assign({},current.images||{},{labelOnly:best.dataUrl,labelCrop:best.dataUrl});
@@ -10400,13 +10403,13 @@ async function v3160BuildVirtual3D(key='',opts={}){
   const incomingProduct=Object.assign({}, payload.product||{});
   if(existing.labelBox){ oldProduct.labelBox=existing.labelBox; }
   if(oldProduct.labelBox){ incomingProduct.labelBox=oldProduct.labelBox; }
-  const current=Object.assign({}, existing, {ok:true,version:'33.4-real3d-v31.10.3',strictV33:true,renderPipelineVersion:'v31_10_3_real_glb_preserve_label',images:mergedImages,product:Object.assign({},oldProduct,incomingProduct),labelBox:existing.labelBox||oldProduct.labelBox||null,teacherOpenAI:{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: 3D reale creato dal worker RunPod V33.4.'}});
-  current.model3D={version:'33.4',at:Date.now(),mode:'real_glb_mesh',realMeshGlb:true,glbDataUrl:payload.render3d.glbDataUrl,glbEndpoint:v3191GpuModelUrl(key),engine:payload.render3d.engine||'TripoSR',front:mergedImages.productWhite||mergedImages.productTransparent||mergedImages.renderPro||'',frames:Array.isArray(payload.render3d.frames)?payload.render3d.frames.slice(0,8):[],note:payload.render3d.note||'GLB mesh reale generato da RunPod V33.4'};
+  const current=Object.assign({}, existing, {ok:true,version:'33.4.2-real3d-v31.10.5',strictV33:true,renderPipelineVersion:'v31_10_5_3d_acquisition_visual_brain',images:mergedImages,product:Object.assign({},oldProduct,incomingProduct),labelBox:existing.labelBox||oldProduct.labelBox||null,teacherOpenAI:{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: 3D reale creato dal worker RunPod V33.4.2 con acquisizione visiva prodotto.'}});
+  current.model3D={version:'33.4.2',at:Date.now(),mode:'real_glb_mesh',realMeshGlb:true,glbDataUrl:payload.render3d.glbDataUrl,glbEndpoint:v3191GpuModelUrl(key),engine:payload.render3d.engine||'TripoSR',front:mergedImages.productWhite||mergedImages.productTransparent||mergedImages.renderPro||'',frames:Array.isArray(payload.render3d.frames)?payload.render3d.frames.slice(0,8):[],note:payload.render3d.note||'GLB mesh reale generato da RunPod V33.4.2', acquisition:{mode:'spesapronta_gpu_live_3d',steps:['frontale','lato','retro','etichetta','barcode'],visualBrain:['dimensioni','sagoma','colori','texture','label','barcode'],sourceFront:frontResolved.source||'',sourceBack:backOpts.backFilename||''}};
   current.render360=Object.assign({},current.model3D);
   const folder=v2842EnsureObjectFolder(rec);
   folder.gpuVisionV33=current; rec.gpuVisionV33=current;
   folder.gpuVisionV31=current; rec.gpuVisionV31=current;
-  folder.render360V3000=current.model3D; rec.render360V3000=current.model3D;
+  folder.render360V3000=current.model3D; rec.render360V3000=current.model3D; folder.acquisizione3DV31105=current.model3D.acquisition;
   folder.updatedAt=Date.now(); rec.updatedAt=Date.now();
   return {ok:true,title:'Render 360° 3D reale creato',message:'Creato GLB reale con worker RunPod V33. Nessun finto 3D piatto.',savedGpuVision:current,gpuVision:current,path:call.path||''};
 }
@@ -10447,9 +10450,9 @@ async function v3100GpuVisionAnalyze({key='',imageDataUrl='',imageUrl='',mode='a
   finally{ if(!force) global.__spesaGpuVisionLocks.delete(lockKey); }
 }
 try{ const prevFolder=v2842PublicObjectFolder; if(typeof prevFolder==='function'&&!global.__v3100GpuFolderWrapped){ v2842PublicObjectFolder=function(record={}){ const out=prevFolder.call(this,record)||{}; out.gpuVisionV31=(record.objectFolder&&record.objectFolder.gpuVisionV31)||record.gpuVisionV31||null; return out; }; global.__v3100GpuFolderWrapped=true; } }catch(_){ }
-try{ const prevBrain=publicServerBrainV2840; if(typeof prevBrain==='function'&&!global.__v3100BrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prevBrain.call(this,opts||{})||{}; out.version='V31.10.4 GPU Vision V33.4.1 Contour Refine'; out.gpuVisionV31=v3100PublicConfig(); return out; }; global.__v3100BrainWrapped=true; } }catch(_){ }
-try{ const prevPreflight=preflightSnapshotV98; if(typeof prevPreflight==='function'&&!global.__v3100PreflightWrapped){ preflightSnapshotV98=function(){ const s=prevPreflight.call(this)||{}; s.version='V31.10.4'; s.gpuVisionV31=v3100PublicConfig(); return s; }; global.__v3100PreflightWrapped=true; } }catch(_){ }
-console.log('[Spesa Pronta] V31.10.4 GPU Vision V33.4.1 Contour Refine active');
+try{ const prevBrain=publicServerBrainV2840; if(typeof prevBrain==='function'&&!global.__v3100BrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prevBrain.call(this,opts||{})||{}; out.version='V31.10.5 GPU Vision V33.4.2 3D Acquisition Refine'; out.gpuVisionV31=v3100PublicConfig(); return out; }; global.__v3100BrainWrapped=true; } }catch(_){ }
+try{ const prevPreflight=preflightSnapshotV98; if(typeof prevPreflight==='function'&&!global.__v3100PreflightWrapped){ preflightSnapshotV98=function(){ const s=prevPreflight.call(this)||{}; s.version='V31.10.5'; s.gpuVisionV31=v3100PublicConfig(); return s; }; global.__v3100PreflightWrapped=true; } }catch(_){ }
+console.log('[Spesa Pronta] V31.10.5 GPU Vision V33.4.2 3D Acquisition Refine active');
 
 
 // =============================================================
@@ -10472,7 +10475,7 @@ console.log('[Spesa Pronta] V31.10.4 GPU Vision V33.4.1 Contour Refine active');
       const prev=preflightSnapshotV98;
       preflightSnapshotV98=function(){
         const s=prev.call(this)||{};
-        s.version='V31.10.4';
+        s.version='V31.10.5';
         s.ramSafeV314=spesaRamSafeHealth();
         s.checks=Array.isArray(s.checks)?s.checks:[];
         s.checks.push({id:'render_ram_safe',label:'Render RAM Safe',ok:!!SPESA_RAM_SAFE,message:SPESA_RAM_SAFE?`Modalità ${SPESA_MEMORY_MODE}: cache/foto/dataset alleggeriti`:'Modalità PRO locale: RAM Safe non forzato'});
