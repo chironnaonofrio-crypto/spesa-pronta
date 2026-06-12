@@ -9536,111 +9536,158 @@ async function v3100GpuVisionHealth(){
 function v3100SlimGpuPayload(data={}){
   return {ok:!!data.ok,version:data.version||'',message:data.message||'',product:data.product||null,images:data.images||{},paths:data.paths||{},at:Date.now()};
 }
-function v3110DataUrlFromBuffer(buf,mime='image/png'){ return buf?`data:${mime};base64,${Buffer.from(buf).toString('base64')}`:''; }
-function v3110MaskFromRgba(data,w,h){
-  const mask=new Uint8Array(w*h);
-  for(let i=0;i<w*h;i++){
-    const j=i*4, a=data[j+3], lum=v2864Lum(data[j],data[j+1],data[j+2]), sat=v2864Sat(data[j],data[j+1],data[j+2]);
-    if(a>24 && (lum<245 || sat>.03)) mask[i]=1;
+function v3130DataUrlFromBuffer(buf,mime='image/png'){ return buf?`data:${mime};base64,${Buffer.from(buf).toString('base64')}`:''; }
+function v3130Xml(s=''){ return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c])); }
+function v3130ComponentMask(mask,w,h,preferredX=.5){
+  const seen=new Uint8Array(w*h), dirs=[1,-1,w,-w,w+1,w-1,-w+1,-w-1]; let best=null;
+  for(let i=0;i<mask.length;i++){
+    if(!mask[i]||seen[i]) continue;
+    const pixels=[]; let stack=[i],area=0,minX=w,minY=h,maxX=0,maxY=0,sx=0,sy=0; seen[i]=1;
+    while(stack.length){ const p=stack.pop(); pixels.push(p); const x=p%w,y=Math.floor(p/w); area++; sx+=x; sy+=y; if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y; for(const d of dirs){ const q=p+d; if(q<0||q>=mask.length||seen[q]||!mask[q]) continue; const qx=q%w,px=p%w; if(Math.abs(qx-px)>1) continue; seen[q]=1; stack.push(q); } }
+    if(area<70) continue;
+    const bw=maxX-minX+1,bh=maxY-minY+1,cx=(sx/area)/w,cy=(sy/area)/h; const central=1-Math.min(1,Math.abs(cx-preferredX)*2.2+Math.abs(cy-.55)*.85); const tall=Math.min(2.3,bh/Math.max(1,bw)); const border=(minX<3||minY<3||maxX>w-4||maxY>h-4)?.55:1;
+    const score=area*(.75+central*1.55+Math.min(1.3,tall*.36))*border;
+    if(!best||score>best.score) best={pixels,area,minX,minY,maxX,maxY,cx,cy,score};
   }
-  return mask;
+  if(!best) return {mask,box:{minX:0,minY:0,maxX:w-1,maxY:h-1},component:null};
+  const out=new Uint8Array(w*h); for(const q of best.pixels) out[q]=1;
+  return {mask:out,box:{minX:best.minX,minY:best.minY,maxX:best.maxX,maxY:best.maxY},component:best};
 }
-function v3110SafeLabelBox(w,h){
-  return {minX:Math.round(w*.18),minY:Math.round(h*.32),maxX:Math.round(w*.82),maxY:Math.round(h*.74),confidence:55,method:'v31_safe_label_box'};
+function v3130CleanProductMaskFromRgba(data,w,h,rec={}){
+  const base=new Uint8Array(w*h), strong=new Uint8Array(w*h);
+  for(let i=0;i<w*h;i++){
+    const j=i*4,a=data[j+3],r=data[j],g=data[j+1],b=data[j+2],lum=v2864Lum(r,g,b),sat=v2864Sat(r,g,b); if(a<26) continue;
+    const white=(r>238&&g>238&&b>238); const cyanBody=(g>120&&b>115&&r<145);
+    if(!white && (sat>.055||lum<226)) base[i]=1;
+    if(!white && (sat>.20||lum<125||cyanBody||(b>105&&r<150)||(r>145&&g>110&&b<150))) strong[i]=1;
+  }
+  const core=v3130ComponentMask(strong,w,h,.5);
+  if(!core.component) return v3130ComponentMask(base,w,h,.5);
+  let {minX,minY,maxX,maxY}=core.box; const cw=maxX-minX+1,ch=maxY-minY+1;
+  minX=v2879Clamp(minX-Math.round(cw*.16),0,w-1); maxX=v2879Clamp(maxX+Math.round(cw*.16),0,w-1); minY=v2879Clamp(minY-Math.round(ch*.08),0,h-1); maxY=v2879Clamp(maxY+Math.round(ch*.08),0,h-1);
+  const col=new Array(w).fill(0), strongCol=new Array(w).fill(0);
+  for(let y=minY;y<=maxY;y++) for(let x=minX;x<=maxX;x++){ const idx=y*w+x; if(base[idx]) col[x]++; if(strong[idx]) strongCol[x]++; }
+  const maxC=Math.max(1,...col.slice(minX,maxX+1)), maxS=Math.max(1,...strongCol.slice(minX,maxX+1));
+  const jug=(typeof v2900IsJugLike==='function')?v2900IsJugLike(rec):false;
+  let peak=minX; for(let x=minX;x<=maxX;x++) if(strongCol[x]>strongCol[peak]) peak=x;
+  const good=x=>col[x]>Math.max(5,maxC*(jug?.08:.14))||strongCol[x]>Math.max(3,maxS*.10);
+  let lx=peak,rx=peak,gap=0; for(let x=peak-1;x>=minX;x--){ if(good(x)){lx=x;gap=0;} else {gap++; if(gap>(jug?44:24)) break;} }
+  gap=0; for(let x=peak+1;x<=maxX;x++){ if(good(x)){rx=x;gap=0;} else {gap++; if(gap>(jug?62:28)) break;} }
+  if(rx-lx>Math.round(w*.10)){ const m=Math.round((rx-lx)*.10); minX=v2879Clamp(lx-m,0,w-1); maxX=v2879Clamp(rx+m,0,w-1); }
+  const cropped=new Uint8Array(w*h); for(let y=minY;y<=maxY;y++) for(let x=minX;x<=maxX;x++){ const idx=y*w+x; if(base[idx]) cropped[idx]=1; }
+  const main=v3130ComponentMask(cropped,w,h,core.component.cx||.5);
+  return main.component?main:{mask:cropped,box:{minX,minY,maxX,maxY},component:core.component};
 }
-async function v3110RefineGpuImages(payload={},rec={}){
+function v3130DetectLabelBox(data,w,h,rec={}){
+  try{
+    const alpha=i=>data[i*4+3]>28; let minPX=w,minPY=h,maxPX=0,maxPY=0;
+    for(let i=0;i<w*h;i++){ if(alpha(i)){ const x=i%w,y=Math.floor(i/w); if(x<minPX)minPX=x;if(x>maxPX)maxPX=x;if(y<minPY)minPY=y;if(y>maxPY)maxPY=y; } }
+    if(maxPX<=minPX||maxPY<=minPY) return {minX:Math.round(w*.18),minY:Math.round(h*.34),maxX:Math.round(w*.82),maxY:Math.round(h*.74),confidence:55,method:'v31_3_fallback_label'};
+    const bw=maxPX-minPX+1,bh=maxPY-minPY+1,xA=minPX+Math.round(bw*.10),xB=minPX+Math.round(bw*.90),yA=minPY+Math.round(bh*.22),yB=minPY+Math.round(bh*.84);
+    const hot=new Uint8Array(w*h); let maxRow=0, rows=[];
+    for(let y=yA;y<=yB;y++){
+      let score=0,den=0;
+      for(let x=xA;x<=xB;x+=2){ const idx=y*w+x,j=idx*4; if(!alpha(idx)) continue; den++; const r=data[j],g=data[j+1],b=data[j+2],lum=v2864Lum(r,g,b),sat=v2864Sat(r,g,b); const cyanPlastic=g>120&&b>115&&r<145&&sat>.12; const cue=(!cyanPlastic&&sat>.24)||lum>176||lum<82||(b>105&&r<160)||(r>145&&b>70&&g<175)||(r>160&&g>125&&b<130); if(cue){ hot[idx]=1; score+=1+sat*2+(lum>176?.45:0)+(lum<82?.35:0); } }
+      const v=score/Math.max(1,den); rows.push([y,v]); if(v>maxRow)maxRow=v;
+    }
+    const th=Math.max(.12,maxRow*.42); let bands=[],open=null;
+    for(const [y,v] of rows){ if(v>=th){ if(!open)open=[y,y]; else open[1]=y; } else if(open){ bands.push(open); open=null; } } if(open) bands.push(open);
+    if(!bands.length) return {minX:xA,minY:yA,maxX:xB,maxY:yB,confidence:62,method:'v31_3_label_broad'};
+    const mid=minPY+bh*.55; bands=bands.map(b=>({b,score:(b[1]-b[0]+1)*(1-Math.min(1,Math.abs(((b[0]+b[1])/2)-mid)/(bh*.55)))})).sort((a,b)=>b.score-a.score);
+    let minY=bands[0].b[0],maxY=bands[0].b[1];
+    for(const obj of bands.slice(1,5)){ const b=obj.b; if(Math.abs(((b[0]+b[1])/2)-((minY+maxY)/2))<bh*.22){ minY=Math.min(minY,b[0]); maxY=Math.max(maxY,b[1]); } }
+    const maxH=Math.round(bh*.52); if(maxY-minY+1>maxH){ const c=Math.round((minY+maxY)/2); minY=Math.max(yA,c-Math.round(maxH*.48)); maxY=Math.min(yB,c+Math.round(maxH*.52)); }
+    let maxCol=0, cols=[]; for(let x=xA;x<=xB;x++){ let score=0,den=0; for(let y=minY;y<=maxY;y+=2){ const idx=y*w+x,j=idx*4; if(!alpha(idx)) continue; den++; const r=data[j],g=data[j+1],b=data[j+2],lum=v2864Lum(r,g,b),sat=v2864Sat(r,g,b); const cue=sat>.20||lum>174||lum<88||(b>105&&r<160)||(r>145&&b>70); if(cue)score+=1+sat; } const v=score/Math.max(1,den); cols.push([x,v]); if(v>maxCol)maxCol=v; }
+    const cth=Math.max(.10,maxCol*.34); let minX=xB,maxX=xA; for(const [x,v] of cols){ if(v>=cth){ if(x<minX)minX=x;if(x>maxX)maxX=x; } }
+    if(maxX<=minX){minX=xA;maxX=xB;}
+    const padX=Math.round((maxX-minX+1)*.06), padY=Math.round((maxY-minY+1)*.11);
+    minX=v2879Clamp(minX-padX,0,w-1); maxX=v2879Clamp(maxX+padX,0,w-1); minY=v2879Clamp(minY-padY,0,h-1); maxY=v2879Clamp(maxY+padY,0,h-1);
+    return {minX,minY,maxX,maxY,confidence:Math.round(v2879Clamp(78+maxRow*20+maxCol*10,80,98)),method:'v31_3_label_only_color_band'};
+  }catch(_){ return {minX:Math.round(w*.18),minY:Math.round(h*.34),maxX:Math.round(w*.82),maxY:Math.round(h*.74),confidence:55,method:'v31_3_fallback_label'}; }
+}
+async function v3130BuildStudioRender(productDataUrl='',labelDataUrl='',rec={}){
+  const sharp=await v2864Sharp(); if(!sharp||!/^data:image\//i.test(String(productDataUrl||''))) return '';
+  try{
+    const id=(typeof v3000Id==='function'?v3000Id(rec):{brand:rec.brand||'',name:rec.productName||'',format:rec.format||'',category:rec.category||''});
+    const brand=v3130Xml(id.brand||rec.brand||''), name=v3130Xml(id.name||rec.productName||'Prodotto'), fmt=v3130Xml(id.format||rec.format||''), cat=v3130Xml(id.category||rec.category||'');
+    const prod=await sharp(v2864DataUrlBuffer(productDataUrl),{failOn:'none'}).rotate().ensureAlpha().resize({height:900,width:760,fit:'inside',withoutEnlargement:true}).png().toBuffer();
+    const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1450" viewBox="0 0 1200 1450"><defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#f1f7ff"/></linearGradient><filter id="shadow"><feDropShadow dx="0" dy="36" stdDeviation="24" flood-color="#0b2545" flood-opacity=".16"/></filter><linearGradient id="pill" x1="0" x2="1"><stop stop-color="#f6d54a"/><stop offset="1" stop-color="#244596"/></linearGradient></defs><rect width="1200" height="1450" rx="54" fill="url(#bg)"/><rect x="70" y="60" width="1060" height="1328" rx="44" fill="#fff" stroke="#d7e7f8" stroke-width="3"/><text x="600" y="122" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="38" font-weight="1000" fill="#10233f">Render da GPU · prodotto ricostruito</text><text x="600" y="165" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="900" fill="#60748e">pixel reali + reference certe + memoria server</text><ellipse cx="600" cy="1070" rx="275" ry="42" fill="#09233f" opacity=".10"/><rect x="150" y="1164" width="900" height="124" rx="32" fill="#f7fbff" stroke="#dce9f7"/><text x="600" y="1220" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="34" font-weight="1000" fill="#10233f">${brand}${brand?' · ':''}${name}</text><text x="600" y="1262" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="900" fill="#60748e">${fmt}${fmt&&cat?' · ':''}${cat}</text><rect x="215" y="1314" width="770" height="66" rx="28" fill="url(#pill)" opacity=".96"/><text x="600" y="1356" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="1000" fill="#fff">salvabile come foto profilo prodotto</text></svg>`;
+    const composite=[{input:prod,gravity:'north',top:195}];
+    const out=await sharp(Buffer.from(svg)).composite(composite).png({compressionLevel:8}).toBuffer();
+    return v3130DataUrlFromBuffer(out,'image/png');
+  }catch(_){ return ''; }
+}
+async function v3130RefineGpuPayload(payload={},rec={}){
   const out={images:Object.assign({},payload.images||{}),labelBox:null,referenceImages:[],render360:null};
-  const sharp=await v2864Sharp();
-  const src=String(out.images.productTransparent||out.images.productWhite||'');
+  const sharp=await v2864Sharp(); const src=String(out.images.productTransparent||out.images.productWhite||'');
   if(sharp && /^data:image\//i.test(src)){
     try{
-      const buf=v2864DataUrlBuffer(src);
-      const base=sharp(buf,{failOn:'none'}).rotate().ensureAlpha().resize({width:1000,height:1000,fit:'inside',withoutEnlargement:true});
-      const raw=await base.raw().toBuffer({resolveWithObject:true});
-      const w=raw.info.width,h=raw.info.height;
-      const mask=v3110MaskFromRgba(raw.data,w,h);
-      const cleaned=(typeof v2920CleanMainComponent==='function')?v2920CleanMainComponent(mask,w,h,{minX:0,minY:0,maxX:w-1,maxY:h-1}):{mask,box:{minX:0,minY:0,maxX:w-1,maxY:h-1}};
-      const rgba=Buffer.alloc(w*h*4);
-      for(let i=0;i<w*h;i++){
-        const j=i*4; rgba[j]=raw.data[j]; rgba[j+1]=raw.data[j+1]; rgba[j+2]=raw.data[j+2]; rgba[j+3]=cleaned.mask[i]?255:0;
-      }
-      const png=await sharp(rgba,{raw:{width:w,height:h,channels:4}}).trim({background:{r:0,g:0,b:0,alpha:0},threshold:6}).resize({height:920,fit:'inside',withoutEnlargement:true}).png({compressionLevel:8}).toBuffer();
-      const white=await sharp(png,{failOn:'none'}).flatten({background:'#ffffff'}).jpeg({quality:92,mozjpeg:true}).toBuffer();
-      out.images.productTransparent=v3110DataUrlFromBuffer(png,'image/png');
-      out.images.productWhite=v3110DataUrlFromBuffer(white,'image/jpeg');
-      try{
-        const prod=await sharp(png,{failOn:'none'}).ensureAlpha().raw().toBuffer({resolveWithObject:true});
-        const pb={minX:0,minY:0,maxX:prod.info.width-1,maxY:prod.info.height-1};
-        const lb=(typeof v2920DetectLabelBox==='function')?v2920DetectLabelBox(prod.data,prod.info.width,prod.info.height,pb,rec):v3110SafeLabelBox(prod.info.width,prod.info.height);
-        const b=(typeof v2920BoxClamp==='function')?v2920BoxClamp(lb,prod.info.width,prod.info.height):lb;
-        const label=await sharp(png,{failOn:'none'}).extract({left:b.minX,top:b.minY,width:Math.max(1,b.maxX-b.minX+1),height:Math.max(1,b.maxY-b.minY+1)}).resize({width:760,height:360,fit:'inside',withoutEnlargement:true}).jpeg({quality:92,mozjpeg:true}).toBuffer();
-        out.images.labelCrop=v3110DataUrlFromBuffer(label,'image/jpeg');
-        out.labelBox={x:b.minX,y:b.minY,w:b.maxX-b.minX+1,h:b.maxY-b.minY+1,confidence:lb.confidence||72,method:lb.method||'v31_label_focus'};
-      }catch(_){ }
+      const buf=v2864DataUrlBuffer(src); const base=sharp(buf,{failOn:'none'}).rotate().ensureAlpha().resize({width:1050,height:1050,fit:'inside',withoutEnlargement:true});
+      const raw=await base.raw().toBuffer({resolveWithObject:true}); const w=raw.info.width,h=raw.info.height; const clean=v3130CleanProductMaskFromRgba(raw.data,w,h,rec); const mask=clean.mask||new Uint8Array(w*h);
+      const rgba=Buffer.alloc(w*h*4); for(let i=0;i<w*h;i++){ const j=i*4; rgba[j]=raw.data[j]; rgba[j+1]=raw.data[j+1]; rgba[j+2]=raw.data[j+2]; rgba[j+3]=mask[i]?255:0; }
+      const png=await sharp(rgba,{raw:{width:w,height:h,channels:4}}).trim({background:{r:0,g:0,b:0,alpha:0},threshold:6}).resize({height:940,fit:'inside',withoutEnlargement:true}).png({compressionLevel:8}).toBuffer();
+      const white=await sharp(png,{failOn:'none'}).flatten({background:'#ffffff'}).jpeg({quality:93,mozjpeg:true}).toBuffer();
+      out.images.productTransparent=v3130DataUrlFromBuffer(png,'image/png'); out.images.productWhite=v3130DataUrlFromBuffer(white,'image/jpeg');
+      const prod=await sharp(png,{failOn:'none'}).ensureAlpha().raw().toBuffer({resolveWithObject:true}); const lb=v3130DetectLabelBox(prod.data,prod.info.width,prod.info.height,rec);
+      const b=(typeof v2920BoxClamp==='function')?v2920BoxClamp(lb,prod.info.width,prod.info.height):lb;
+      const label=await sharp(png,{failOn:'none'}).extract({left:b.minX,top:b.minY,width:Math.max(1,b.maxX-b.minX+1),height:Math.max(1,b.maxY-b.minY+1)}).resize({width:780,height:360,fit:'inside',withoutEnlargement:true}).jpeg({quality:93,mozjpeg:true}).toBuffer();
+      out.images.labelCrop=v3130DataUrlFromBuffer(label,'image/jpeg'); out.labelBox={x:b.minX,y:b.minY,w:b.maxX-b.minX+1,h:b.maxY-b.minY+1,confidence:lb.confidence||88,method:lb.method||'v31_3_label_only'};
+      out.images.renderPro=await v3130BuildStudioRender(out.images.productTransparent,out.images.labelCrop,rec);
     }catch(_){ }
   }
   try{
-    if(rec && typeof v30rrSearch==='function' && rec.__memoryKey){
-      const refRes=await v30rrSearch(rec.__memoryKey,{force:true});
-      const refs=Array.isArray(refRes?.references)?refRes.references.slice(0,16):[];
-      out.referenceImages=refs;
-      const pick=(kind)=>{
-        let best=null, bestScore=-1;
-        for(const r of refs){
-          const txt=[r.title,r.productName,r.brand,r.source,r.sourceLabel,r.url,r.pageUrl,r.imageUrl].filter(Boolean).join(' ').toLowerCase();
-          let score=Number(r.score||0);
-          if(kind==='back') score += /(retro|back|rear|dietro)/.test(txt)?120:0;
-          else if(kind==='side') score += /(lato|side|profil|profile)/.test(txt)?120:0;
-          else score += /(front|fronte|pack|packshot|product)/.test(txt)?40:10;
-          if(kind==='front' && /(retro|back|rear|lato|side)/.test(txt)) score -= 30;
-          if(score>bestScore){ bestScore=score; best=r; }
-        }
-        return best;
-      };
-      const frontSrc=String(out.images.productTransparent||out.images.productWhite||'');
-      const sideRef=pick('side'), backRef=pick('back');
-      out.render360={version:'V31.2',at:Date.now(),mode:(sideRef&&backRef)?'web_enriched_real360':(sideRef||backRef)?'web_enriched_partial':'front_only',front:frontSrc,side:sideRef?(sideRef.displayUrl||sideRef.imageDataUrl||sideRef.imageUrl||''):'',back:backRef?(backRef.displayUrl||backRef.imageDataUrl||backRef.imageUrl||''):'',referenceCount:refs.length,rotationReady:!!frontSrc,searchPolicy:'front gpu + lato/retro da internet se trovati'};
-      if(!out.render360.side && !out.render360.back) out.render360.note='Mancano ancora viste lato/retro: il cervello continuerà ad arricchire dalle reference quando disponibili.';
+    if(rec && rec.__memoryKey && typeof v30rrSearch==='function'){
+      const refRes=await v30rrSearch(rec.__memoryKey,{force:true}); const refs=Array.isArray(refRes?.references)?refRes.references.slice(0,16):[]; out.referenceImages=refs;
+      const pick=(kind)=>{ let best=null,bestScore=-1; for(const r of refs){ const txt=[r.title,r.productName,r.brand,r.source,r.sourceLabel,r.url,r.pageUrl,r.imageUrl].filter(Boolean).join(' ').toLowerCase(); let score=Number(r.score||0); if(kind==='back')score+=/(retro|back|rear|dietro)/.test(txt)?120:0; else if(kind==='side')score+=/(lato|side|profil|profile)/.test(txt)?120:0; else score+=/(front|fronte|pack|packshot|product)/.test(txt)?45:10; if(score>bestScore){bestScore=score; best=r;} } return best; };
+      const sideRef=pick('side'), backRef=pick('back'); const front=out.images.renderPro||out.images.productTransparent||out.images.productWhite||'';
+      out.render360={version:'V31.3',at:Date.now(),mode:(sideRef&&backRef)?'web_enriched_real360':(sideRef||backRef)?'web_enriched_partial':'front_render_ready',front,side:sideRef?(sideRef.displayUrl||sideRef.imageDataUrl||sideRef.imageUrl||''):'',back:backRef?(backRef.displayUrl||backRef.imageDataUrl||backRef.imageUrl||''):'',referenceCount:refs.length,rotationReady:!!front,searchPolicy:'render GPU + lato/retro da reference certe quando disponibili'};
+      if(!out.render360.side&&!out.render360.back) out.render360.note='Non ho trovato ancora lato/retro certi: uso render frontale e tengo memoria pronta ad arricchirsi.';
     }
   }catch(_){ }
   return out;
 }
-async function v3100PersistGpuVision(key='', payload={}, mode='analyze'){
+async function v3130ResolveBestReferenceForGpuRender(key=''){
+  try{ ensureDbShape(); const rec=db.assistantBrain?.globalProductMemory?.products?.[key]; if(!rec||typeof v30rrSearch!=='function') return null; const search=await v30rrSearch(key,{force:true}); const refs=Array.isArray(search?.references)?search.references:[]; refs.sort((a,b)=>Number(b.score||0)-Number(a.score||0)); for(const r of refs.slice(0,8)){ let src=r.displayUrl||r.imageDataUrl||''; if(!src&&r.imageUrl){ try{ src=await v3000RemoteDataUrl(r.imageUrl,12000); }catch(_){} } const parts=v3100DataUrlParts(src); if(parts) return Object.assign({source:'online_reference_for_gpu_render',filename:'reference-render.jpg',reference:r},parts); if(r.imageUrl){ const f=await v3100FetchImageBuffer(r.imageUrl,12000); if(f) return Object.assign({source:'online_reference_for_gpu_render',filename:'reference-render.jpg',reference:r},f); } } }catch(e){ try{ updateGlobalLearningAudit({type:'gpu-v31-reference-resolve-failed',key,error:String(e?.message||e).slice(0,120)}); }catch(_){} } return null;
+}
+async function v3100PersistGpuVision(key='', payload={}, mode='analyze', source={}){
   if(!key || !payload || !payload.ok) return null;
   const rec=db.assistantBrain?.globalProductMemory?.products?.[key]; if(!rec) return null;
   rec.__memoryKey=key;
   const slim=v3100SlimGpuPayload(payload);
-  const refined=await v3110RefineGpuImages(payload,rec);
-  if(refined.images) slim.images=refined.images;
+  const refined=await v3130RefineGpuPayload(payload,rec);
+  slim.images=Object.assign({},slim.images||{},refined.images||{});
   if(refined.labelBox){ slim.labelBox=refined.labelBox; slim.product=Object.assign({},slim.product||{}, {labelBox:refined.labelBox,labelConfidence:refined.labelBox.confidence}); }
   if(refined.render360) slim.render360=refined.render360;
-  rec.gpuVisionV31=Object.assign({}, slim, {mode, engine:'runpod_spesa_vision_brain_v31_2'});
+  if(source&&source.reference) slim.usedReference=source.reference;
+  rec.gpuVisionV31=Object.assign({}, slim, {mode, engine:'runpod_spesa_vision_brain_v31_3'});
   rec.updatedAt=Date.now();
   try{
     const folder=v2842EnsureObjectFolder(rec); folder.gpuVisionV31=rec.gpuVisionV31; folder.updatedAt=Date.now();
     const imgs=rec.gpuVisionV31.images||{};
-    const add=(kind,dataUrl,score)=>{ if(!dataUrl||!String(dataUrl).startsWith('data:image')) return; folder.photos=Array.isArray(folder.photos)?folder.photos:[]; const id='gpu_'+kind+'_'+hashStable(String(dataUrl).slice(0,300)).slice(0,14); folder.photos=folder.photos.filter(p=>p.id!==id); folder.photos.unshift({id,kind:'gpu_'+kind,source:'gpu_vision_v31',at:Date.now(),dataUrl,thumbDataUrl:dataUrl,score,bytes:String(dataUrl).length,visibleEvidence:['GPU Vision V31',kind],colors:payload.product?.dominantColors||[]}); };
-    add('product_transparent',imgs.productTransparent,99); add('product_white',imgs.productWhite,96); add('label_crop',imgs.labelCrop,95);
-    folder.photos=folder.photos.slice(0,30); folder.photoCount=folder.photos.length;
-    if(imgs.productTransparent||imgs.productWhite){ folder.representativePhoto=folder.photos[0]||folder.representativePhoto; folder.representativePhotoId=folder.photos[0]?.id||folder.representativePhotoId||''; folder.hasRealProfilePhoto=true; }
-    if(Array.isArray(refined.referenceImages) && refined.referenceImages.length){ folder.referenceImagesV3000=refined.referenceImages; folder.referenceCandidatesV3000=refined.referenceImages; }
+    const add=(kind,dataUrl,score)=>{ if(!dataUrl||!String(dataUrl).startsWith('data:image')) return; folder.photos=Array.isArray(folder.photos)?folder.photos:[]; const id='gpu_'+kind+'_'+hashStable(String(dataUrl).slice(0,300)).slice(0,14); folder.photos=folder.photos.filter(p=>p.id!==id); folder.photos.unshift({id,kind:'gpu_'+kind,source:'gpu_vision_v31_3',at:Date.now(),dataUrl,thumbDataUrl:dataUrl,score,bytes:String(dataUrl).length,visibleEvidence:['GPU Vision V31.3',kind],colors:payload.product?.dominantColors||[]}); };
+    add('render_pro',imgs.renderPro,100); add('product_transparent',imgs.productTransparent,98); add('product_white',imgs.productWhite,96); add('label_crop',imgs.labelCrop,95);
+    folder.photos=folder.photos.slice(0,36); folder.photoCount=folder.photos.length;
+    if(imgs.renderPro||imgs.productWhite||imgs.productTransparent){ folder.representativePhoto=folder.photos[0]||folder.representativePhoto; folder.representativePhotoId=folder.photos[0]?.id||folder.representativePhotoId||''; folder.hasRealProfilePhoto=true; }
+    if(Array.isArray(refined.referenceImages)&&refined.referenceImages.length){ folder.referenceImagesV3000=refined.referenceImages; folder.referenceCandidatesV3000=refined.referenceImages; }
     if(refined.render360){ folder.render360V3000=refined.render360; rec.render360V3000=refined.render360; }
   }catch(_){ }
   try{ delete rec.__memoryKey; }catch(_){ }
   try{ v2840AttachMemoryCard(rec,{}); }catch(_){ }
-  updateGlobalLearningAudit({type:'gpu-vision-v31-saved', key, productName:rec.productName||'', brand:rec.brand||'', mode, confidence:payload.product?.confidence||null});
+  updateGlobalLearningAudit({type:'gpu-vision-v31-3-saved', key, productName:rec.productName||'', brand:rec.brand||'', mode, confidence:payload.product?.confidence||null});
   return rec.gpuVisionV31;
 }
 async function v3100GpuVisionAnalyze({key='',imageDataUrl='',imageUrl='',mode='analyze'}={}){
-  const resolved=await v3100ResolveImageSource({key,imageDataUrl,imageUrl});
+  let resolved=null;
+  if(mode==='render' && key && !imageDataUrl && !imageUrl) resolved=await v3130ResolveBestReferenceForGpuRender(key);
+  if(!resolved) resolved=await v3100ResolveImageSource({key,imageDataUrl,imageUrl});
   if(resolved.error) return {ok:false,reason:resolved.error,config:v3100PublicConfig()};
   const call=await v3100CallGpuVision(resolved.buffer,resolved.mime,mode,resolved.filename);
   if(!call.ok) return call;
-  const payload=call.data||{};
-  const saved=key?await v3100PersistGpuVision(key,payload,mode):null;
-  return {ok:!!payload.ok,version:'V31.0_bridge',mode,source:resolved.source,gpuVision:payload,savedGpuVision:saved,config:v3100PublicConfig()};
+  const payload=call.data||{}; if(resolved.reference){ payload.usedReference=resolved.reference; payload.message=(payload.message||'')+' · render arricchito da reference online'; }
+  const saved=key?await v3100PersistGpuVision(key,payload,mode,resolved):null;
+  return {ok:!!payload.ok,version:'V31.3_bridge',mode,source:resolved.source,usedReference:resolved.reference||null,gpuVision:payload,savedGpuVision:saved,config:v3100PublicConfig()};
 }
 try{ const prevFolder=v2842PublicObjectFolder; if(typeof prevFolder==='function'&&!global.__v3100GpuFolderWrapped){ v2842PublicObjectFolder=function(record={}){ const out=prevFolder.call(this,record)||{}; out.gpuVisionV31=(record.objectFolder&&record.objectFolder.gpuVisionV31)||record.gpuVisionV31||null; return out; }; global.__v3100GpuFolderWrapped=true; } }catch(_){ }
-try{ const prevBrain=publicServerBrainV2840; if(typeof prevBrain==='function'&&!global.__v3100BrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prevBrain.call(this,opts||{})||{}; out.version='V31.0 GPU Vision Bridge'; out.gpuVisionV31=v3100PublicConfig(); return out; }; global.__v3100BrainWrapped=true; } }catch(_){ }
-try{ const prevPreflight=preflightSnapshotV98; if(typeof prevPreflight==='function'&&!global.__v3100PreflightWrapped){ preflightSnapshotV98=function(){ const s=prevPreflight.call(this)||{}; s.version='V31.0'; s.gpuVisionV31=v3100PublicConfig(); return s; }; global.__v3100PreflightWrapped=true; } }catch(_){ }
-console.log('[Spesa Pronta] V31.0 GPU Vision Bridge active');
+try{ const prevBrain=publicServerBrainV2840; if(typeof prevBrain==='function'&&!global.__v3100BrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prevBrain.call(this,opts||{})||{}; out.version='V31.3 GPU Vision Render Brain'; out.gpuVisionV31=v3100PublicConfig(); return out; }; global.__v3100BrainWrapped=true; } }catch(_){ }
+try{ const prevPreflight=preflightSnapshotV98; if(typeof prevPreflight==='function'&&!global.__v3100PreflightWrapped){ preflightSnapshotV98=function(){ const s=prevPreflight.call(this)||{}; s.version='V31.3'; s.gpuVisionV31=v3100PublicConfig(); return s; }; global.__v3100PreflightWrapped=true; } }catch(_){ }
+console.log('[Spesa Pronta] V31.3 GPU Vision Render Brain active');
