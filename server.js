@@ -3994,6 +3994,28 @@ const server = http.createServer(async (req,res)=>{
     }
 
 
+    if(req.method === 'GET' && (pathName === '/api/gpu-vision/model-3d' || pathName === '/gpu-vision/model-3d')) {
+      const key=String(url.searchParams.get('key')||'').trim();
+      const rec=(typeof v3160Rec==='function')?v3160Rec(key):null;
+      if(!rec) return send(res,404,{ok:false,error:'product_not_found'});
+      const folder=(typeof v2842EnsureObjectFolder==='function')?v2842EnsureObjectFolder(rec):(rec.objectFolder||{});
+      const gv=folder.gpuVisionV33||rec.gpuVisionV33||folder.gpuVisionV31||rec.gpuVisionV31||{};
+      const model=gv.model3D||gv.render360||folder.render360V3000||rec.render360V3000||{};
+      const dataUrl=String(model.glbDataUrl||model.glb||model.modelDataUrl||'');
+      const parsed=(typeof v3191DecodeDataUrl==='function')?v3191DecodeDataUrl(dataUrl):null;
+      if(!parsed||!parsed.buffer){
+        return send(res,404,{ok:false,error:'glb_not_found',message:'GLB reale non trovato in memoria. Premi Render 360° 3D dopo worker V33.2.'});
+      }
+      res.writeHead(200,{
+        'Content-Type':'model/gltf-binary',
+        'Content-Length':parsed.buffer.length,
+        'Cache-Control':'no-store, max-age=0',
+        'Content-Disposition':'inline; filename="spesa-pronta-product.glb"'
+      });
+      return res.end(parsed.buffer);
+    }
+
+
     if(req.method === 'POST' && (pathName === '/api/gpu-vision/render-pro' || pathName === '/gpu-vision/render-pro')) {
       const auth=v3100AuthHousehold(req,url,body);
       if(auth.error) return send(res, auth.error.status, auth.error.body);
@@ -10213,9 +10235,9 @@ async function v3100GpuVisionAnalyze({key='',imageDataUrl='',imageUrl='',mode='a
   finally{ if(!force) global.__spesaGpuVisionLocks.delete(lockKey); }
 }
 try{ const prevFolder=v2842PublicObjectFolder; if(typeof prevFolder==='function'&&!global.__v3100GpuFolderWrapped){ v2842PublicObjectFolder=function(record={}){ const out=prevFolder.call(this,record)||{}; out.gpuVisionV31=(record.objectFolder&&record.objectFolder.gpuVisionV31)||record.gpuVisionV31||null; return out; }; global.__v3100GpuFolderWrapped=true; } }catch(_){ }
-try{ const prevBrain=publicServerBrainV2840; if(typeof prevBrain==='function'&&!global.__v3100BrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prevBrain.call(this,opts||{})||{}; out.version='V31.10 GPU Vision V33.2 Premium Fix Bridge'; out.gpuVisionV31=v3100PublicConfig(); return out; }; global.__v3100BrainWrapped=true; } }catch(_){ }
-try{ const prevPreflight=preflightSnapshotV98; if(typeof prevPreflight==='function'&&!global.__v3100PreflightWrapped){ preflightSnapshotV98=function(){ const s=prevPreflight.call(this)||{}; s.version='V31.10'; s.gpuVisionV31=v3100PublicConfig(); return s; }; global.__v3100PreflightWrapped=true; } }catch(_){ }
-console.log('[Spesa Pronta] V31.10 GPU Vision V33.2 Premium Fix Bridge active');
+try{ const prevBrain=publicServerBrainV2840; if(typeof prevBrain==='function'&&!global.__v3100BrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prevBrain.call(this,opts||{})||{}; out.version='V31.10.1.1 GPU Vision V33.2 Premium Fix Bridge'; out.gpuVisionV31=v3100PublicConfig(); return out; }; global.__v3100BrainWrapped=true; } }catch(_){ }
+try{ const prevPreflight=preflightSnapshotV98; if(typeof prevPreflight==='function'&&!global.__v3100PreflightWrapped){ preflightSnapshotV98=function(){ const s=prevPreflight.call(this)||{}; s.version='V31.10.1'; s.gpuVisionV31=v3100PublicConfig(); return s; }; global.__v3100PreflightWrapped=true; } }catch(_){ }
+console.log('[Spesa Pronta] V31.10.1 GPU Vision V33.2 Premium Fix Bridge active');
 
 
 // =============================================================
@@ -10238,7 +10260,7 @@ console.log('[Spesa Pronta] V31.10 GPU Vision V33.2 Premium Fix Bridge active');
       const prev=preflightSnapshotV98;
       preflightSnapshotV98=function(){
         const s=prev.call(this)||{};
-        s.version='V31.10';
+        s.version='V31.10.1';
         s.ramSafeV314=spesaRamSafeHealth();
         s.checks=Array.isArray(s.checks)?s.checks:[];
         s.checks.push({id:'render_ram_safe',label:'Render RAM Safe',ok:!!SPESA_RAM_SAFE,message:SPESA_RAM_SAFE?`Modalità ${SPESA_MEMORY_MODE}: cache/foto/dataset alleggeriti`:'Modalità PRO locale: RAM Safe non forzato'});
