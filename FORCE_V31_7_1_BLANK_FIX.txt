@@ -1,0 +1,1 @@
+V31.7.1 blank page fix: removed nested script tag inside server-brain template; V32 endpoints remain active.
