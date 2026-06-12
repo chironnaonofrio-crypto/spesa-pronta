@@ -1,0 +1,6 @@
+V31.5 Render Brain Bugfix
+- no duplicate GPU downloads
+- no automatic profile photo change
+- tolerant photo delete
+- virtual 360 turntable
+- ordered GPU render panel

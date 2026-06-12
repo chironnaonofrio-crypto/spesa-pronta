@@ -13,7 +13,5 @@
     "pg": "^8.13.1",
     "sharp": "^0.34.5"
   },
-  "spesaProntaBuild": "V30.3-GOOGLE-BLOCK-SAFE-3030-1781215200"
-,
-  "spesaProntaBuild": "v30_4_auto_web_harvester_3040_1781218800"
+  "spesaProntaBuild": "v31_4_render_ram_safe_3140"
 }

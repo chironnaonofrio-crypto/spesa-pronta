@@ -20,3 +20,21 @@ services:
         value: 60000
       - key: DB_PATH
         value: ./cloud-db.json
+      - key: SPESA_MEMORY_MODE
+        value: light
+      - key: SPESA_RAM_SAFE
+        value: true
+      - key: DISABLE_GOOGLE_HTML_SCRAPE
+        value: 1
+      - key: GPU_VISION_ENABLED
+        value: false
+      - key: MAX_MEMORY_CACHE
+        value: 120
+      - key: MAX_DIAGNOSTIC_EVENTS
+        value: 50
+      - key: MAX_GLOBAL_PRODUCTS
+        value: 800
+      - key: MAX_PRODUCT_PHOTOS
+        value: 2
+      - key: MAX_STORED_DATA_URL_CHARS
+        value: 0

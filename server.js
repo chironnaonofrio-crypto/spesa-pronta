@@ -52,8 +52,36 @@ const TWILIO_VERIFY_SERVICE_SID = process.env.TWILIO_VERIFY_SERVICE_SID || '';
 const SMS_ENABLED = !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_FROM_NUMBER);
 const TWILIO_VERIFY_ENABLED = !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_VERIFY_SERVICE_SID);
 const PHONE_VERIFY_READY = SMS_ENABLED || TWILIO_VERIFY_ENABLED;
-const VISION_SEED_MEMORY = loadVisionSeedMemory();
-const VISION_MEGA_INDEX = loadVisionMegaIndex();
+
+// V31.4 Render RAM Safe: su Render 512MB il server deve partire leggero.
+// Le funzioni pesanti restano disponibili, ma dataset/cache/foto base64 non vengono tenuti tutti in RAM.
+const IS_RENDER_RUNTIME = !!(process.env.RENDER || process.env.RENDER_SERVICE_ID || process.env.RENDER_INSTANCE_ID || process.env.RENDER_EXTERNAL_HOSTNAME);
+const SPESA_MEMORY_MODE = String(process.env.SPESA_MEMORY_MODE || (IS_RENDER_RUNTIME ? 'light' : 'pro')).toLowerCase();
+const SPESA_RAM_SAFE = !/^false$/i.test(String(process.env.SPESA_RAM_SAFE || (IS_RENDER_RUNTIME ? 'true' : 'false'))) || /^(light|lite|safe|render)$/i.test(SPESA_MEMORY_MODE);
+const SPESA_FORCE_SEED_LOAD = /^true$/i.test(String(process.env.SPESA_FORCE_SEED_LOAD || 'false'));
+const SPESA_MAX_DIAGNOSTIC_EVENTS = Math.max(20, Math.min(250, Number(process.env.MAX_DIAGNOSTIC_EVENTS || process.env.SPESA_MAX_DIAGNOSTIC_EVENTS || (SPESA_RAM_SAFE ? 50 : 120))));
+const SPESA_MAX_MEMORY_CACHE = Math.max(40, Math.min(2000, Number(process.env.MAX_MEMORY_CACHE || process.env.SPESA_MAX_MEMORY_CACHE || (SPESA_RAM_SAFE ? 120 : 1800))));
+const SPESA_MAX_BARCODE_CACHE = Math.max(80, Math.min(5000, Number(process.env.MAX_BARCODE_CACHE || process.env.SPESA_MAX_BARCODE_CACHE || (SPESA_RAM_SAFE ? 400 : 1800))));
+const SPESA_MAX_GLOBAL_PRODUCTS = Math.max(120, Math.min(5000, Number(process.env.MAX_GLOBAL_PRODUCTS || process.env.SPESA_MAX_GLOBAL_PRODUCTS || (SPESA_RAM_SAFE ? 800 : 2500))));
+const SPESA_MAX_PRODUCT_PHOTOS = Math.max(0, Math.min(36, Number(process.env.MAX_PRODUCT_PHOTOS || process.env.SPESA_MAX_PRODUCT_PHOTOS || (SPESA_RAM_SAFE ? 2 : 36))));
+const SPESA_MAX_DATA_URL_CHARS = Math.max(0, Math.min(300000, Number(process.env.MAX_STORED_DATA_URL_CHARS || process.env.SPESA_MAX_DATA_URL_CHARS || (SPESA_RAM_SAFE ? 0 : 180000))));
+if(SPESA_RAM_SAFE){
+  if(process.env.DISABLE_GOOGLE_HTML_SCRAPE === undefined) process.env.DISABLE_GOOGLE_HTML_SCRAPE = '1';
+  if(process.env.GPU_VISION_ENABLED === undefined) process.env.GPU_VISION_ENABLED = 'false';
+  if(process.env.VISION_ALLOW_SECOND_OPENAI_PASS === undefined) process.env.VISION_ALLOW_SECOND_OPENAI_PASS = 'false';
+}
+let VISION_SEED_MEMORY_CACHE = null;
+let VISION_MEGA_INDEX_CACHE = null;
+const VISION_SEED_MEMORY_LIGHT = {version:'lazy-ram-safe-v31-4', products:[], categories:[], rules:{}, lazy:true};
+function getVisionSeedMemory(){
+  if(SPESA_RAM_SAFE && !SPESA_FORCE_SEED_LOAD) return VISION_SEED_MEMORY_LIGHT;
+  if(!VISION_SEED_MEMORY_CACHE) VISION_SEED_MEMORY_CACHE = loadVisionSeedMemory();
+  return VISION_SEED_MEMORY_CACHE || VISION_SEED_MEMORY_LIGHT;
+}
+function getVisionMegaIndex(){
+  if(!VISION_MEGA_INDEX_CACHE) VISION_MEGA_INDEX_CACHE = loadVisionMegaIndex();
+  return VISION_MEGA_INDEX_CACHE || {version:'mega-vision-v48-1000000', totalProfiles:1000000, activeSeedProfiles:0};
+}
 const WHATSAPP_ENABLED = !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_WHATSAPP_FROM);
 
 // V28.39 - OpenAI max_output_tokens guard + OpenAI connection guard: chiave solo lato server, diagnostica reale e fallback modelli.
@@ -171,7 +199,8 @@ function loadVisionMegaIndex(){
       }
     }catch(e){ console.warn('Vision mega index load failed', e.message); }
   }
-  return {version:'mega-vision-v48-1000000', totalProfiles:1000000, activeSeedProfiles:(VISION_SEED_MEMORY.products||[]).length};
+  const seedForMega = VISION_SEED_MEMORY_CACHE || VISION_SEED_MEMORY_LIGHT;
+  return {version:'mega-vision-v48-1000000', totalProfiles:1000000, activeSeedProfiles:(seedForMega.products||[]).length};
 }
 function seedCategoryToAppServer(cat=''){
   const map={water:'water',soft_drinks:'soft_drinks',dairy:'dairy',deli:'meat_deli',pasta_rice:'pasta_rice',pantry:'food',breakfast_snacks:'breakfast_snacks',fruit:'fruit',vegetables:'veg',frozen:'frozen',cleaning:'house',paper_house:'house',personal_care:'personal_care',pets:'pets',baby:'food'};
@@ -242,6 +271,7 @@ async function initStorage(){
   console.log('Spesa Pronta DB: Supabase/Postgres connected encrypted=true');
 }
 async function saveDb(){
+  if(SPESA_RAM_SAFE) spesaRamSafeCompactDb('beforeSave');
   if(pgPool){
     const secureData = encryptObject(db);
     await pgPool.query(`INSERT INTO spesa_pronta_store(key,data,updated_at) VALUES($1,$2,now())
@@ -279,7 +309,7 @@ function ensureDbShape(){
   db.assistantBrain.autonomousVision = db.assistantBrain.autonomousVision || {products:{},voice:{},samples:0,corrections:0};
   db.assistantBrain.autonomousVision.products = db.assistantBrain.autonomousVision.products || {};
   db.assistantBrain.autonomousVision.voice = db.assistantBrain.autonomousVision.voice || {};
-  db.assistantBrain.seedMemory = {version:VISION_SEED_MEMORY.version||'', products:(VISION_SEED_MEMORY.products||[]).length, totalProfiles:Number(VISION_MEGA_INDEX.totalProfiles||1000000), megaVersion:VISION_MEGA_INDEX.version||'', categories:(VISION_SEED_MEMORY.categories||[]).length, loaded:(VISION_SEED_MEMORY.products||[]).length>0};
+  const seedMemoryV314=getVisionSeedMemory(); const megaIndexV314=getVisionMegaIndex(); db.assistantBrain.seedMemory = {version:seedMemoryV314.version||'', products:(seedMemoryV314.products||[]).length, totalProfiles:Number(megaIndexV314.totalProfiles||1000000), megaVersion:megaIndexV314.version||'', categories:(seedMemoryV314.categories||[]).length, loaded:(seedMemoryV314.products||[]).length>0, lazy:!!seedMemoryV314.lazy, ramSafe:SPESA_RAM_SAFE};
   Object.values(db.households||{}).forEach(h=>{
     h.aiMemory = h.aiMemory || {messages:[],facts:[],events:[],scanHistory:[],learnedProducts:[],productDeepMemory:[],productMemoryIndex:{},summary:'',preferences:{},updatedAt:0};
     h.aiMemory.messages = h.aiMemory.messages || [];
@@ -293,6 +323,7 @@ function ensureDbShape(){
     h.aiMemory.voiceProfile = h.aiMemory.voiceProfile || {version:41,heard:[],corrections:[],intentPhrases:{},fieldPhrases:{},productAliases:{},speakerStyle:{},serverSyncs:0};
     h.aiMemory.preferences = h.aiMemory.preferences || {};
   });
+  if(SPESA_RAM_SAFE) spesaRamSafeCompactDb('ensureDbShape');
 }
 function ensureHouseholdMemory(h){
   h.aiMemory = h.aiMemory || {messages:[],facts:[],events:[],scanHistory:[],learnedProducts:[],productDeepMemory:[],productMemoryIndex:{},summary:'',preferences:{},updatedAt:0};
@@ -307,6 +338,160 @@ function ensureHouseholdMemory(h){
   h.aiMemory.voiceProfile = h.aiMemory.voiceProfile || {version:41,heard:[],corrections:[],intentPhrases:{},fieldPhrases:{},productAliases:{},speakerStyle:{},serverSyncs:0};
   h.aiMemory.preferences = h.aiMemory.preferences || {};
   return h.aiMemory;
+}
+
+
+// =============================================================
+// V31.4 Render RAM Safe Core
+// - Compatta cache/diagnosi/memoria globale per non superare 512MB su Render.
+// - Rimuove base64 pesanti dal DB persistente in modalità light.
+// - Mantiene nome, marca, categoria, barcode, ingredienti e apprendimento utile.
+// =============================================================
+function spesaRamSafeMemoryMb(){
+  try{
+    const m=process.memoryUsage();
+    const mb=v=>Number((Number(v||0)/1024/1024).toFixed(1));
+    return {rss:mb(m.rss),heapUsed:mb(m.heapUsed),heapTotal:mb(m.heapTotal),external:mb(m.external),arrayBuffers:mb(m.arrayBuffers)};
+  }catch(_){ return {}; }
+}
+function spesaRamSafeIsDataUrl(v=''){ return /^data:image\/[a-z0-9.+-]+;base64,/i.test(String(v||'')); }
+function spesaRamSafeLooksBase64(v=''){
+  const s=String(v||'');
+  return s.length>25000 && /^[A-Za-z0-9+/=\r\n]+$/.test(s.slice(0,2000));
+}
+function spesaRamSafeArrayLimit(key=''){
+  const k=String(key||'').toLowerCase();
+  if(/learningaudit|diagnostic|events|logs|history|samples|heard/.test(k)) return SPESA_MAX_DIAGNOSTIC_EVENTS;
+  if(/photos|images|reference|candidate/.test(k)) return Math.max(0, SPESA_MAX_PRODUCT_PHOTOS || 0) || 0;
+  if(/confirmedexamples|knowledgesources/.test(k)) return SPESA_RAM_SAFE ? 10 : 40;
+  if(/corrections|lastsources|last/.test(k)) return SPESA_RAM_SAFE ? 25 : 90;
+  if(/ingredients/.test(k)) return SPESA_RAM_SAFE ? 45 : 80;
+  if(/allergens|colors|barcodes|aliases|brands|visibleevidence|detectedtext|evidencetokens/.test(k)) return SPESA_RAM_SAFE ? 24 : 80;
+  return SPESA_RAM_SAFE ? 80 : 240;
+}
+function spesaRamSafeString(v='', key=''){
+  const s=String(v==null?'':v);
+  const k=String(key||'').toLowerCase();
+  if(spesaRamSafeIsDataUrl(s) || spesaRamSafeLooksBase64(s)){
+    if(SPESA_MAX_DATA_URL_CHARS<=0 || s.length>SPESA_MAX_DATA_URL_CHARS) return '';
+    return s;
+  }
+  if(/url$|imageurl|pageurl|sourceurl|externalurl/.test(k)) return s.slice(0,1200);
+  if(s.length>1600 && SPESA_RAM_SAFE) return s.slice(0,1600);
+  if(s.length>5000) return s.slice(0,5000);
+  return s;
+}
+function spesaRamSafeCompactAny(value, key='', depth=0){
+  if(value==null) return value;
+  if(typeof value==='string') return spesaRamSafeString(value,key);
+  if(typeof value==='number' || typeof value==='boolean') return value;
+  if(Array.isArray(value)){
+    const limit=spesaRamSafeArrayLimit(key);
+    if(limit<=0) return [];
+    const arr=value.slice(0,limit).map(v=>spesaRamSafeCompactAny(v,key,depth+1)).filter(v=>v!=='' && v!=null);
+    return arr;
+  }
+  if(typeof value==='object'){
+    if(depth>5) return {};
+    const out={};
+    for(const [k,v] of Object.entries(value)){
+      const lk=String(k||'').toLowerCase();
+      if(SPESA_RAM_SAFE && /^(raw|full|original|buffer|blob|file|image|base64)$/i.test(k) && (typeof v==='string') && (spesaRamSafeIsDataUrl(v)||spesaRamSafeLooksBase64(v))) continue;
+      if(SPESA_RAM_SAFE && /(dataurl|data_url|imagedata|thumbdataurl|fulldataurl|originaldataurl|masterdataurl|transparentdataurl|whitedataurl|studiodataurl|semanticdataurl|render360dataurl|labelcropdataurl|producttransparent|productwhite|renderpro|labelcrop)$/i.test(k)){
+        const safe=spesaRamSafeCompactAny(v,k,depth+1);
+        if(safe) out[k]=safe;
+        continue;
+      }
+      if(SPESA_RAM_SAFE && /(imageDataUrl|displayUrl)$/i.test(k) && typeof v==='string' && spesaRamSafeIsDataUrl(v)) continue;
+      const safe=spesaRamSafeCompactAny(v,k,depth+1);
+      if(safe!==undefined && safe!=='' && safe!==null) out[k]=safe;
+    }
+    return out;
+  }
+  return undefined;
+}
+function spesaRamSafeLimitObjectMap(map={}, limit=100, scoreFn=null){
+  if(!map || typeof map!=='object') return {};
+  const entries=Object.entries(map);
+  if(entries.length<=limit) return map;
+  entries.sort((a,b)=>{
+    const sb=scoreFn?scoreFn(b[1],b[0]):Number(b[1]?.updatedAt||b[1]?.lastAt||0);
+    const sa=scoreFn?scoreFn(a[1],a[0]):Number(a[1]?.updatedAt||a[1]?.lastAt||0);
+    return sb-sa;
+  });
+  return Object.fromEntries(entries.slice(0,limit));
+}
+function spesaRamSafeCompactDb(reason='runtime'){
+  if(!SPESA_RAM_SAFE || !db || !db.assistantBrain || global.__spesaRamSafeCompacting) return {ok:true,skipped:true};
+  const now=Date.now();
+  if(reason==='ensureDbShape' && global.__spesaRamSafeLastCompactAt && now-global.__spesaRamSafeLastCompactAt<15000) return {ok:true,skipped:true,throttled:true};
+  global.__spesaRamSafeLastCompactAt=now;
+  global.__spesaRamSafeCompacting=true;
+  const stats={reason,removedProducts:0,knowledgeEntries:0,barcodeEntries:0,mode:SPESA_MEMORY_MODE,limits:{diagnosticEvents:SPESA_MAX_DIAGNOSTIC_EVENTS,memoryCache:SPESA_MAX_MEMORY_CACHE,barcodeCache:SPESA_MAX_BARCODE_CACHE,globalProducts:SPESA_MAX_GLOBAL_PRODUCTS,productPhotos:SPESA_MAX_PRODUCT_PHOTOS,dataUrlChars:SPESA_MAX_DATA_URL_CHARS}};
+  try{
+    const brain=db.assistantBrain;
+    brain.learningAudit=Array.isArray(brain.learningAudit)?brain.learningAudit.slice(0,SPESA_MAX_DIAGNOSTIC_EVENTS):[];
+    if(brain.diagnosticsTestSync) brain.diagnosticsTestSync=Array.isArray(brain.diagnosticsTestSync)?brain.diagnosticsTestSync.slice(0,25):[];
+    if(brain.categoryBrainV95?.last) brain.categoryBrainV95.last=brain.categoryBrainV95.last.slice(0,25);
+    if(brain.monsterBrainV96?.last) brain.monsterBrainV96.last=brain.monsterBrainV96.last.slice(0,25);
+    if(brain.errorLearning?.corrections) brain.errorLearning.corrections=brain.errorLearning.corrections.slice(0,50);
+    if(brain.knowledgeFeeder?.lastSources) brain.knowledgeFeeder.lastSources=brain.knowledgeFeeder.lastSources.slice(0,12);
+    const kc=brain.knowledgeCache=brain.knowledgeCache||{version:94,entries:{},hits:0,misses:0,barcodeHits:0,updatedAt:0};
+    kc.entries=spesaRamSafeLimitObjectMap(kc.entries||{}, SPESA_MAX_MEMORY_CACHE, (v)=>Number(v?.updatedAt||0));
+    kc.entries=spesaRamSafeCompactAny(kc.entries,'knowledgeCacheEntries',0) || {};
+    stats.knowledgeEntries=Object.keys(kc.entries||{}).length;
+    const bb=brain.barcodeBrain=brain.barcodeBrain||{version:94,products:{},hits:0,misses:0,updatedAt:0};
+    bb.products=spesaRamSafeLimitObjectMap(bb.products||{}, SPESA_MAX_BARCODE_CACHE, (v)=>Number(v?.updatedAt||v?.lastSeenAt||0)+Number(v?.confirmations||0)*1000);
+    bb.products=spesaRamSafeCompactAny(bb.products,'barcodeProducts',0) || {};
+    stats.barcodeEntries=Object.keys(bb.products||{}).length;
+    const gpm=brain.globalProductMemory=brain.globalProductMemory||{products:{},confirmations:0,teacherHelp:0,localRecognitions:0,updatedAt:0};
+    const beforeProducts=Object.keys(gpm.products||{}).length;
+    gpm.products=spesaRamSafeLimitObjectMap(gpm.products||{}, SPESA_MAX_GLOBAL_PRODUCTS, (v)=>Number(v?.confirmations||0)*100000+Number(v?.updatedAt||0));
+    stats.removedProducts=Math.max(0,beforeProducts-Object.keys(gpm.products||{}).length);
+    for(const [key,rec] of Object.entries(gpm.products||{})){
+      const compact=spesaRamSafeCompactAny(rec,'globalProductRecord',0) || {};
+      compact.key=compact.key||key;
+      gpm.products[key]=compact;
+    }
+    for(const h of Object.values(db.households||{})){
+      if(!h || !h.aiMemory) continue;
+      h.aiMemory.messages=Array.isArray(h.aiMemory.messages)?h.aiMemory.messages.slice(-120):[];
+      h.aiMemory.events=Array.isArray(h.aiMemory.events)?h.aiMemory.events.slice(-80):[];
+      h.aiMemory.scanHistory=Array.isArray(h.aiMemory.scanHistory)?h.aiMemory.scanHistory.slice(-80):[];
+      h.aiMemory.learnedProducts=Array.isArray(h.aiMemory.learnedProducts)?h.aiMemory.learnedProducts.slice(-240):[];
+      h.aiMemory.productDeepMemory=Array.isArray(h.aiMemory.productDeepMemory)?h.aiMemory.productDeepMemory.slice(-80):[];
+      if(h.aiMemory.visionBrain?.serverSamples) h.aiMemory.visionBrain.serverSamples=h.aiMemory.visionBrain.serverSamples.slice(-30);
+      if(h.aiMemory.voiceProfile?.heard) h.aiMemory.voiceProfile.heard=h.aiMemory.voiceProfile.heard.slice(-80);
+      h.aiMemory=spesaRamSafeCompactAny(h.aiMemory,'householdMemory',0)||h.aiMemory;
+    }
+    brain.ramSafeV314={active:true,mode:SPESA_MEMORY_MODE,reason,limits:stats.limits,lastCompactAt:Date.now(),memory:spesaRamSafeMemoryMb(),stats};
+    return {ok:true,version:'V31.4',stats};
+  }catch(e){
+    try{ db.assistantBrain.ramSafeV314={active:true,error:String(e?.message||e).slice(0,220),lastCompactAt:Date.now(),memory:spesaRamSafeMemoryMb()}; }catch(_){}
+    return {ok:false,error:String(e?.message||e)};
+  }finally{
+    global.__spesaRamSafeCompacting=false;
+  }
+}
+function spesaRamSafeHealth(){
+  const brain=db?.assistantBrain||{};
+  const gpm=brain.globalProductMemory||{products:{}};
+  const kc=brain.knowledgeCache||{entries:{}};
+  const bb=brain.barcodeBrain||{products:{}};
+  return {
+    ok:true,
+    version:'V31.5 Render Brain Bugfix',
+    active:!!SPESA_RAM_SAFE,
+    mode:SPESA_MEMORY_MODE,
+    renderRuntime:IS_RENDER_RUNTIME,
+    seedLazy:!!getVisionSeedMemory().lazy,
+    buildId:global.__SPESA_PRONTA_BUILD_ID||'V31.5-RENDER-BRAIN-BUGFIX',
+    memory:spesaRamSafeMemoryMb(),
+    limits:{diagnosticEvents:SPESA_MAX_DIAGNOSTIC_EVENTS,memoryCache:SPESA_MAX_MEMORY_CACHE,barcodeCache:SPESA_MAX_BARCODE_CACHE,globalProducts:SPESA_MAX_GLOBAL_PRODUCTS,productPhotos:SPESA_MAX_PRODUCT_PHOTOS,dataUrlChars:SPESA_MAX_DATA_URL_CHARS},
+    counts:{globalProducts:Object.keys(gpm.products||{}).length,knowledgeCache:Object.keys(kc.entries||{}).length,barcodeProducts:Object.keys(bb.products||{}).length,learningAudit:(brain.learningAudit||[]).length,households:Object.keys(db?.households||{}).length},
+    lastCompact:brain.ramSafeV314||null,
+    disabledHeavy:{googleHtmlScrape:String(process.env.DISABLE_GOOGLE_HTML_SCRAPE||'')==='1',gpuVisionEnabled:String(process.env.GPU_VISION_ENABLED||'').toLowerCase()==='true'}
+  };
 }
 function rememberMessage(memory, role, text, extra={}){
   memory.messages = memory.messages || [];
@@ -985,39 +1170,37 @@ function v2874DeleteObjectPhotos(record={}, photoIds=[], actor=''){
   if(!ids.length) return {ok:false,error:'photo_id_required',message:'Nessuna foto selezionata'};
   folder.photos=Array.isArray(folder.photos)?folder.photos:[];
   const removed=folder.photos.filter(p=>ids.includes(String(p.id||'')));
-  if(!removed.length) return {ok:false,error:'photo_not_found',message:'Foto non trovata nella cartella oggetto'};
+  if(!removed.length){
+    // V31.5: se la foto era già stata rimossa/compattata non bloccare la UI.
+    folder.photoCount=folder.photos.length;
+    folder.updatedAt=v2842Now();
+    return {ok:true, alreadyMissing:true, removedCount:0, remainingPhotoCount:folder.photoCount, message:'Foto già rimossa o non più presente'};
+  }
   folder.photos=folder.photos.filter(p=>!ids.includes(String(p.id||'')));
-  const repStillThere=folder.representativePhotoId && folder.photos.find(p=>String(p.id||'')===String(folder.representativePhotoId||''));
-  if(!repStillThere){
-    const best=folder.photos.find(p=>p.kind==='product_front' && (p.dataUrl||p.externalUrl)) || folder.photos.find(p=>p.dataUrl||p.externalUrl) || null;
-    if(best){
-      folder.representativePhotoId=best.id;
-      folder.representativePhoto=Object.assign({}, best);
-      folder.hasRealProfilePhoto=!!(best.dataUrl||best.externalUrl);
-      record.profilePhoto=Object.assign({}, best);
-      if(record.ownerProfilePhoto && ids.includes(String(record.ownerProfilePhoto.id||''))) record.ownerProfilePhoto=null;
-    }else{
-      folder.representativePhotoId='';
-      folder.representativePhoto=null;
-      folder.hasRealProfilePhoto=false;
-      record.profilePhoto=null;
-      if(record.ownerProfilePhoto && ids.includes(String(record.ownerProfilePhoto.id||''))) record.ownerProfilePhoto=null;
-    }
+  const repDeleted=folder.representativePhotoId && ids.includes(String(folder.representativePhotoId||''));
+  if(repDeleted){
+    // V31.5: non scegliere più in automatico una nuova foto profilo dopo una cancellazione.
+    // Il titolare deve decidere manualmente con “Imposta come foto articolo”.
+    folder.representativePhotoId='';
+    folder.representativePhoto=null;
     folder.profilePhotoLockedByOwner=false;
+    folder.hasRealProfilePhoto=false;
+    record.profilePhoto=null;
+    if(record.ownerProfilePhoto && ids.includes(String(record.ownerProfilePhoto.id||''))) record.ownerProfilePhoto=null;
     if(record.ownerOverrides){
       record.ownerOverrides.profilePhotoLockedByOwner=false;
-      record.ownerOverrides.representativePhotoId=folder.representativePhotoId||'';
+      record.ownerOverrides.representativePhotoId='';
     }
   }
   folder.photoCount=folder.photos.length;
   folder.updatedAt=v2842Now();
   record.updatedAt=v2842Now();
   record.ownerOverrideHistory=Array.isArray(record.ownerOverrideHistory)?record.ownerOverrideHistory:[];
-  record.ownerOverrideHistory.unshift({at:v2842Now(), actor:actor||'server_owner', fields:['deletePhoto'], removedPhotoIds:ids.slice(0,20), removedCount:removed.length, remainingPhotoCount:folder.photoCount});
+  record.ownerOverrideHistory.unshift({at:v2842Now(), actor:actor||'server_owner', fields:['deletePhoto'], removedPhotoIds:ids.slice(0,20), removedCount:removed.length, remainingPhotoCount:folder.photoCount, noAutoProfile:true});
   record.ownerOverrideHistory=record.ownerOverrideHistory.slice(0,30);
   v2840AttachMemoryCard(record,{});
-  updateGlobalLearningAudit({type:'owner-photo-deleted-v2874', key:record.key||'', productName:record.productName||'', brand:record.brand||'', actor, removedPhotoIds:ids.slice(0,10), removedCount:removed.length, remainingPhotoCount:folder.photoCount});
-  return {ok:true, removedCount:removed.length, removedPhotos:removed.map(p=>({id:p.id||'',kind:p.kind||'',source:p.source||''})), remainingPhotoCount:folder.photoCount};
+  updateGlobalLearningAudit({type:'owner-photo-deleted-v315', key:record.key||'', productName:record.productName||'', brand:record.brand||'', actor, removedPhotoIds:ids.slice(0,10), removedCount:removed.length, remainingPhotoCount:folder.photoCount, noAutoProfile:true});
+  return {ok:true, removedCount:removed.length, removedPhotos:removed.map(p=>({id:p.id||'',kind:p.kind||'',source:p.source||''})), remainingPhotoCount:folder.photoCount, noAutoProfile:true};
 }
 
 function v2842UpdateOwnerOverride(key='', updates={}, actor=''){
@@ -1924,17 +2107,17 @@ function serveFileDirect(req,res,fileName){
   const file=candidates.find(f=>fs.existsSync(f) && fs.statSync(f).isFile());
   if(!file) return false;
   try{
-    const data=fs.readFileSync(file);
+    const stat=fs.statSync(file);
     res.writeHead(200,{
       'Content-Type':contentType(file),
-      'Content-Length':data.length,
+      'Content-Length':stat.size,
       'Cache-Control':'no-store, no-cache, must-revalidate, max-age=0',
       'Pragma':'no-cache',
       'Expires':'0',
       'X-Robots-Tag':'noindex, nofollow, noarchive'
     });
     if(req.method === 'HEAD') return res.end();
-    res.end(data);
+    fs.createReadStream(file).on('error',()=>{ try{ res.destroy(); }catch(_){} }).pipe(res);
     return true;
   }catch{ return false; }
 }
@@ -1961,17 +2144,17 @@ function serveStatic(req,res,url){
     file = path.join(STATIC_DIR, 'index.html');
   }
   try{
-    const data = fs.readFileSync(file);
+    const stat = fs.statSync(file);
     const isHardNoCache = /(?:index\.html|clear-cache\.html|service-worker\.js|app\.|styles\.|\.js$|\.css$)/.test(file);
     res.writeHead(200, {
       'Content-Type': contentType(file),
-      'Content-Length': data.length,
+      'Content-Length': stat.size,
       'Cache-Control': isHardNoCache ? 'no-store, no-cache, must-revalidate, max-age=0' : 'public, max-age=86400, immutable',
       'Pragma': isHardNoCache ? 'no-cache' : undefined,
       'Expires': isHardNoCache ? '0' : undefined
     });
     if(req.method === 'HEAD') return res.end();
-    res.end(data);
+    fs.createReadStream(file).on('error',()=>{ try{ res.destroy(); }catch(_){} }).pipe(res);
     return true;
   }catch{
     return false;
@@ -2820,7 +3003,7 @@ function buildVisionCandidatePool(catalog=[], settings={}, memory={}){
       visualHints: uniqueStrings(row.visualHints||[],8)
     });
   }
-  for(const p of pickDiverseVisionSeedProducts(VISION_SEED_MEMORY.products||[],520)){
+  for(const p of pickDiverseVisionSeedProducts((getVisionSeedMemory().products)||[], SPESA_RAM_SAFE ? 80 : 520)){
     out.push({
       source:'seed', id:p.key||String(p.id||''), name:cleanVisionString(p.name||''), category:seedCategoryToAppServer(p.category||''), brand:p.brand==='Generico'?'':cleanVisionString(p.brand||''), aliases:uniqueStrings([p.name,p.brand,...(p.aliases||[])],10), unit:cleanVisionString(p.defaultUnit||''), estimatedSize:cleanVisionString((p.formats||[])[0]||''), visualHints:uniqueStrings([...(p.visualHints||[]),...(p.ocrKeywords||[])],10)
     });
@@ -3602,7 +3785,17 @@ const server = http.createServer(async (req,res)=>{
       if(serveFileDirect(req,res,'clear-cache.html')) return;
       return send(res,404,{error:'clear_cache_missing'});
     }
-    if(req.method === 'GET' && pathName === '/api/health') return send(res, 200, { ok:true, service:'spesa-pronta-cloud', dbMode, dbConnected: dbMode !== 'file', time:new Date().toISOString() });
+    if(req.method === 'GET' && pathName === '/api/health') return send(res, 200, { ok:true, service:'spesa-pronta-cloud', dbMode, dbConnected: dbMode !== 'file', time:new Date().toISOString(), ramSafe: spesaRamSafeHealth() });
+
+    if(req.method === 'GET' && (pathName === '/api/ai/memory-health' || pathName === '/ai/memory-health')) {
+      return send(res, 200, spesaRamSafeHealth());
+    }
+
+    if(req.method === 'POST' && (pathName === '/api/ai/memory-compact' || pathName === '/ai/memory-compact')) {
+      const result=spesaRamSafeCompactDb('manualEndpoint');
+      if(result.ok) await saveDb();
+      return send(res, 200, Object.assign({health:spesaRamSafeHealth()}, result));
+    }
 
     if(req.method === 'GET' && pathName === '/api/db/status') {
       const users=Object.values(db.users||{});
@@ -3769,7 +3962,8 @@ const server = http.createServer(async (req,res)=>{
       const imageDataUrl=String(body.imageDataUrl||body.dataUrl||body.image||'').trim();
       const imageUrl=String(body.imageUrl||body.url||'').trim();
       const mode=pathName.includes('/render')?'render':'analyze';
-      const result=await v3100GpuVisionAnalyze({key,imageDataUrl,imageUrl,mode,householdId:auth.householdId||'',actor:'server_brain'});
+      const force=body.force===true || body.force==='1' || body.force==='true' || url.searchParams.get('force')==='1' || url.searchParams.get('force')==='true';
+      const result=await v3100GpuVisionAnalyze({key,imageDataUrl,imageUrl,mode,force,householdId:auth.householdId||'',actor:'server_brain'});
       if(result.ok) await saveDb().catch(()=>{});
       return send(res,200,result);
     }
@@ -3842,7 +4036,7 @@ const server = http.createServer(async (req,res)=>{
         memoryReady: dbMode !== 'file',
         globalLearning: 'server_global_product_memory', globalProductMemory: publicGlobalProductMemory(10), knowledgeFeeder: db.assistantBrain.knowledgeFeeder||null, knowledgeCache:{entries:Object.keys(db.assistantBrain?.knowledgeCache?.entries||{}).length,hits:db.assistantBrain?.knowledgeCache?.hits||0,barcodeHits:db.assistantBrain?.knowledgeCache?.barcodeHits||0,updatedAt:db.assistantBrain?.knowledgeCache?.updatedAt||0}, barcodeBrain:db.assistantBrain?.barcodeBrain||null, categoryBrainV95:db.assistantBrain?.categoryBrainV95||null, monsterBrainV96:db.assistantBrain?.monsterBrainV96||null, ultraBrainV97:db.assistantBrain?.ultraBrainV97||null, errorLearning:{corrections:(db.assistantBrain?.errorLearning?.corrections||[]).length,patterns:Object.keys(db.assistantBrain?.errorLearning?.patterns||{}).length,updatedAt:db.assistantBrain?.errorLearning?.updatedAt||0}, learningQuality:{dedupe:'canonical_key_plus_barcode_conflict_guard', teacherBypass:'after_confirmations_barcode_and_field_confidence', knowledgeFeeder:'open_facts_family_with_barcode_and_cache_after_user_confirmation', storesPhotos:'lightweight_object_folder_photos_v2845_owner_selectable_profile_photo', storesVisualSignature:true, ownerOverridePriority:'server_owner_override_wins', categoryEngine:'ultra_error_reduction_core_v27_97', costGuardV2804:db.assistantBrain?.costGuardV2804||null, ultraErrorReduction:'active', preflightStability:'v28_04_cost_guard_pro', barcodePriority:'barcode > label > memory > teacher', fieldConfidence:'per_field_v97', visionPipelineV2829:'server_full_image_openai_slim_teacher_barcode_step_v2830'},
         smsReady: PHONE_VERIFY_READY,
-        seedMemory:{version:VISION_SEED_MEMORY.version||'', products:(VISION_SEED_MEMORY.products||[]).length, totalProfiles:Number(VISION_MEGA_INDEX.totalProfiles||1000000), megaVersion:VISION_MEGA_INDEX.version||'', categories:(VISION_SEED_MEMORY.categories||[]).length, loaded:(VISION_SEED_MEMORY.products||[]).length>0},
+        seedMemory:(()=>{ const seed=getVisionSeedMemory(); const mega=getVisionMegaIndex(); return {version:seed.version||'', products:(seed.products||[]).length, totalProfiles:Number(mega.totalProfiles||1000000), megaVersion:mega.version||'', categories:(seed.categories||[]).length, loaded:(seed.products||[]).length>0, lazy:!!seed.lazy, ramSafe:SPESA_RAM_SAFE}; })(),
         twilioVerifyReady: TWILIO_VERIFY_ENABLED,
         smsFromNumberReady: SMS_ENABLED,
         whatsappReady: WHATSAPP_ENABLED,
@@ -9488,11 +9682,23 @@ async function v3100ResolveImageSource({key='',imageDataUrl='',imageUrl=''}={}){
   if(key){
     const rec=db.assistantBrain?.globalProductMemory?.products?.[key];
     if(!rec) return {error:'product_not_found'};
+    const folder=rec.objectFolder||{};
+    const photos=Array.isArray(folder.photos)?folder.photos:[];
+    const isGpuOrDetailPhoto=(p={})=>{
+      const t=[p.id,p.kind,p.source,p.note,(p.visibleEvidence||[]).join(' ')].filter(Boolean).join(' ').toLowerCase();
+      if(/gpu_label|label_crop|etichetta|barcode|expiry|scadenza|ingredient/.test(t)) return true;
+      if(/gpu_product|gpu_render|gpu_vision/.test(t)) return true;
+      return false;
+    };
+    const usable=(p={})=>p && !isGpuOrDetailPhoto(p) && (p.dataUrl||p.thumbDataUrl||p.fullDataUrl||p.originalDataUrl||p.externalUrl||p.imageUrl||p.url);
     let p=null;
-    try{ if(typeof v2879PickRenderPhoto==='function') p=v2879PickRenderPhoto(rec); }catch(_){ }
+    if(folder.profilePhotoLockedByOwner && usable(folder.representativePhoto)) p=folder.representativePhoto;
+    if(!p) p=photos.find(x=>usable(x) && /owner_profile|product_front|front|profile|manual|user/.test(String([x.kind,x.source].join(' ')).toLowerCase())) || null;
+    if(!p) p=photos.find(x=>usable(x)) || null;
+    if(!p && rec.profilePhoto && usable(rec.profilePhoto)) p=rec.profilePhoto;
     if(!p){
-      const f=rec.objectFolder||{}; const photos=Array.isArray(f.photos)?f.photos:[];
-      p=f.representativePhoto||rec.profilePhoto||photos.find(x=>x.dataUrl||x.externalUrl)||null;
+      // Ultimo tentativo: vecchio selettore, ma mai se restituisce crop GPU/etichetta.
+      try{ if(typeof v2879PickRenderPhoto==='function'){ const cand=v2879PickRenderPhoto(rec); if(usable(cand)) p=cand; } }catch(_){ }
     }
     if(!p) return {error:'no_product_photo'};
     parts=v3100DataUrlParts(p.dataUrl||p.thumbDataUrl||p.fullDataUrl||p.originalDataUrl||'');
@@ -9659,35 +9865,115 @@ async function v3100PersistGpuVision(key='', payload={}, mode='analyze', source=
   if(refined.labelBox){ slim.labelBox=refined.labelBox; slim.product=Object.assign({},slim.product||{}, {labelBox:refined.labelBox,labelConfidence:refined.labelBox.confidence}); }
   if(refined.render360) slim.render360=refined.render360;
   if(source&&source.reference) slim.usedReference=source.reference;
-  rec.gpuVisionV31=Object.assign({}, slim, {mode, engine:'runpod_spesa_vision_brain_v31_3'});
+  slim.teacherOpenAI=Object.assign({called:false,reason:'not_needed_for_cached_gpu_render',result:'Nessuna chiamata OpenAI: ho usato foto prodotto, GPU e fonti gratuite/API.'}, slim.teacherOpenAI||payload.teacherOpenAI||{});
+  slim.barcodeCandidate=payload.product?.barcode||payload.barcode||payload.product?.ean||'';
+  rec.gpuVisionV31=Object.assign({}, slim, {mode, engine:'runpod_spesa_vision_brain_v31_5', profilePolicy:'manual_owner_only'});
   rec.updatedAt=Date.now();
   try{
     const folder=v2842EnsureObjectFolder(rec); folder.gpuVisionV31=rec.gpuVisionV31; folder.updatedAt=Date.now();
     const imgs=rec.gpuVisionV31.images||{};
-    const add=(kind,dataUrl,score)=>{ if(!dataUrl||!String(dataUrl).startsWith('data:image')) return; folder.photos=Array.isArray(folder.photos)?folder.photos:[]; const id='gpu_'+kind+'_'+hashStable(String(dataUrl).slice(0,300)).slice(0,14); folder.photos=folder.photos.filter(p=>p.id!==id); folder.photos.unshift({id,kind:'gpu_'+kind,source:'gpu_vision_v31_3',at:Date.now(),dataUrl,thumbDataUrl:dataUrl,score,bytes:String(dataUrl).length,visibleEvidence:['GPU Vision V31.3',kind],colors:payload.product?.dominantColors||[]}); };
-    add('render_pro',imgs.renderPro,100); add('product_transparent',imgs.productTransparent,98); add('product_white',imgs.productWhite,96); add('label_crop',imgs.labelCrop,95);
-    folder.photos=folder.photos.slice(0,36); folder.photoCount=folder.photos.length;
-    if(imgs.renderPro||imgs.productWhite||imgs.productTransparent){ folder.representativePhoto=folder.photos[0]||folder.representativePhoto; folder.representativePhotoId=folder.photos[0]?.id||folder.representativePhotoId||''; folder.hasRealProfilePhoto=true; }
-    if(Array.isArray(refined.referenceImages)&&refined.referenceImages.length){ folder.referenceImagesV3000=refined.referenceImages; folder.referenceCandidatesV3000=refined.referenceImages; }
+    folder.photos=Array.isArray(folder.photos)?folder.photos:[];
+    folder.photos=folder.photos.filter(p=>!(String(p.source||'').startsWith('gpu_vision') && /label|etichetta|barcode|expiry|scadenza/i.test(String([p.kind,p.id,p.source].join(' ')))));
+    const add=(kind,dataUrl,score)=>{
+      if(!dataUrl||!String(dataUrl).startsWith('data:image')) return;
+      folder.photos=Array.isArray(folder.photos)?folder.photos:[];
+      const id='gpu_'+kind+'_'+hashStable(String(dataUrl).slice(0,500)+String(dataUrl).slice(-500)).slice(0,14);
+      // V31.5: una sola foto GPU per tipo, niente valanghe dopo 3/4 click.
+      folder.photos=folder.photos.filter(p=>!(String(p.source||'').startsWith('gpu_vision') && (String(p.kind||'')===('gpu_'+kind) || String(p.kind||'')===kind)) && p.id!==id);
+      folder.photos.unshift({id,kind:'gpu_'+kind,source:'gpu_vision_v31_5',at:Date.now(),dataUrl,thumbDataUrl:dataUrl,score,bytes:String(dataUrl).length,profileCandidate:kind==='render_pro'||kind==='product_white'||kind==='product_transparent',visibleEvidence:['GPU Vision V31.5',kind],colors:payload.product?.dominantColors||[]});
+    };
+    add('render_pro',imgs.renderPro,100);
+    add('product_transparent',imgs.productTransparent,98);
+    add('product_white',imgs.productWhite,96);
+    // Il crop etichetta resta nel pannello Render, non nella galleria foto profilo.
+    folder.photos=folder.photos.slice(0,Math.max(6, Number(process.env.MAX_PRODUCT_PHOTOS||12)||12));
+    folder.photoCount=folder.photos.length;
+    // V31.5: MAI cambiare automaticamente la foto profilo da analisi/render GPU.
+    folder.hasRealProfilePhoto=!!(folder.representativePhotoId && folder.representativePhoto);
+    if(Array.isArray(refined.referenceImages)&&refined.referenceImages.length){ folder.referenceImagesV3000=refined.referenceImages.slice(0,8); folder.referenceCandidatesV3000=refined.referenceImages.slice(0,8); }
     if(refined.render360){ folder.render360V3000=refined.render360; rec.render360V3000=refined.render360; }
   }catch(_){ }
   try{ delete rec.__memoryKey; }catch(_){ }
   try{ v2840AttachMemoryCard(rec,{}); }catch(_){ }
-  updateGlobalLearningAudit({type:'gpu-vision-v31-3-saved', key, productName:rec.productName||'', brand:rec.brand||'', mode, confidence:payload.product?.confidence||null});
+  updateGlobalLearningAudit({type:'gpu-vision-v31-5-saved', key, productName:rec.productName||'', brand:rec.brand||'', mode, confidence:payload.product?.confidence||null, profilePolicy:'manual_owner_only'});
   return rec.gpuVisionV31;
 }
-async function v3100GpuVisionAnalyze({key='',imageDataUrl='',imageUrl='',mode='analyze'}={}){
-  let resolved=null;
-  if(mode==='render' && key && !imageDataUrl && !imageUrl) resolved=await v3130ResolveBestReferenceForGpuRender(key);
-  if(!resolved) resolved=await v3100ResolveImageSource({key,imageDataUrl,imageUrl});
-  if(resolved.error) return {ok:false,reason:resolved.error,config:v3100PublicConfig()};
-  const call=await v3100CallGpuVision(resolved.buffer,resolved.mime,mode,resolved.filename);
-  if(!call.ok) return call;
-  const payload=call.data||{}; if(resolved.reference){ payload.usedReference=resolved.reference; payload.message=(payload.message||'')+' · render arricchito da reference online'; }
-  const saved=key?await v3100PersistGpuVision(key,payload,mode,resolved):null;
-  return {ok:!!payload.ok,version:'V31.3_bridge',mode,source:resolved.source,usedReference:resolved.reference||null,gpuVision:payload,savedGpuVision:saved,config:v3100PublicConfig()};
+async function v3100GpuVisionAnalyze({key='',imageDataUrl='',imageUrl='',mode='analyze',force=false}={}){
+  ensureDbShape();
+  const rec=key?db.assistantBrain?.globalProductMemory?.products?.[key]:null;
+  const existing=rec?.objectFolder?.gpuVisionV31||rec?.gpuVisionV31||null;
+  const existingFresh=!!(existing&&(String(existing.engine||'').includes('v31_5')||existing.profilePolicy==='manual_owner_only'));
+  const hasGoodExisting=!!(existingFresh&&existing.ok&&existing.images&&(existing.images.renderPro||existing.images.productTransparent||existing.images.productWhite));
+  if(key && !force && !imageDataUrl && !imageUrl && hasGoodExisting){
+    return {ok:true,version:'V31.5_cached',mode:'cached_'+mode,cached:true,message:'Render/analisi GPU già presente: non ho rifatto download né rigenerazione.',gpuVision:existing,savedGpuVision:existing,config:v3100PublicConfig()};
+  }
+  global.__spesaGpuVisionLocks=global.__spesaGpuVisionLocks||new Map();
+  const lockKey=[key||'direct',mode,force?'force':'cache',hashStable(String(imageUrl||'')+String(imageDataUrl||'').slice(0,120))].join('|');
+  if(!force && global.__spesaGpuVisionLocks.has(lockKey)){
+    try{ return await global.__spesaGpuVisionLocks.get(lockKey); }catch(_){ }
+  }
+  const job=(async()=>{
+    let resolved=null;
+    if(mode==='render' && key && !imageDataUrl && !imageUrl) resolved=await v3130ResolveBestReferenceForGpuRender(key);
+    if(!resolved) resolved=await v3100ResolveImageSource({key,imageDataUrl,imageUrl});
+    if(resolved.error) return {ok:false,reason:resolved.error,config:v3100PublicConfig()};
+    const call=await v3100CallGpuVision(resolved.buffer,resolved.mime,mode,resolved.filename);
+    if(!call.ok) return call;
+    const payload=call.data||{};
+    if(resolved.reference){ payload.usedReference=resolved.reference; payload.message=(payload.message||'')+' · render arricchito da reference online'; }
+    payload.teacherOpenAI=payload.teacherOpenAI||{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI eseguita in questa analisi.'};
+    const saved=key?await v3100PersistGpuVision(key,payload,mode,resolved):null;
+    return {ok:!!payload.ok,version:'V31.5_bridge',mode,source:resolved.source,usedReference:resolved.reference||null,gpuVision:payload,savedGpuVision:saved,config:v3100PublicConfig(),cached:false,force:!!force};
+  })();
+  if(!force) global.__spesaGpuVisionLocks.set(lockKey,job);
+  try{ return await job; }
+  finally{ if(!force) global.__spesaGpuVisionLocks.delete(lockKey); }
 }
 try{ const prevFolder=v2842PublicObjectFolder; if(typeof prevFolder==='function'&&!global.__v3100GpuFolderWrapped){ v2842PublicObjectFolder=function(record={}){ const out=prevFolder.call(this,record)||{}; out.gpuVisionV31=(record.objectFolder&&record.objectFolder.gpuVisionV31)||record.gpuVisionV31||null; return out; }; global.__v3100GpuFolderWrapped=true; } }catch(_){ }
-try{ const prevBrain=publicServerBrainV2840; if(typeof prevBrain==='function'&&!global.__v3100BrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prevBrain.call(this,opts||{})||{}; out.version='V31.3 GPU Vision Render Brain'; out.gpuVisionV31=v3100PublicConfig(); return out; }; global.__v3100BrainWrapped=true; } }catch(_){ }
-try{ const prevPreflight=preflightSnapshotV98; if(typeof prevPreflight==='function'&&!global.__v3100PreflightWrapped){ preflightSnapshotV98=function(){ const s=prevPreflight.call(this)||{}; s.version='V31.3'; s.gpuVisionV31=v3100PublicConfig(); return s; }; global.__v3100PreflightWrapped=true; } }catch(_){ }
-console.log('[Spesa Pronta] V31.3 GPU Vision Render Brain active');
+try{ const prevBrain=publicServerBrainV2840; if(typeof prevBrain==='function'&&!global.__v3100BrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prevBrain.call(this,opts||{})||{}; out.version='V31.5 GPU Vision Render Brain'; out.gpuVisionV31=v3100PublicConfig(); return out; }; global.__v3100BrainWrapped=true; } }catch(_){ }
+try{ const prevPreflight=preflightSnapshotV98; if(typeof prevPreflight==='function'&&!global.__v3100PreflightWrapped){ preflightSnapshotV98=function(){ const s=prevPreflight.call(this)||{}; s.version='V31.5'; s.gpuVisionV31=v3100PublicConfig(); return s; }; global.__v3100PreflightWrapped=true; } }catch(_){ }
+console.log('[Spesa Pronta] V31.5 GPU Vision Render Brain active');
+
+
+// =============================================================
+// V31.4 RENDER RAM SAFE FINAL WRAPPER
+// =============================================================
+(function(){
+  try{
+    global.__SPESA_PRONTA_BUILD_ID='V31.5-RENDER-BRAIN-BUGFIX-3150';
+    if(typeof publicServerBrainV2840==='function' && !global.__v3140RamSafeBrainWrapped){
+      const prev=publicServerBrainV2840;
+      publicServerBrainV2840=function(opts={}){
+        const out=prev.call(this,opts||{})||{};
+        out.version='V31.5 Render Brain Bugfix';
+        out.ramSafeV314=spesaRamSafeHealth();
+        return out;
+      };
+      global.__v3140RamSafeBrainWrapped=true;
+    }
+    if(typeof preflightSnapshotV98==='function' && !global.__v3140RamSafePreflightWrapped){
+      const prev=preflightSnapshotV98;
+      preflightSnapshotV98=function(){
+        const s=prev.call(this)||{};
+        s.version='V31.5';
+        s.ramSafeV314=spesaRamSafeHealth();
+        s.checks=Array.isArray(s.checks)?s.checks:[];
+        s.checks.push({id:'render_ram_safe',label:'Render RAM Safe',ok:!!SPESA_RAM_SAFE,message:SPESA_RAM_SAFE?`Modalità ${SPESA_MEMORY_MODE}: cache/foto/dataset alleggeriti`:'Modalità PRO locale: RAM Safe non forzato'});
+        s.brain=Object.assign({},s.brain||{},{version:'V31.5',ramSafe:'active',memoryMode:SPESA_MEMORY_MODE});
+        return s;
+      };
+      global.__v3140RamSafePreflightWrapped=true;
+    }
+    if(SPESA_RAM_SAFE && !global.__v3140RamSafeInterval){
+      const intervalMs=Math.max(30000, Math.min(300000, Number(process.env.SPESA_MEMORY_LOG_INTERVAL_MS||60000)));
+      const logEnabled=!/^false$/i.test(String(process.env.SPESA_MEMORY_LOGS || (IS_RENDER_RUNTIME?'true':'false')));
+      if(logEnabled){
+        global.__v3140RamSafeInterval=setInterval(()=>{
+          try{ console.log('[Spesa Pronta] V31.5 RAM health', JSON.stringify(spesaRamSafeMemoryMb()), 'mode='+SPESA_MEMORY_MODE); }catch(_){}
+        }, intervalMs);
+        try{ global.__v3140RamSafeInterval.unref?.(); }catch(_){}
+      }
+    }
+    console.log(`[Spesa Pronta] V31.5 Render Brain Bugfix active mode=${SPESA_MEMORY_MODE} render=${IS_RENDER_RUNTIME} seedLazy=${!!getVisionSeedMemory().lazy} htmlScrapeDisabled=${String(process.env.DISABLE_GOOGLE_HTML_SCRAPE||'')==='1'} gpuEnabled=${String(process.env.GPU_VISION_ENABLED||'').toLowerCase()==='true'}`);
+  }catch(e){ console.warn('[Spesa Pronta] V31.4 Render RAM Safe wrapper warning', e?.message||e); }
+})();
