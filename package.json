@@ -1,6 +1,6 @@
 {
   "name": "spesa-pronta-deploy",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "type": "module",
   "scripts": {
     "start": "node server.js",
@@ -13,5 +13,5 @@
     "pg": "^8.13.1",
     "sharp": "^0.34.5"
   },
-  "spesaProntaBuild": "v31_4_render_ram_safe_3140"
+  "spesaProntaBuild": "v31_5_1_npm_registry_fix_3151"
 }

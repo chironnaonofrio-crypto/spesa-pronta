@@ -211,7 +211,7 @@
           <h1>Cervello Server</h1>
           <p class="subtitle">Memoria prodotti · foto reali · valori titolare · ricerca precisa</p>
         </div>
-        <span class="build" id="buildBadge">V31.5</span>
+        <span class="build" id="buildBadge">V31.5.1</span>
       </div>
     </header>
 
@@ -383,12 +383,12 @@
     const barcode=gpu.barcodeCandidate||gpu.product?.barcode||gpu.product?.ean||gpu.barcode||'';
     const refsStatus=refs.length?refs.length+' fonti':'fonti non ancora salvate';
     const labelText=gpu.labelBox?`${gpu.labelBox.confidence||'—'}% · ${gpu.labelBox.method||'label_only'}`:'non ancora rilevata';
-    const gpuSummary=gpu&&gpu.ok?`<div class="gpuBox"><h4><span>⚡ GPU Vision V31.5 · ordinata</span><small>${esc(gpu.version||'31.5')}</small></h4><div class="gpuFacts"><span>confidence ${esc(gpu.product?.confidence||gpu.confidence||'—')}</span><span>${esc(gpuShape.family||'forma letta')}</span><span>profilo: manuale</span><span>${esc((gpuColors||[]).slice(0,5).join(' ')||'colori in memoria')}</span>${gpu.usedReference?'<span class="ok">reference usata</span>':''}${gpu.cached?'<span class="ok">cache</span>':''}</div></div>`:`<div class="gpuBox"><h4><span>⚡ GPU Vision V31.5</span><small>pronta</small></h4><div class="gpuFacts"><span class="warn">Premi Render GPU PRO. Se esiste già un render, non lo rigenera e non riscarica 20 immagini.</span></div></div>`;
+    const gpuSummary=gpu&&gpu.ok?`<div class="gpuBox"><h4><span>⚡ GPU Vision V31.5.1 · ordinata</span><small>${esc(gpu.version||'31.5')}</small></h4><div class="gpuFacts"><span>confidence ${esc(gpu.product?.confidence||gpu.confidence||'—')}</span><span>${esc(gpuShape.family||'forma letta')}</span><span>profilo: manuale</span><span>${esc((gpuColors||[]).slice(0,5).join(' ')||'colori in memoria')}</span>${gpu.usedReference?'<span class="ok">reference usata</span>':''}${gpu.cached?'<span class="ok">cache</span>':''}</div></div>`:`<div class="gpuBox"><h4><span>⚡ GPU Vision V31.5.1</span><small>pronta</small></h4><div class="gpuFacts"><span class="warn">Premi Render GPU PRO. Se esiste già un render, non lo rigenera e non riscarica 20 immagini.</span></div></div>`;
     const candidatesHtml=refs.length?`<div class="v30RefGrid">${refs.slice(0,8).map(r=>`<div class="v30RefCard"><img src="${esc(srcOf(r)||fallback)}" data-fallback-src="${esc(fallback)}" alt="reference"><b>${esc(r.productName||r.title||'Reference')}</b><small>${esc(r.brand||'')} ${r.source?'· '+esc(r.source):''}</small><small>score ${esc(r.score||'—')}</small></div>`).join('')}</div>`:'<div class="empty">Nessuna fonte salvata. Il server prova fonti gratuite/API e salva solo poche immagini deduplicate.</div>';
     const rotButtons=`<div class="gpu360Nav"><button class="primary mini" ${front?`data-rot-src="${esc(front)}" data-rot-label="Fronte"`: 'disabled'}>Fronte</button><button class="ghost mini" ${side?`data-rot-src="${esc(side)}" data-rot-label="Lato trovato"`: 'disabled'}>Lato</button><button class="ghost mini" ${back?`data-rot-src="${esc(back)}" data-rot-label="Retro trovato"`: 'disabled'}>Retro</button></div>`;
-    return `<div class="section"><h3>🧊 Render AI · GPU Vision V31.5</h3>
+    return `<div class="section"><h3>🧊 Render AI · GPU Vision V31.5.1</h3>
       <div class="v30Actions"><button class="primary" id="btnGpuRenderProduct">Render GPU PRO</button><button class="ghost" id="btnGpuAnalyzeProduct">Analizza prodotto puro</button><button class="ghost" id="btnGpuRenderForce">Rigenera se non piace</button><button class="ghost" id="btnGpu360Refresh">Trova dettagli + 360°</button><button class="ghost" data-open-photos="1">Apri tab Foto</button><button class="ghost" id="btnGpuHealth">Test GPU</button></div>
-      <div class="v30Info">V31.5: niente spam di download, profilo foto solo manuale, crop etichetta separato, render salvabile, 360° virtuale ruotabile. Se il render esiste già, viene mostrato dalla memoria senza rifarlo.</div>
+      <div class="v30Info">V31.5.1: niente spam di download, profilo foto solo manuale, crop etichetta separato, render salvabile, 360° virtuale ruotabile. Se il render esiste già, viene mostrato dalla memoria senza rifarlo.</div>
       ${gpuSummary}
       <div class="v30Grid">
         <div class="v30Card"><h4><span>Render GPU PRO</span><small>${gpu.cached?'memoria':'render'}</small></h4><div class="gpuRenderHero"><img id="gpuRenderMain" src="${esc(renderSrc)}" alt="Render GPU PRO"><button class="primary" id="btnSaveGpuProfileMain" ${renderSrc?'':'disabled'}>Salva render come foto profilo</button><div class="gpuSourceNote">Il server non cambia più la foto profilo da solo: la imposti tu da qui.</div></div></div>
@@ -543,7 +543,7 @@
     d.querySelector('#btnV30OpenOfficial')?.addEventListener('click',()=>{const src=(d.querySelector('#v30OfficialRenderImg')?.src)||(currentProduct()?.fields?.objectFolder?.officialRenderV3000?.officialDataUrl)||(currentProduct()?.fields?.objectFolder?.officialRenderV3000?.studioDataUrl)||'';const w=window.open('about:blank','_blank');if(w){w.document.write('<title>Render ufficiale V30</title><body style="margin:0;background:#f4f8ff;display:grid;place-items:center;min-height:100vh"><img style="max-width:96vw;max-height:96vh;object-fit:contain;border-radius:22px" src="'+String(src).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"></body>');}});
     d.querySelector('#btnV30CopySources')?.addEventListener('click',()=>copyText(JSON.stringify(currentProduct()?.fields?.objectFolder?.referenceImagesV3000||currentProduct()?.fields?.objectFolder?.referenceCandidatesV3000||[],null,2),'Fonti render copiate ✅'));
     d.querySelector('#btnV30TestGoogle')?.addEventListener('click',v30TestGoogleApi);
-    d.querySelector('#btnV302ForceMarker')?.addEventListener('click',()=>alert('V31.5 attiva ✅ bug foto/memoria + render 360 virtuale + profilo manuale'));
+    d.querySelector('#btnV302ForceMarker')?.addEventListener('click',()=>alert('V31.5.1 attiva ✅ bug foto/memoria + render 360 virtuale + profilo manuale'));
     d.querySelector('#btnGpuAnalyzeProduct')?.addEventListener('click',()=>gpuVisionAnalyzeSelected('analyze',false));
     d.querySelector('#btnGpuRenderProduct')?.addEventListener('click',()=>gpuVisionAnalyzeSelected('render',false)); 
     d.querySelector('#btnGpuRenderForce')?.addEventListener('click',()=>gpuVisionAnalyzeSelected('render',true));
