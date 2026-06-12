@@ -1,0 +1,5 @@
+V31.6 PRO Render 3D
+- Render PRO 2D da foto profilo/frontale
+- Etichetta solo label
+- Render 360 3D virtuale fronte/retro
+- Salva foto in galleria senza impostare profilo

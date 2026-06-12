@@ -65,7 +65,7 @@ const SPESA_MAX_BARCODE_CACHE = Math.max(80, Math.min(5000, Number(process.env.M
 const SPESA_MAX_GLOBAL_PRODUCTS = Math.max(120, Math.min(5000, Number(process.env.MAX_GLOBAL_PRODUCTS || process.env.SPESA_MAX_GLOBAL_PRODUCTS || (SPESA_RAM_SAFE ? 800 : 2500))));
 const SPESA_MAX_PRODUCT_PHOTOS = Math.max(6, Math.min(36, Number(process.env.MAX_PRODUCT_PHOTOS || process.env.SPESA_MAX_PRODUCT_PHOTOS || (SPESA_RAM_SAFE ? 8 : 36))));
 const SPESA_MAX_DATA_URL_CHARS = Math.max(0, Math.min(300000, Number(process.env.MAX_STORED_DATA_URL_CHARS || process.env.SPESA_MAX_DATA_URL_CHARS || (SPESA_RAM_SAFE ? 0 : 180000))));
-// V31.5.2: in modalità RAM-safe non salviamo le foto enormi, ma conserviamo preview leggere per non rompere galleria/profilo/render.
+// V31.7: in modalità RAM-safe non salviamo le foto enormi, ma conserviamo preview leggere per non rompere galleria/profilo/render.
 const SPESA_MAX_THUMB_DATA_URL_CHARS = Math.max(20000, Math.min(300000, Number(process.env.MAX_STORED_THUMB_DATA_URL_CHARS || process.env.SPESA_MAX_THUMB_DATA_URL_CHARS || (SPESA_RAM_SAFE ? 140000 : 240000))));
 if(SPESA_RAM_SAFE){
   if(process.env.DISABLE_GOOGLE_HTML_SCRAPE === undefined) process.env.DISABLE_GOOGLE_HTML_SCRAPE = '1';
@@ -375,7 +375,7 @@ function spesaRamSafeString(v='', key=''){
   const s=String(v==null?'':v);
   const k=String(key||'').toLowerCase();
   if(spesaRamSafeIsDataUrl(s) || spesaRamSafeLooksBase64(s)){
-    // V31.5.2: se è una preview/thumb o un render leggero, conservarla anche con MAX_STORED_DATA_URL_CHARS=0.
+    // V31.7: se è una preview/thumb o un render leggero, conservarla anche con MAX_STORED_DATA_URL_CHARS=0.
     const previewKey=/(thumb|thumbdataurl|preview|profile|representative|renderpro|productwhite|labelcrop|labelcropdataurl|displayurl|imagedataurl)$/i.test(k);
     const limit=previewKey ? SPESA_MAX_THUMB_DATA_URL_CHARS : SPESA_MAX_DATA_URL_CHARS;
     if(limit<=0 || s.length>limit) return '';
@@ -489,12 +489,12 @@ function spesaRamSafeHealth(){
   const bb=brain.barcodeBrain||{products:{}};
   return {
     ok:true,
-    version:'V31.5 Render Brain Bugfix',
+    version:'V31.7 V32 GPU Endpoint Bridge',
     active:!!SPESA_RAM_SAFE,
     mode:SPESA_MEMORY_MODE,
     renderRuntime:IS_RENDER_RUNTIME,
     seedLazy:!!getVisionSeedMemory().lazy,
-    buildId:global.__SPESA_PRONTA_BUILD_ID||'V31.5-RENDER-BRAIN-BUGFIX',
+    buildId:global.__SPESA_PRONTA_BUILD_ID||'V31.7-V32-ENDPOINT-BRIDGE',
     memory:spesaRamSafeMemoryMb(),
     limits:{diagnosticEvents:SPESA_MAX_DIAGNOSTIC_EVENTS,memoryCache:SPESA_MAX_MEMORY_CACHE,barcodeCache:SPESA_MAX_BARCODE_CACHE,globalProducts:SPESA_MAX_GLOBAL_PRODUCTS,productPhotos:SPESA_MAX_PRODUCT_PHOTOS,dataUrlChars:SPESA_MAX_DATA_URL_CHARS, thumbDataUrlChars:SPESA_MAX_THUMB_DATA_URL_CHARS},
     counts:{globalProducts:Object.keys(gpm.products||{}).length,knowledgeCache:Object.keys(kc.entries||{}).length,barcodeProducts:Object.keys(bb.products||{}).length,learningAudit:(brain.learningAudit||[]).length,households:Object.keys(db?.households||{}).length},
@@ -1180,7 +1180,7 @@ function v2874DeleteObjectPhotos(record={}, photoIds=[], actor=''){
   folder.photos=Array.isArray(folder.photos)?folder.photos:[];
   const removed=folder.photos.filter(p=>ids.includes(String(p.id||'')));
   if(!removed.length){
-    // V31.5: se la foto era già stata rimossa/compattata non bloccare la UI.
+    // V31.7: se la foto era già stata rimossa/compattata non bloccare la UI.
     folder.photoCount=folder.photos.length;
     folder.updatedAt=v2842Now();
     return {ok:true, alreadyMissing:true, removedCount:0, remainingPhotoCount:folder.photoCount, message:'Foto già rimossa o non più presente'};
@@ -1188,7 +1188,7 @@ function v2874DeleteObjectPhotos(record={}, photoIds=[], actor=''){
   folder.photos=folder.photos.filter(p=>!ids.includes(String(p.id||'')));
   const repDeleted=folder.representativePhotoId && ids.includes(String(folder.representativePhotoId||''));
   if(repDeleted){
-    // V31.5: non scegliere più in automatico una nuova foto profilo dopo una cancellazione.
+    // V31.7: non scegliere più in automatico una nuova foto profilo dopo una cancellazione.
     // Il titolare deve decidere manualmente con “Imposta come foto articolo”.
     folder.representativePhotoId='';
     folder.representativePhoto=null;
@@ -3993,6 +3993,46 @@ const server = http.createServer(async (req,res)=>{
       return send(res,200,result);
     }
 
+
+    if(req.method === 'POST' && (pathName === '/api/gpu-vision/render-pro' || pathName === '/gpu-vision/render-pro')) {
+      const auth=v3100AuthHousehold(req,url,body);
+      if(auth.error) return send(res, auth.error.status, auth.error.body);
+      const key=String(body.key||url.searchParams.get('key')||'').trim();
+      const force=body.force===true || body.force==='1' || body.force==='true' || url.searchParams.get('force')==='1' || url.searchParams.get('force')==='true';
+      const result=await v3160RenderPro2D(key,{force});
+      if(result.ok) await saveDb().catch(()=>{});
+      return send(res,200,result);
+    }
+
+    if(req.method === 'POST' && (pathName === '/api/gpu-vision/label' || pathName === '/gpu-vision/label')) {
+      const auth=v3100AuthHousehold(req,url,body);
+      if(auth.error) return send(res, auth.error.status, auth.error.body);
+      const key=String(body.key||url.searchParams.get('key')||'').trim();
+      const force=body.force===true || body.force==='1' || body.force==='true' || url.searchParams.get('force')==='1' || url.searchParams.get('force')==='true';
+      const result=await v3160ExtractLabelOnly(key,{force});
+      if(result.ok) await saveDb().catch(()=>{});
+      return send(res,200,result);
+    }
+
+    if(req.method === 'POST' && (pathName === '/api/gpu-vision/render-3d' || pathName === '/gpu-vision/render-3d')) {
+      const auth=v3100AuthHousehold(req,url,body);
+      if(auth.error) return send(res, auth.error.status, auth.error.body);
+      const key=String(body.key||url.searchParams.get('key')||'').trim();
+      const result=await v3160BuildVirtual3D(key,{});
+      if(result.ok) await saveDb().catch(()=>{});
+      return send(res,200,result);
+    }
+
+    if(req.method === 'POST' && (pathName === '/api/gpu-vision/save-gallery' || pathName === '/gpu-vision/save-gallery')) {
+      const auth=v3100AuthHousehold(req,url,body);
+      if(auth.error) return send(res, auth.error.status, auth.error.body);
+      const key=String(body.key||url.searchParams.get('key')||'').trim();
+      const imageKey=String(body.imageKey||url.searchParams.get('imageKey')||'renderPro2D').trim();
+      const dataUrl=String(body.dataUrl||'').trim();
+      const result=await v3160SaveGpuImageToGallery(key,{imageKey,dataUrl});
+      if(result.ok) await saveDb().catch(()=>{});
+      return send(res,200,result);
+    }
 
     if((req.method === 'GET' || req.method === 'POST') && (pathName === '/api/gpu-vision/health' || pathName === '/gpu-vision/health')) {
       const auth=v3100AuthHousehold(req,url,body);
@@ -9688,11 +9728,14 @@ function v3100GpuConfig(){
     timeoutMs:Number.isFinite(timeoutMs)&&timeoutMs>1000?timeoutMs:45000,
     analyzePath:String(process.env.GPU_VISION_ANALYZE_PATH||'/analyze-product'),
     renderPath:String(process.env.GPU_VISION_RENDER_PATH||'/render-product'),
+    renderProPath:String(process.env.GPU_VISION_RENDER_PRO_PATH||'/render-pro'),
+    labelPath:String(process.env.GPU_VISION_LABEL_PATH||'/label-pro'),
+    render3dPath:String(process.env.GPU_VISION_RENDER_3D_PATH||'/render-3d'),
     healthPath:String(process.env.GPU_VISION_HEALTH_PATH||'/health'),
-    version:String(process.env.GPU_VISION_VERSION||'31.0')
+    version:String(process.env.GPU_VISION_VERSION||'32.0')
   };
 }
-function v3100PublicConfig(){ const c=v3100GpuConfig(); return {enabled:c.enabled,urlConfigured:!!c.url,tokenConfigured:!!c.token,timeoutMs:c.timeoutMs,version:c.version,paths:{health:c.healthPath,analyze:c.analyzePath,render:c.renderPath},urlMasked:c.url?c.url.replace(/https?:\/\//,'').replace(/^(.{6}).+(-\d+\.proxy\.runpod\.net)$/,'$1…$2'):''}; }
+function v3100PublicConfig(){ const c=v3100GpuConfig(); return {enabled:c.enabled,urlConfigured:!!c.url,tokenConfigured:!!c.token,timeoutMs:c.timeoutMs,version:c.version,paths:{health:c.healthPath,analyze:c.analyzePath,render:c.renderPath,renderPro:c.renderProPath,label:c.labelPath,render3d:c.render3dPath},urlMasked:c.url?c.url.replace(/https?:\/\//,'').replace(/^(.{6}).+(-\d+\.proxy\.runpod\.net)$/,'$1…$2'):''}; }
 function v3100AuthHousehold(req,url,body={}){
   const householdId=String(body.householdId||url.searchParams.get('householdId')||'').trim();
   const bearer=String(req.headers.authorization||'').replace(/^Bearer\s+/,'').trim();
@@ -9756,7 +9799,7 @@ async function v3100ResolveImageSource({key='',imageDataUrl='',imageUrl=''}={}){
   }
   return {error:'missing_image'};
 }
-async function v3100CallGpuVision(buffer,mime='image/jpeg',mode='analyze',filename='product.jpg'){
+async function v3100CallGpuVision(buffer,mime='image/jpeg',mode='analyze',filename='product.jpg',opts={}){
   const cfg=v3100GpuConfig();
   if(!cfg.enabled) return {ok:false,reason:'gpu_disabled',config:v3100PublicConfig()};
   if(!cfg.url || !cfg.token) return {ok:false,reason:'gpu_not_configured',config:v3100PublicConfig()};
@@ -9765,11 +9808,16 @@ async function v3100CallGpuVision(buffer,mime='image/jpeg',mode='analyze',filena
   try{
     const form=new FormData();
     form.append('image', new Blob([buffer],{type:mime||'image/jpeg'}), filename||'product.jpg');
-    const path=mode==='render'?cfg.renderPath:cfg.analyzePath;
+    if(opts && opts.backBuffer){ form.append('back', new Blob([opts.backBuffer],{type:opts.backMime||'image/jpeg'}), opts.backFilename||'back.jpg'); }
+    const path = mode==='render-pro' ? cfg.renderProPath
+      : mode==='label' || mode==='label-pro' ? cfg.labelPath
+      : mode==='render-3d' || mode==='3d' ? cfg.render3dPath
+      : mode==='render' ? cfg.renderPath
+      : cfg.analyzePath;
     const r=await fetch(`${cfg.url}${path}`,{method:'POST',headers:{'Authorization':`Bearer ${cfg.token}`,'X-Vision-Token':cfg.token},body:form,signal:ctrl.signal});
     const text=await r.text(); let data=null; try{data=JSON.parse(text)}catch{data={raw:text.slice(0,500)}}
-    if(!r.ok) return {ok:false,reason:'gpu_http_error',status:r.status,data,config:v3100PublicConfig()};
-    return {ok:true,status:r.status,data,config:v3100PublicConfig()};
+    if(!r.ok) return {ok:false,reason:'gpu_http_error',status:r.status,data,config:v3100PublicConfig(),path};
+    return {ok:true,status:r.status,data,config:v3100PublicConfig(),path};
   }catch(e){ return {ok:false,reason:e?.name==='AbortError'?'gpu_timeout':'gpu_fetch_error',error:String(e?.message||e),config:v3100PublicConfig()}; }
   finally{ clearTimeout(t); }
 }
@@ -9924,9 +9972,9 @@ async function v3100PersistGpuVision(key='', payload={}, mode='analyze', source=
       if(!dataUrl||!String(dataUrl).startsWith('data:image')) return;
       folder.photos=Array.isArray(folder.photos)?folder.photos:[];
       const id='gpu_'+kind+'_'+hashStable(String(dataUrl).slice(0,500)+String(dataUrl).slice(-500)).slice(0,14);
-      // V31.5: una sola foto GPU per tipo, niente valanghe dopo 3/4 click.
+      // V31.7: una sola foto GPU per tipo, niente valanghe dopo 3/4 click.
       folder.photos=folder.photos.filter(p=>!(String(p.source||'').startsWith('gpu_vision') && (String(p.kind||'')===('gpu_'+kind) || String(p.kind||'')===kind)) && p.id!==id);
-      folder.photos.unshift({id,kind:'gpu_'+kind,source:'gpu_vision_v31_5',at:Date.now(),dataUrl,thumbDataUrl:dataUrl,score,bytes:String(dataUrl).length,profileCandidate:kind==='render_pro'||kind==='product_white'||kind==='product_transparent',visibleEvidence:['GPU Vision V31.5',kind],colors:payload.product?.dominantColors||[]});
+      folder.photos.unshift({id,kind:'gpu_'+kind,source:'gpu_vision_v31_5',at:Date.now(),dataUrl,thumbDataUrl:dataUrl,score,bytes:String(dataUrl).length,profileCandidate:kind==='render_pro'||kind==='product_white'||kind==='product_transparent',visibleEvidence:['GPU Vision V31.7',kind],colors:payload.product?.dominantColors||[]});
     };
     add('render_pro',imgs.renderPro,100);
     add('product_transparent',imgs.productTransparent,98);
@@ -9934,7 +9982,7 @@ async function v3100PersistGpuVision(key='', payload={}, mode='analyze', source=
     // Il crop etichetta resta nel pannello Render, non nella galleria foto profilo.
     folder.photos=folder.photos.slice(0,Math.max(6, Number(process.env.MAX_PRODUCT_PHOTOS||12)||12));
     folder.photoCount=folder.photos.length;
-    // V31.5: MAI cambiare automaticamente la foto profilo da analisi/render GPU.
+    // V31.7: MAI cambiare automaticamente la foto profilo da analisi/render GPU.
     folder.hasRealProfilePhoto=!!(folder.representativePhotoId && folder.representativePhoto && ((folder.representativePhoto.dataUrl||folder.representativePhoto.thumbDataUrl||folder.representativePhoto.externalUrl)));
     if(Array.isArray(refined.referenceImages)&&refined.referenceImages.length){ folder.referenceImagesV3000=refined.referenceImages.slice(0,8); folder.referenceCandidatesV3000=refined.referenceImages.slice(0,8); }
     if(refined.render360){ folder.render360V3000=refined.render360; rec.render360V3000=refined.render360; }
@@ -9944,6 +9992,107 @@ async function v3100PersistGpuVision(key='', payload={}, mode='analyze', source=
   updateGlobalLearningAudit({type:'gpu-vision-v31-5-saved', key, productName:rec.productName||'', brand:rec.brand||'', mode, confidence:payload.product?.confidence||null, profilePolicy:'manual_owner_only'});
   return rec.gpuVisionV31;
 }
+
+// =============================================================
+// V31.7 PRO render controls: Render 2D, label-only, virtual 3D, save gallery.
+// =============================================================
+function v3160Rec(key=''){ ensureDbShape(); return db.assistantBrain?.globalProductMemory?.products?.[String(key||'').trim()]||null; }
+function v3160Src(p={}){ return String((p&&typeof p==='object')?(p.dataUrl||p.thumbDataUrl||p.fullDataUrl||p.originalDataUrl||p.externalUrl||p.imageUrl||p.url||''):(p||'')); }
+function v3160IsDetailPhoto(p={}){ const t=String([p.id,p.kind,p.source,p.note,(p.visibleEvidence||[]).join(' ')].filter(Boolean).join(' ')).toLowerCase(); return /label_crop|gpu_label|etichetta|barcode|ean|expiry|scadenza|ingredient|nutrition/.test(t); }
+function v3160PhotoScore(p={},folder={}){ const t=String([p.id,p.kind,p.source,p.note,(p.visibleEvidence||[]).join(' ')].filter(Boolean).join(' ')).toLowerCase(); let score=0; if(!v3160Src(p)) score-=999; if(v3160IsDetailPhoto(p)) score-=400; if(String(p.id||'')===String(folder.representativePhotoId||'')) score+=220; if(/owner_profile|manual|profilo|profile/.test(t)) score+=180; if(/product_front|front|fronte/.test(t)) score+=140; if(/retro|back|rear|dietro/.test(t)) score-=35; if(/gpu_product|product_white|product_transparent/.test(t)) score-=60; score+=Math.min(60,Number(p.score||0)/8); return score; }
+function v3160BackScore(p={},folder={}){ const t=String([p.id,p.kind,p.source,p.note,(p.visibleEvidence||[]).join(' ')].filter(Boolean).join(' ')).toLowerCase(); let score=0; if(!v3160Src(p)) score-=999; if(v3160IsDetailPhoto(p)) score-=400; if(/retro|back|rear|dietro/.test(t)) score+=220; if(String(p.id||'')!==String(folder.representativePhotoId||'')) score+=80; if(/owner_profile|manual|product_front|front/.test(t)) score+=40; score+=Math.min(60,Number(p.score||0)/10); return score; }
+function v3160DataUrlForBuffer(buffer,mime='image/jpeg'){ return buffer?`data:${mime};base64,${Buffer.from(buffer).toString('base64')}`:''; }
+async function v3160ResolvePreferredPhoto(key='',want='front'){
+  const rec=v3160Rec(key); if(!rec) return {error:'product_not_found'};
+  const folder=v2842EnsureObjectFolder(rec); const photos=Array.isArray(folder.photos)?folder.photos:[];
+  const candidates=[]; if(folder.representativePhoto)candidates.push(folder.representativePhoto); for(const p of photos)candidates.push(p); if(rec.profilePhoto)candidates.push(rec.profilePhoto);
+  const unique=[]; const seen=new Set(); for(const p of candidates){ const src=v3160Src(p); const id=String(p.id||src.slice(0,80)); if(!src||seen.has(id)) continue; seen.add(id); unique.push(p); }
+  unique.sort((a,b)=> want==='back' ? v3160BackScore(b,folder)-v3160BackScore(a,folder) : v3160PhotoScore(b,folder)-v3160PhotoScore(a,folder));
+  const photo=unique[0]; if(!photo) return {error:'no_product_photo'};
+  let src=v3160Src(photo); let parts=v3100DataUrlParts(src);
+  if(parts) return Object.assign({record:rec,photo,source:photo.kind||photo.source||'preferred_photo',filename:`${key}-${want}.jpg`},parts);
+  const fetched=await v3100FetchImageBuffer(src,12000); if(fetched) return Object.assign({record:rec,photo,source:photo.kind||photo.source||'preferred_photo_url',filename:`${key}-${want}.jpg`},fetched);
+  return {error:'photo_not_downloadable'};
+}
+async function v3160BuildRender2D(productDataUrl='',rec={}){
+  const sharp=await v2864Sharp(); if(!sharp||!/^data:image\//i.test(String(productDataUrl||''))) return '';
+  try{ const buf=v2864DataUrlBuffer(productDataUrl); if(!buf) return ''; const prod=await sharp(buf,{failOn:'none'}).rotate().ensureAlpha().resize({height:930,width:760,fit:'inside',withoutEnlargement:true}).png().toBuffer(); const shadow=await sharp(prod,{failOn:'none'}).ensureAlpha().blur(18).modulate({brightness:.2}).resize({height:930,width:760,fit:'inside',withoutEnlargement:true}).png().toBuffer(); const canvas=await sharp({create:{width:900,height:1100,channels:4,background:{r:255,g:255,b:255,alpha:0}}}).composite([{input:shadow,left:96,top:112},{input:prod,left:70,top:70}]).png({compressionLevel:8}).toBuffer(); return v3130DataUrlFromBuffer(canvas,'image/png'); }catch(_){ return productDataUrl; }
+}
+async function v3160ExtractLabelFromBuffer(buffer,mime='image/jpeg',rec={}){
+  const sharp=await v2864Sharp(); if(!sharp||!buffer) return null;
+  try{
+    const img=sharp(buffer,{failOn:'none'}).rotate().resize({width:1300,height:1300,fit:'inside',withoutEnlargement:true}).ensureAlpha();
+    const {data,info}=await img.raw().toBuffer({resolveWithObject:true}); const w=info.width,h=info.height;
+    const hot=new Uint8Array(w*h); let minX=w,minY=h,maxX=0,maxY=0,hotCount=0; const y0=Math.round(h*.16), y1=Math.round(h*.88), x0=Math.round(w*.08), x1=Math.round(w*.92);
+    for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++){ const idx=y*w+x,j=idx*4,a=data[j+3]; if(a<24) continue; const r=data[j],g=data[j+1],b=data[j+2],lum=v2864Lum(r,g,b),sat=v2864Sat(r,g,b); const cyanBody=(g>95&&b>95&&r<175&&g>r*1.02&&b>r*1.02&&sat>.10); const bgFloor=(lum>190&&sat<.18&&Math.abs(r-g)<28&&Math.abs(g-b)<32); const red=r>130&&r>g*1.08&&r>b*.92, blue=b>95&&b>r*.95&&b>g*.85, yellow=r>150&&g>110&&b<145, darkText=lum<92, whitePanel=lum>175&&sat<.22; const cue=!cyanBody && !bgFloor && (sat>.28||red||blue||yellow||darkText||whitePanel); if(cue){ hot[idx]=1; hotCount++; if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y; } }
+    if(hotCount<120) return null;
+    const rows=[]; let maxRow=1; for(let y=minY;y<=maxY;y++){ let n=0; for(let x=minX;x<=maxX;x+=2) if(hot[y*w+x]) n++; rows.push([y,n]); if(n>maxRow)maxRow=n; }
+    const rth=Math.max(3,maxRow*.18); let ry0=maxY,ry1=minY; for(const [y,n] of rows){ if(n>=rth){ if(y<ry0)ry0=y;if(y>ry1)ry1=y; } }
+    const cols=[]; let maxCol=1; for(let x=minX;x<=maxX;x++){ let n=0; for(let y=ry0;y<=ry1;y+=2) if(hot[y*w+x]) n++; cols.push([x,n]); if(n>maxCol)maxCol=n; }
+    const cth=Math.max(3,maxCol*.16); let cx0=maxX,cx1=minX; for(const [x,n] of cols){ if(n>=cth){ if(x<cx0)cx0=x;if(x>cx1)cx1=x; } }
+    if(cx1<=cx0||ry1<=ry0){ cx0=minX;cx1=maxX;ry0=minY;ry1=maxY; }
+    const maxW=Math.round(w*.62),maxH=Math.round(h*.36); if(cx1-cx0+1>maxW){ const c=Math.round((cx0+cx1)/2); cx0=Math.max(0,c-Math.round(maxW/2)); cx1=Math.min(w-1,c+Math.round(maxW/2)); } if(ry1-ry0+1>maxH){ const c=Math.round((ry0+ry1)/2); ry0=Math.max(0,c-Math.round(maxH/2)); ry1=Math.min(h-1,c+Math.round(maxH/2)); }
+    const padX=Math.round((cx1-cx0+1)*.05), padY=Math.round((ry1-ry0+1)*.07); cx0=v2879Clamp(cx0-padX,0,w-1); cx1=v2879Clamp(cx1+padX,0,w-1); ry0=v2879Clamp(ry0-padY,0,h-1); ry1=v2879Clamp(ry1+padY,0,h-1);
+    const label=await sharp(buffer,{failOn:'none'}).rotate().resize({width:w,height:h,fit:'fill'}).extract({left:cx0,top:ry0,width:Math.max(1,cx1-cx0+1),height:Math.max(1,ry1-ry0+1)}).resize({width:860,height:420,fit:'inside',withoutEnlargement:true}).jpeg({quality:94,mozjpeg:true}).toBuffer();
+    return {dataUrl:v3130DataUrlFromBuffer(label,'image/jpeg'),box:{x:cx0,y:ry0,w:cx1-cx0+1,h:ry1-ry0+1,sourceW:w,sourceH:h},confidence:Math.round(v2879Clamp(76+Math.min(20,hotCount/650),78,98)),method:'v31_7_label_only_color_text_detector'};
+  }catch(_){ return null; }
+}
+async function v3160RenderPro2D(key='',opts={}){
+  const rec=v3160Rec(key); if(!rec) return {ok:false,error:'product_not_found'}; const existing=rec.objectFolder?.gpuVisionV31||rec.gpuVisionV31||{}; if(!opts.force && existing?.images?.renderPro2D) return {ok:true,title:'Render PRO dalla memoria',message:'Render PRO già presente: non ho rigenerato.',cached:true,savedGpuVision:existing,gpuVision:existing};
+  const resolved=await v3160ResolvePreferredPhoto(key,'front'); if(resolved.error) return {ok:false,error:resolved.error,message:'Serve una foto profilo/frontale valida per generare il render PRO.'};
+  let payload=null; const call=await v3100CallGpuVision(resolved.buffer,resolved.mime,'render-pro',resolved.filename); if(call.ok&&call.data) payload=call.data;
+  if(!payload||!payload.ok){ const d=v3160DataUrlForBuffer(resolved.buffer,resolved.mime); payload={ok:true,version:'V31.7_local_fallback',product:{confidence:.55,shape:{family:'render_from_profile_photo'}},images:{productTransparent:d,productWhite:d},message:'GPU non ha prodotto render; uso foto profilo come base controllata.'}; }
+  const refined=await v3130RefineGpuPayload(payload,rec); const imgs=Object.assign({},payload.images||{},refined.images||{}); imgs.renderPro2D=imgs.renderPro||imgs.renderPro2D||await v3160BuildRender2D(imgs.productTransparent||imgs.productWhite||v3160DataUrlForBuffer(resolved.buffer,resolved.mime),rec); payload.images=imgs; payload.labelBox=refined.labelBox||payload.labelBox||null; payload.render360=refined.render360||payload.render360||null; payload.teacherOpenAI=payload.teacherOpenAI||{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: render PRO creato da foto profilo/frontale + GPU/server.'};
+  const saved=await v3100PersistGpuVision(key,payload,'render_pro_2d',resolved); if(saved){ saved.version='31.7'; saved.images=Object.assign({},saved.images||{},imgs); saved.model3D=saved.model3D||saved.render360||{}; }
+  return {ok:true,title:'Render PRO 2D creato',message:'Creato dalla foto profilo/frontale. Non ho cambiato foto profilo.',savedGpuVision:saved,gpuVision:payload,source:resolved.source};
+}
+async function v3160ExtractLabelOnly(key='',opts={}){
+  const rec=v3160Rec(key); if(!rec) return {ok:false,error:'product_not_found'}; const existing=rec.objectFolder?.gpuVisionV31||rec.gpuVisionV31||{}; if(!opts.force && (existing?.images?.labelOnly||existing?.images?.labelCrop)) return {ok:true,title:'Etichetta dalla memoria',message:'Etichetta già presente.',cached:true,savedGpuVision:existing,gpuVision:existing};
+  const folder=v2842EnsureObjectFolder(rec); const photos=Array.isArray(folder.photos)?folder.photos:[]; const candidates=[]; if(folder.representativePhoto)candidates.push(folder.representativePhoto); for(const p of photos)candidates.push(p); if(rec.profilePhoto)candidates.push(rec.profilePhoto);
+  const clean=[]; const seen=new Set(); for(const p of candidates){ const src=v3160Src(p); if(!src||v3160IsDetailPhoto(p)) continue; const id=String(p.id||src.slice(0,80)); if(seen.has(id)) continue; seen.add(id); clean.push(p); } clean.sort((a,b)=>v3160PhotoScore(b,folder)-v3160PhotoScore(a,folder));
+  let best=null,bestPhoto=null; for(const p of clean.slice(0,5)){ let parts=v3100DataUrlParts(v3160Src(p)); if(!parts){ const f=await v3100FetchImageBuffer(v3160Src(p),10000); if(f) parts=f; } if(!parts) continue; let lab=null; try{ const gpuLab=await v3100CallGpuVision(parts.buffer,parts.mime,'label-pro',`${key}-label.jpg`); const gd=gpuLab?.data||{}; if(gpuLab.ok&&gd.ok&&gd.images?.labelCrop){ lab={dataUrl:gd.images.labelCrop,confidence:gd.labelBox?.confidence||gd.product?.labelBox?.confidence||92,box:gd.labelBox||gd.product?.labelBox||{},method:gd.labelBox?.method||'v32_gpu_label_pro',barcode:gd.barcode||gd.product?.barcode||null}; } }catch(_){} if(!lab) lab=await v3160ExtractLabelFromBuffer(parts.buffer,parts.mime,rec); if(lab && (!best || lab.confidence>best.confidence)){ best=lab; bestPhoto=p; } }
+  if(!best){ const r=await v3160RenderPro2D(key,{force:opts.force}); const gv=r.savedGpuVision||{}; const src=gv.images?.labelCrop||gv.images?.labelOnly||''; if(src) best={dataUrl:src,confidence:gv.labelBox?.confidence||70,box:gv.labelBox||{},method:'v31_7_gpu_label_fallback'}; }
+  if(!best) return {ok:false,error:'label_not_found',message:'Non ho trovato una label chiara: carica una foto frontale/etichetta più vicina.'};
+  const current=rec.objectFolder?.gpuVisionV31||rec.gpuVisionV31||{ok:true,version:'31.7',images:{}}; current.ok=true; current.version='31.7'; current.images=Object.assign({},current.images||{},{labelOnly:best.dataUrl,labelCrop:best.dataUrl}); current.labelBox=Object.assign({},best.box||{},{confidence:best.confidence,method:best.method}); if(best.barcode) current.barcodeCandidate=best.barcode; current.teacherOpenAI=current.teacherOpenAI||{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: etichetta estratta dalle foto articolo con GPU V32 se disponibile.'}; rec.gpuVisionV31=current; const folder2=v2842EnsureObjectFolder(rec); folder2.gpuVisionV31=current; folder2.updatedAt=Date.now(); rec.updatedAt=Date.now();
+  return {ok:true,title:'Etichetta estratta',message:'Salvata solo label, senza usarla come foto profilo.',savedGpuVision:current,gpuVision:current,photoId:bestPhoto?.id||''};
+}
+async function v3160BuildVirtual3D(key='',opts={}){
+  const rec=v3160Rec(key); if(!rec) return {ok:false,error:'product_not_found'};
+  let current=rec.objectFolder?.gpuVisionV31||rec.gpuVisionV31||null;
+  const frontResolved=await v3160ResolvePreferredPhoto(key,'front');
+  if(frontResolved.error) return {ok:false,error:frontResolved.error,message:'Serve una foto frontale/profilo per generare il 360° 3D.'};
+  const backResolved=await v3160ResolvePreferredPhoto(key,'back');
+  let backOpts={}; let backDataUrl='';
+  if(backResolved&&!backResolved.error&&backResolved.buffer&&(!frontResolved.photo||String(backResolved.photo?.id||'')!==String(frontResolved.photo?.id||''))){
+    backOpts={backBuffer:backResolved.buffer,backMime:backResolved.mime,backFilename:`${key}-back.jpg`};
+    backDataUrl=v3160DataUrlForBuffer(backResolved.buffer,backResolved.mime);
+  }
+  let payload=null; const call=await v3100CallGpuVision(frontResolved.buffer,frontResolved.mime,'render-3d',frontResolved.filename,backOpts);
+  if(call.ok&&call.data&&call.data.ok) payload=call.data;
+  if(!payload){
+    const front=current?.images?.renderPro2D||current?.images?.productTransparent||current?.images?.productWhite||v3160DataUrlForBuffer(frontResolved.buffer,frontResolved.mime);
+    payload={ok:true,version:'31.7_local_3d_fallback',images:{renderPro2D:front,productTransparent:front,backTransparent:backDataUrl},render3d:{kind:'local_front_back_virtual_card',realMeshGlb:false,frames:[],frameCount:0,note:'Fallback locale: il worker V32 non ha risposto a /render-3d.'},product:{shape:{family:'local_virtual_3d',hasBack:!!backDataUrl}},message:'Fallback 3D locale'};
+  }
+  const frames=Array.isArray(payload.render3d?.frames)?payload.render3d.frames.slice(0,18):[];
+  payload.render3d=Object.assign({},payload.render3d||{}, {frames, frameCount:frames.length});
+  current=current||{ok:true,version:'31.7',images:{}};
+  current.ok=true; current.version='31.7'; current.images=Object.assign({},current.images||{},payload.images||{});
+  if(payload.images?.renderPro && !current.images.renderPro2D) current.images.renderPro2D=payload.images.renderPro;
+  const front=current.images.renderPro2D||current.images.renderPro||current.images.productTransparent||current.images.productWhite||v3160DataUrlForBuffer(frontResolved.buffer,frontResolved.mime);
+  const back=payload.images?.backTransparent||backDataUrl||'';
+  current.model3D={version:'31.7',at:Date.now(),mode:back?'v32_depth_front_back_orbit':'v32_depth_front_orbit',front,back,frames,frameCount:frames.length,thickness:0.24,depthPx:84,rotationReady:!!front,realMeshGlb:!!payload.render3d?.realMeshGlb,kind:payload.render3d?.kind||'showroom_depth_orbit',searchPolicy:'RunPod V32: segmentazione + depth/normal + orbit frames da GPU'};
+  current.render360=Object.assign({},current.render360||{},current.model3D);
+  current.depthMap=payload.images?.depthMap||current.depthMap||''; current.normalMap=payload.images?.normalMap||current.normalMap||'';
+  current.product=Object.assign({},current.product||{},payload.product||{});
+  current.teacherOpenAI=current.teacherOpenAI||{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: 360° creato dal worker GPU V32.'};
+  rec.gpuVisionV31=current; const folder=v2842EnsureObjectFolder(rec); folder.gpuVisionV31=current; folder.render360V3000=current.model3D; rec.render360V3000=current.model3D; folder.updatedAt=Date.now(); rec.updatedAt=Date.now();
+  return {ok:true,title:'Render 360° 3D V32 creato',message:back?'Usato fronte + retro con worker GPU V32.':'Creato 3D V32 dal fronte; carica retro per migliorarlo.',savedGpuVision:current,gpuVision:current,path:call.path||''};
+}
+async function v3160SaveGpuImageToGallery(key='',opts={}){
+  const rec=v3160Rec(key); if(!rec) return {ok:false,error:'product_not_found'}; const gv=rec.objectFolder?.gpuVisionV31||rec.gpuVisionV31||{}; const imgs=gv.images||{}; const imageKey=String(opts.imageKey||'renderPro2D'); const dataUrl=String(opts.dataUrl||imgs[imageKey]||imgs.renderPro2D||imgs.renderPro||imgs.productTransparent||imgs.productWhite||''); if(!/^data:image\//i.test(dataUrl)) return {ok:false,error:'image_missing',message:'Render non disponibile: premi Render PRO prima di salvare in galleria.'};
+  const folder=v2842EnsureObjectFolder(rec); folder.photos=Array.isArray(folder.photos)?folder.photos:[]; const id='saved_render_'+hashStable(String(dataUrl).slice(0,900)+String(dataUrl).slice(-900)+Date.now()).slice(0,16); const photo={id,kind:'saved_render_pro',source:'owner_saved_gpu_render_v31_7',at:Date.now(),dataUrl,thumbDataUrl:dataUrl,bytes:String(dataUrl).length,score:970,profileCandidate:true,visibleEvidence:['Render PRO salvato in galleria, non impostato come profilo']}; folder.photos.unshift(photo); folder.photos=folder.photos.slice(0,Math.max(8,Number(process.env.MAX_PRODUCT_PHOTOS||12)||12)); folder.photoCount=folder.photos.length; folder.updatedAt=Date.now(); rec.updatedAt=Date.now(); updateGlobalLearningAudit({type:'gpu-render-saved-gallery-v31-6',key,productName:rec.productName||'',brand:rec.brand||'',photoId:id}); return {ok:true,title:'Foto salvata in galleria',message:'Salvata senza impostarla come profilo prodotto.',photoId:id,photo};
+}
+
 async function v3100GpuVisionAnalyze({key='',imageDataUrl='',imageUrl='',mode='analyze',force=false}={}){
   ensureDbShape();
   const rec=key?db.assistantBrain?.globalProductMemory?.products?.[key]:null;
@@ -9951,7 +10100,7 @@ async function v3100GpuVisionAnalyze({key='',imageDataUrl='',imageUrl='',mode='a
   const existingFresh=!!(existing&&(String(existing.engine||'').includes('v31_5')||existing.profilePolicy==='manual_owner_only'));
   const hasGoodExisting=!!(existingFresh&&existing.ok&&existing.images&&(existing.images.renderPro||existing.images.productTransparent||existing.images.productWhite));
   if(key && !force && !imageDataUrl && !imageUrl && hasGoodExisting){
-    return {ok:true,version:'V31.5_cached',mode:'cached_'+mode,cached:true,message:'Render/analisi GPU già presente: non ho rifatto download né rigenerazione.',gpuVision:existing,savedGpuVision:existing,config:v3100PublicConfig()};
+    return {ok:true,version:'V31.7_cached',mode:'cached_'+mode,cached:true,message:'Render/analisi GPU già presente: non ho rifatto download né rigenerazione.',gpuVision:existing,savedGpuVision:existing,config:v3100PublicConfig()};
   }
   global.__spesaGpuVisionLocks=global.__spesaGpuVisionLocks||new Map();
   const lockKey=[key||'direct',mode,force?'force':'cache',hashStable(String(imageUrl||'')+String(imageDataUrl||'').slice(0,120))].join('|');
@@ -9969,16 +10118,16 @@ async function v3100GpuVisionAnalyze({key='',imageDataUrl='',imageUrl='',mode='a
     if(resolved.reference){ payload.usedReference=resolved.reference; payload.message=(payload.message||'')+' · render arricchito da reference online'; }
     payload.teacherOpenAI=payload.teacherOpenAI||{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI eseguita in questa analisi.'};
     const saved=key?await v3100PersistGpuVision(key,payload,mode,resolved):null;
-    return {ok:!!payload.ok,version:'V31.5_bridge',mode,source:resolved.source,usedReference:resolved.reference||null,gpuVision:payload,savedGpuVision:saved,config:v3100PublicConfig(),cached:false,force:!!force};
+    return {ok:!!payload.ok,version:'V31.7_bridge',mode,source:resolved.source,usedReference:resolved.reference||null,gpuVision:payload,savedGpuVision:saved,config:v3100PublicConfig(),cached:false,force:!!force};
   })();
   if(!force) global.__spesaGpuVisionLocks.set(lockKey,job);
   try{ return await job; }
   finally{ if(!force) global.__spesaGpuVisionLocks.delete(lockKey); }
 }
 try{ const prevFolder=v2842PublicObjectFolder; if(typeof prevFolder==='function'&&!global.__v3100GpuFolderWrapped){ v2842PublicObjectFolder=function(record={}){ const out=prevFolder.call(this,record)||{}; out.gpuVisionV31=(record.objectFolder&&record.objectFolder.gpuVisionV31)||record.gpuVisionV31||null; return out; }; global.__v3100GpuFolderWrapped=true; } }catch(_){ }
-try{ const prevBrain=publicServerBrainV2840; if(typeof prevBrain==='function'&&!global.__v3100BrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prevBrain.call(this,opts||{})||{}; out.version='V31.5 GPU Vision Render Brain'; out.gpuVisionV31=v3100PublicConfig(); return out; }; global.__v3100BrainWrapped=true; } }catch(_){ }
-try{ const prevPreflight=preflightSnapshotV98; if(typeof prevPreflight==='function'&&!global.__v3100PreflightWrapped){ preflightSnapshotV98=function(){ const s=prevPreflight.call(this)||{}; s.version='V31.5'; s.gpuVisionV31=v3100PublicConfig(); return s; }; global.__v3100PreflightWrapped=true; } }catch(_){ }
-console.log('[Spesa Pronta] V31.5 GPU Vision Render Brain active');
+try{ const prevBrain=publicServerBrainV2840; if(typeof prevBrain==='function'&&!global.__v3100BrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prevBrain.call(this,opts||{})||{}; out.version='V31.7 GPU Vision V32 Bridge'; out.gpuVisionV31=v3100PublicConfig(); return out; }; global.__v3100BrainWrapped=true; } }catch(_){ }
+try{ const prevPreflight=preflightSnapshotV98; if(typeof prevPreflight==='function'&&!global.__v3100PreflightWrapped){ preflightSnapshotV98=function(){ const s=prevPreflight.call(this)||{}; s.version='V31.7'; s.gpuVisionV31=v3100PublicConfig(); return s; }; global.__v3100PreflightWrapped=true; } }catch(_){ }
+console.log('[Spesa Pronta] V31.7 GPU Vision V32 Bridge active');
 
 
 // =============================================================
@@ -9986,12 +10135,12 @@ console.log('[Spesa Pronta] V31.5 GPU Vision Render Brain active');
 // =============================================================
 (function(){
   try{
-    global.__SPESA_PRONTA_BUILD_ID='V31.5-RENDER-BRAIN-BUGFIX-3150';
+    global.__SPESA_PRONTA_BUILD_ID='V31.7-V32-GPU-ENDPOINTS-3170';
     if(typeof publicServerBrainV2840==='function' && !global.__v3140RamSafeBrainWrapped){
       const prev=publicServerBrainV2840;
       publicServerBrainV2840=function(opts={}){
         const out=prev.call(this,opts||{})||{};
-        out.version='V31.5 Render Brain Bugfix';
+        out.version='V31.7 V32 GPU Endpoint Bridge';
         out.ramSafeV314=spesaRamSafeHealth();
         return out;
       };
@@ -10001,11 +10150,11 @@ console.log('[Spesa Pronta] V31.5 GPU Vision Render Brain active');
       const prev=preflightSnapshotV98;
       preflightSnapshotV98=function(){
         const s=prev.call(this)||{};
-        s.version='V31.5';
+        s.version='V31.7';
         s.ramSafeV314=spesaRamSafeHealth();
         s.checks=Array.isArray(s.checks)?s.checks:[];
         s.checks.push({id:'render_ram_safe',label:'Render RAM Safe',ok:!!SPESA_RAM_SAFE,message:SPESA_RAM_SAFE?`Modalità ${SPESA_MEMORY_MODE}: cache/foto/dataset alleggeriti`:'Modalità PRO locale: RAM Safe non forzato'});
-        s.brain=Object.assign({},s.brain||{},{version:'V31.5',ramSafe:'active',memoryMode:SPESA_MEMORY_MODE});
+        s.brain=Object.assign({},s.brain||{},{version:'V31.7',ramSafe:'active',memoryMode:SPESA_MEMORY_MODE});
         return s;
       };
       global.__v3140RamSafePreflightWrapped=true;
@@ -10015,11 +10164,11 @@ console.log('[Spesa Pronta] V31.5 GPU Vision Render Brain active');
       const logEnabled=!/^false$/i.test(String(process.env.SPESA_MEMORY_LOGS || (IS_RENDER_RUNTIME?'true':'false')));
       if(logEnabled){
         global.__v3140RamSafeInterval=setInterval(()=>{
-          try{ console.log('[Spesa Pronta] V31.5 RAM health', JSON.stringify(spesaRamSafeMemoryMb()), 'mode='+SPESA_MEMORY_MODE); }catch(_){}
+          try{ console.log('[Spesa Pronta] V31.7 RAM health', JSON.stringify(spesaRamSafeMemoryMb()), 'mode='+SPESA_MEMORY_MODE); }catch(_){}
         }, intervalMs);
         try{ global.__v3140RamSafeInterval.unref?.(); }catch(_){}
       }
     }
-    console.log(`[Spesa Pronta] V31.5 Render Brain Bugfix active mode=${SPESA_MEMORY_MODE} render=${IS_RENDER_RUNTIME} seedLazy=${!!getVisionSeedMemory().lazy} htmlScrapeDisabled=${String(process.env.DISABLE_GOOGLE_HTML_SCRAPE||'')==='1'} gpuEnabled=${String(process.env.GPU_VISION_ENABLED||'').toLowerCase()==='true'}`);
+    console.log(`[Spesa Pronta] V31.7 V32 GPU Endpoint Bridge active mode=${SPESA_MEMORY_MODE} render=${IS_RENDER_RUNTIME} seedLazy=${!!getVisionSeedMemory().lazy} htmlScrapeDisabled=${String(process.env.DISABLE_GOOGLE_HTML_SCRAPE||'')==='1'} gpuEnabled=${String(process.env.GPU_VISION_ENABLED||'').toLowerCase()==='true'}`);
   }catch(e){ console.warn('[Spesa Pronta] V31.4 Render RAM Safe wrapper warning', e?.message||e); }
 })();

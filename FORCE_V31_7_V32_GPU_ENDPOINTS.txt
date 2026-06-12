@@ -1,0 +1,1 @@
+V31.7 collega Spesa Pronta al worker RunPod V32: /render-pro /label-pro /render-3d.

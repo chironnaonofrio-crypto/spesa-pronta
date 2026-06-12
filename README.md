@@ -118,6 +118,6 @@ OPENAI_VISION_MODEL=gpt-4.1-mini
 
 La chiave API deve stare solo nel backend, mai nel frontend pubblico.
 
-# V31.5.2: conserva anteprime leggere anche in RAM-safe (non foto enormi)
+# V31.6: conserva anteprime leggere anche in RAM-safe (non foto enormi)
 MAX_STORED_THUMB_DATA_URL_CHARS=140000
 MAX_PRODUCT_PHOTOS=8
