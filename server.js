@@ -4046,7 +4046,7 @@ const server = http.createServer(async (req,res)=>{
       const auth=v3100AuthHousehold(req,url,body);
       if(auth.error) return send(res, auth.error.status, auth.error.body);
       const sessionId=String(body.sessionId||url.searchParams.get('sessionId')||'').trim();
-      const result=await v31106BuildAcquire3D(sessionId);
+      const result=await v31106BuildAcquire3D(sessionId,{forcePreview:body.forcePreview===true||body.forcePreview==='1'||body.forcePreview==='true'||body.buildMode==='preview'});
       if(result.ok) await saveDb().catch(()=>{});
       return send(res,result.ok?200:400,result);
     }
@@ -9894,8 +9894,8 @@ async function v3100GpuVisionHealth(){
   try{
     const r=await fetch(`${cfg.url}${cfg.healthPath}`,{headers:{'Authorization':`Bearer ${cfg.token}`,'X-Vision-Token':cfg.token},signal:ctrl.signal});
     let data={}; try{data=await r.json()}catch{data={raw:await r.text().catch(()=> '')}}
-    return {ok:r.ok,enabled:true,version:'V31.10.7_V33.4.4_video_live_3d_bridge',config:v3100PublicConfig(),gpuResponse:data,status:r.status};
-  }catch(e){ return {ok:false,enabled:true,version:'V31.10.7_V33.4.4_video_live_3d_bridge',config:v3100PublicConfig(),error:String(e?.message||e)}; }
+    return {ok:r.ok,enabled:true,version:'V31.10.14_V33.4.12_live_build_fix_bridge',config:v3100PublicConfig(),gpuResponse:data,status:r.status};
+  }catch(e){ return {ok:false,enabled:true,version:'V31.10.14_V33.4.12_live_build_fix_bridge',config:v3100PublicConfig(),error:String(e?.message||e)}; }
   finally{ clearTimeout(t); }
 }
 function v3100SlimGpuPayload(data={}){
@@ -10422,7 +10422,58 @@ function v31106SessionPublic(s={}){
     debug:{frontDescriptor:!!s.frontDescriptor,lastDescriptor:!!s.lastDescriptor,viewDescriptors:Object.keys(s.viewDescriptors||{}),barcodeCandidates:s.barcodeCandidates||[],lastMetrics:s.lastMetrics||null,readyStreak:Number(s.readyStreak||0),duplicateStreak:Number(s.duplicateStreak||0),gpuErrorStreak:Number(s.gpuErrorStreak||0),lastAcceptedView:s.lastAcceptedView||'',qualityHint:s.qualityHint||''}
   };
 }
-function v31106PickBestFrame(s={},view='front'){ const frames=Array.isArray(s.frames)?s.frames:[]; let best=null; for(const f of frames){ let score=Number(f.score||0); if(f.view===view) score+=45; if(view==='front' && Array.isArray(f.parts)&&f.parts.includes('frontLabel')) score+=24; if(view==='back' && Array.isArray(f.parts)&&f.parts.includes('barcode')) score+=18; if(!best||score>best._score){ best=Object.assign({_score:score},f); } } return best; }
+function v31106PickBestFrame(s={},view='front',opts={}){
+  const frames=Array.isArray(s.frames)?s.frames:[];
+  if(!frames.length) return null;
+  const partsOf=f=>Array.isArray(f.parts)?f.parts:[];
+  const scoreOf=f=>Number(f.score||0)+Number(f.viewConfidence||0)+(f.frameType==='wide_view'?12:0)+(f.frameType==='tilt_view'?12:0)+(f.frameType==='detail_view'?-8:0);
+  let pool=[];
+  if(view==='front'){
+    pool=frames.filter(f=>f.view==='front');
+    if(!pool.length) pool=frames.filter(f=>partsOf(f).includes('frontLabel') && f.frameType!=='detail_view');
+  }else if(view==='back'){
+    pool=frames.filter(f=>f.view==='back');
+    if(!pool.length) pool=frames.filter(f=>partsOf(f).some(p=>['barcode','rearPanel','textPanel'].includes(p)) || String(f.printedText||'').length>30);
+  }else if(view==='sideA'||view==='sideB'){
+    pool=frames.filter(f=>f.view===view);
+    if(!pool.length) pool=frames.filter(f=>/^side/.test(String(f.view||'')) || (partsOf(f).includes('handleHole') && f.view!=='front'));
+  }else if(view==='bottom'){
+    pool=frames.filter(f=>f.view==='bottom' || partsOf(f).includes('base') || (f.frameType==='tilt_view' && f.view!=='top'));
+  }else if(view==='top'){
+    pool=frames.filter(f=>f.view==='top' || partsOf(f).includes('cap') || partsOf(f).includes('lidOrTop'));
+  }
+  if(!pool.length && opts.allowFallback) pool=frames.slice();
+  if(!pool.length) return null;
+  pool.sort((a,b)=>scoreOf(b)-scoreOf(a));
+  return Object.assign({_score:scoreOf(pool[0])},pool[0]);
+}
+function v31106BuildAcquisitionPreviewFrames(s={}){
+  const frames=Array.isArray(s.frames)?s.frames:[];
+  const priority={front:1,sideA:2,back:3,sideB:4,top:5,bottom:6,detail:7,unknown:8};
+  const seenViews=new Set();
+  const chosen=[];
+  const sorted=frames.slice().sort((a,b)=>{
+    const pa=priority[a.view]||9, pb=priority[b.view]||9;
+    const sa=Number(a.score||0)+Number(a.viewConfidence||0)+(a.frameType==='wide_view'?10:0)+(a.frameType==='tilt_view'?8:0);
+    const sb=Number(b.score||0)+Number(b.viewConfidence||0)+(b.frameType==='wide_view'?10:0)+(b.frameType==='tilt_view'?8:0);
+    return pa-pb || sb-sa;
+  });
+  for(const f of sorted){
+    if(!f||!f.buffer) continue;
+    const view=String(f.view||'unknown');
+    const key=seenViews.has(view)?`${view}_${chosen.length}`:view;
+    if(seenViews.has(view) && chosen.length>=6) continue;
+    const dataUrl=v3160DataUrlForBuffer(f.buffer,f.mime||'image/jpeg');
+    if(!dataUrl) continue;
+    chosen.push({id:f.id||key,view,frameType:f.frameType||'',viewConfidence:Number(f.viewConfidence||0),score:Number(f.score||0),parts:Array.isArray(f.parts)?f.parts:[],dataUrl});
+    seenViews.add(view);
+    if(chosen.length>=8) break;
+  }
+  if(!chosen.length && frames[0]?.buffer){
+    chosen.push({id:frames[0].id||'front_fallback',view:frames[0].view||'front',frameType:frames[0].frameType||'',viewConfidence:Number(frames[0].viewConfidence||0),score:Number(frames[0].score||0),parts:Array.isArray(frames[0].parts)?frames[0].parts:[],dataUrl:v3160DataUrlForBuffer(frames[0].buffer,frames[0].mime||'image/jpeg')});
+  }
+  return {items:chosen,views:chosen.map(x=>x.view)};
+}
 function v31106RefineInstruction(s={}, data={}){
   const reason=String(data.reason||s.lastFrameReason||'');
   const dist=String(data.distanceState||s.distanceState||'');
@@ -10488,7 +10539,7 @@ function v31106StartAcquire3D(key='',opts={}){
   v31106CleanSessions();
   const rec=v3160Rec(key); if(!rec) return {ok:false,error:'product_not_found'};
   const sessionId=v31106SessionId();
-  const s={sessionId,key,householdId:opts.householdId||'',status:'active',createdAt:Date.now(),updatedAt:Date.now(),frames:[],descriptors:[],viewDescriptors:{},frontDescriptor:null,lastDescriptor:null,lastMetrics:null,barcodeCandidates:[],ocrWords:[],printedText:'',capturedViews:{},capturedParts:{},missingViews:['front','sideA','back','sideB','top','bottom'],missingParts:['frontLabel','barcode'],coveragePercent:0,acceptedFrames:0,rejectedFrames:0,productFamily:'unknown_product',readyFor3D:false,currentView:'unknown',viewConfidence:0,frameType:'unknown',distanceState:'unknown',motionType:'unknown',barcodeStatus:'not_seen',barcodeValue:'',labelStatus:'unknown',evidence:[],overlay:null,lastInstruction:'Inquadra il prodotto intero. Ruotalo lentamente: non assegno lati senza prove visive.',lastFrameReason:'',cleanup:'pending',readyStreak:0,duplicateStreak:0,gpuErrorStreak:0,lastAcceptedView:'',qualityHint:'',autoBuildEligible:false,buildRecommendation:''};
+  const s={sessionId,key,householdId:opts.householdId||'',status:'active',createdAt:Date.now(),updatedAt:Date.now(),frames:[],descriptors:[],viewDescriptors:{},frontDescriptor:null,lastDescriptor:null,lastMetrics:null,barcodeCandidates:[],ocrWords:[],printedText:'',capturedViews:{},capturedParts:{},missingViews:['front','sideA','back','sideB','top','bottom'],missingParts:['frontLabel','barcode'],coveragePercent:0,acceptedFrames:0,rejectedFrames:0,productFamily:'unknown_product',readyFor3D:false,currentView:'unknown',viewConfidence:0,frameType:'unknown',distanceState:'unknown',motionType:'unknown',barcodeStatus:'not_seen',barcodeValue:'',labelStatus:'unknown',evidence:[],overlay:null,lastInstruction:'Inquadra il prodotto intero. Ruotalo lentamente: non assegno lati senza prove visive.',lastFrameReason:'',cleanup:'pending',readyStreak:0,duplicateStreak:0,gpuErrorStreak:0,lastAcceptedView:'',qualityHint:'',autoBuildEligible:false,preview3DEligible:false,buildRecommendation:''};
   v31106AcquireSessions.set(sessionId,s);
   return {ok:true,sessionId,message:'Acquisizione 3D video avviata',assistant:'Inquadra il prodotto intero. Ruotalo lentamente: catturo solo frame con prove reali.',status:v31106SessionPublic(s)};
 }
@@ -10550,6 +10601,14 @@ async function v31106Acquire3DFrame(sessionId='',frameDataUrl='',frameIndex=0,cl
     s.rejectedFrames++;
     if(data.descriptor){ s.lastDescriptor=data.descriptor; s.lastMetrics=data.metrics||null; }
     if(String(data.reason||'')==='duplicate_angle' || String(data.reason||'')==='view_not_confident') s.duplicateStreak=Number(s.duplicateStreak||0)+1;
+    // V31.10.14: for visible preview, keep usable non-blurry frames too.
+    const usablePreviewFrame=Number(data.metrics?.objectCoverage||0)>.045 && !['too_blurry','bad_exposure','product_cut_or_too_small'].includes(String(data.reason||''));
+    if(usablePreviewFrame){
+      const frame={id:'p'+String(frameIndex).padStart(3,'0')+'_'+Date.now().toString(36),frameIndex,view:data.viewDetected||'preview',viewConfidence:Number(data.viewConfidence||0),frameType:data.frameType||'',distanceState:data.distanceState||'',parts:data.partsDetected||[],score:Math.max(28,Number(data.score||0)-8),mime:parts.mime,buffer:parts.buffer,bytes:parts.buffer.length,metrics:data.metrics||{},descriptor:data.descriptor||null,printedText:data.printedText||'',barcodeValue:data.barcodeValue||'',previewFrame:true,at:Date.now()};
+      s.frames.push(frame);
+      s.frames.sort((a,b)=>(Number(b.score||0)+Number(b.viewConfidence||0))-(Number(a.score||0)+Number(a.viewConfidence||0)));
+      s.frames=s.frames.slice(0,14);
+    }
   }
   for(const v of (data.capturedViews||[])){ if(!['unknown','detail'].includes(v)) s.capturedViews[v]=true; }
   for(const p of (data.capturedParts||[])) s.capturedParts[p]=true;
@@ -10559,10 +10618,10 @@ async function v31106Acquire3DFrame(sessionId='',frameDataUrl='',frameIndex=0,cl
   s.readyStreak=(data.readyFor3D && data.accepted)?(Number(s.readyStreak||0)+1):0;
   s.readyFor3D=!!data.readyFor3D && (Number(s.readyStreak||0)>=2 || Number(s.coveragePercent||0)>=82);
   const geomViews=Object.keys(s.capturedViews||{}).filter(k=>s.capturedViews[k]&&['front','sideA','sideB','back','top','bottom'].includes(k));
-  s.preview3DEligible=!!(Number(s.coveragePercent||0)>=50 && Number(s.acceptedFrames||0)>=3 && (s.capturedViews.front || geomViews.length>=2));
+  s.preview3DEligible=!!((Array.isArray(s.frames)&&s.frames.length>=1) || (Number(s.acceptedFrames||0)>=1 && (Number(s.coveragePercent||0)>=25 || s.capturedViews.front || geomViews.length>=1)));
   s.autoBuildEligible=!!s.readyFor3D;
   s.qualityHint=String(data.reason||'ok');
-  s.buildRecommendation=s.readyFor3D?'Copertura stabile: posso generare automaticamente il 3D.':(s.preview3DEligible?'Posso generare una preview 3D visibile anche se manca qualche dettaglio.':'Sto ancora raccogliendo prove reali per il 3D.');
+  s.buildRecommendation=s.readyFor3D?'Copertura stabile: posso generare automaticamente il 3D.':(s.preview3DEligible?'Puoi già premere “Crea 3D con frame attuali”: creo una preview visibile e ruotabile dai frame della live.':'Sto ancora raccogliendo almeno un frame utilizzabile per creare il 3D.');
   s.lastInstruction=v31106RefineInstruction(s, data);
   s.lastFrameReason=data.reason||'';
   return Object.assign({ok:true,accepted:!!data.accepted,frame:data},v31106SessionPublic(s));
@@ -10570,20 +10629,22 @@ async function v31106Acquire3DFrame(sessionId='',frameDataUrl='',frameIndex=0,cl
 function v31106Acquire3DStatus(sessionId=''){
   v31106CleanSessions(); const s=v31106AcquireSessions.get(String(sessionId||'')); if(!s) return {ok:false,error:'session_not_found'}; return Object.assign({ok:true},v31106SessionPublic(s));
 }
-async function v31106BuildAcquire3D(sessionId=''){
+async function v31106BuildAcquire3D(sessionId='',opts={}){
   v31106CleanSessions();
   const s=v31106AcquireSessions.get(String(sessionId||'')); if(!s) return {ok:false,error:'session_not_found'};
   const rec=v3160Rec(s.key); if(!rec) return {ok:false,error:'product_not_found'};
   const geomViewsForPreview=Object.keys(s.capturedViews||{}).filter(k=>s.capturedViews[k]&&['front','sideA','sideB','back','top','bottom'].includes(k));
-  const previewAllowed=!!(Number(s.coveragePercent||0)>=50 && Number(s.acceptedFrames||0)>=3 && (s.capturedViews.front || geomViewsForPreview.length>=2));
-  if(!s.readyFor3D && !previewAllowed){
-    return {ok:false,error:'not_ready_for_3d',message:'Non genero 3D: la copertura non è ancora stabile o mancano ancora viste/prove reali.',status:v31106SessionPublic(s)};
+  const previewAllowed=!!(Number(s.acceptedFrames||0)>=1 && (s.capturedViews.front || geomViewsForPreview.length>=1 || Number(s.coveragePercent||0)>=28));
+  const forcedPreview=!!opts.forcePreview && ((Array.isArray(s.frames)&&s.frames.length>=1) || Number(s.acceptedFrames||0)>=1);
+  if(!s.readyFor3D && !previewAllowed && !forcedPreview){
+    return {ok:false,error:'not_ready_for_3d',message:'Non genero 3D: mi serve almeno 1 frame utilizzabile. Mostra il prodotto intero per un secondo, poi premi “Crea 3D con frame attuali”.',status:v31106SessionPublic(s)};
   }
-  const front=v31106PickBestFrame(s,'front')||s.frames?.[0];
-  const back=v31106PickBestFrame(s,'back')||null;
-  const side=v31106PickBestFrame(s,'sideA')||v31106PickBestFrame(s,'sideB')||null;
+  const front=v31106PickBestFrame(s,'front',{allowFallback:true})||s.frames?.[0];
+  const back=v31106PickBestFrame(s,'back')||v31106PickBestFrame(s,'bottom')||null;
+  const side=v31106PickBestFrame(s,'sideA')||v31106PickBestFrame(s,'sideB')||v31106PickBestFrame(s,'top')||null;
   if(!front||!front.buffer) return {ok:false,error:'no_valid_frames',message:'Non ho ancora frame validi: continua la live.'};
-  const metadata={sessionId:s.sessionId,productFamily:s.productFamily,coveragePercent:s.coveragePercent,capturedViews:Object.keys(s.capturedViews).filter(k=>s.capturedViews[k]),capturedParts:Object.keys(s.capturedParts).filter(k=>s.capturedParts[k]),missingViews:s.missingViews,missingParts:s.missingParts,acceptedFrames:s.acceptedFrames,rejectedFrames:s.rejectedFrames,readyFor3D:s.readyFor3D,previewAllowed,provisional3D:!s.readyFor3D,distanceAware:true,truthGate:true,objectCentricTracking:true,ocrWords:s.ocrWords||[],printedText:s.printedText||'',barcodeCandidates:s.barcodeCandidates||[],barcodeValue:s.barcodeValue||'',version:'professional-object-centric-3d-truth-ocr-v2'};
+  const acqPreview=await v31106BuildAcquisitionPreviewFrames(s);
+  const metadata={sessionId:s.sessionId,productFamily:s.productFamily,coveragePercent:s.coveragePercent,capturedViews:Object.keys(s.capturedViews).filter(k=>s.capturedViews[k]),capturedParts:Object.keys(s.capturedParts).filter(k=>s.capturedParts[k]),missingViews:s.missingViews,missingParts:s.missingParts,acceptedFrames:s.acceptedFrames,rejectedFrames:s.rejectedFrames,readyFor3D:s.readyFor3D,previewAllowed:previewAllowed||forcedPreview,provisional3D:!s.readyFor3D,acquisitionFrameCount:acqPreview.items.length,acquisitionFrameViews:acqPreview.views,distanceAware:true,truthGate:true,objectCentricTracking:true,ocrWords:s.ocrWords||[],printedText:s.printedText||'',barcodeCandidates:s.barcodeCandidates||[],barcodeValue:s.barcodeValue||'',version:'professional-object-centric-3d-truth-ocr-v3'};
   let build=await v31106CallGpuBuildFromAcquisition(front,back,side,metadata);
   let payload=(build.ok&&build.data&&build.data.ok)?build.data:null;
   if(!payload){
@@ -10591,18 +10652,20 @@ async function v31106BuildAcquire3D(sessionId=''){
     if(fallback.ok&&fallback.data) payload=fallback.data;
   }
   if(!payload||!payload.ok){ return {ok:false,error:'build_failed',gpuBuild:build,message:'La GPU non ha generato il 3D. Continua acquisizione o controlla RunPod.'}; }
-  payload.acquisition3D=Object.assign({},metadata,{status:'completed',cleanup:{temporaryFramesDeleted:true,savedFinalAssetsOnly:true}});
+  payload.acquisition3D=Object.assign({},metadata,{status:'completed',previewFramesSaved:acqPreview.items.length,cleanup:{temporaryFramesDeleted:true,savedFinalAssetsOnly:true}});
+  payload.acquisitionFrames=acqPreview.items;
+  if(payload.render3d&&typeof payload.render3d==='object') payload.render3d.acquisitionFrames=acqPreview.items;
   payload.extractedText=payload.extractedText||{printedText:s.printedText||'',ocrWords:s.ocrWords||[]};
   payload.barcodeCandidate=payload.barcodeCandidate||s.barcodeValue||'';
   const saved=await v3100PersistGpuVision(s.key,payload,'professional_video_live_acquisition_3d',{source:'professional_video_live_acquisition',reference:{sessionId:s.sessionId}});
   if(saved){
-    saved.version='31.10.8-v33.4.5-live-3d-persist-rotate';
-    saved.renderPipelineVersion='v31_10_8_live3d_persist_rotate_fix';
+    saved.version='31.10.14-v33.4.12-live-build-fix';
+    saved.renderPipelineVersion='v31_10_14_live_build_visible_fix';
     saved.acquisition3D=payload.acquisition3D;
     saved.extractedText=payload.extractedText;
     saved.barcodeCandidate=s.barcodeValue||saved.barcodeCandidate||'';
     saved.images=Object.assign({},saved.images||{},payload.images||{});
-    const real3d=v3192BuildReal3DModel(s.key,payload,saved.images||{}, {sourceFront:front.filename||'',sourceBack:back?.filename||'',sourceSide:side?.filename||'',mode:'spesapronta_gpu_live_3d',acquisition:payload.acquisition3D});
+    const real3d=v3192BuildReal3DModel(s.key,payload,saved.images||{}, {sourceFront:front.filename||'',sourceBack:back?.filename||'',sourceSide:side?.filename||'',mode:'spesapronta_gpu_live_3d',acquisition:payload.acquisition3D,acquisitionFrames:acqPreview.items});
     if(real3d){ saved.model3D=real3d; saved.render360=Object.assign({},real3d); }
   }
   try{
@@ -10619,7 +10682,7 @@ async function v31106BuildAcquire3D(sessionId=''){
   }catch(_){ }
   s.frames=[]; s.cleanup='completed'; s.status='completed';
   v31106AcquireSessions.delete(s.sessionId);
-  return {ok:true,title:'Acquisizione 3D completata',message:(metadata.provisional3D?'Ho creato una preview 3D visibile e ruotabile: alcuni dettagli mancavano, ma ora puoi vedere il risultato finale.':'Ho creato e salvato il GLB reale nella scheda finale 3D. Ora è anche ruotabile nel viewer.'),savedGpuVision:saved,gpuVision:payload,acquisition3D:payload.acquisition3D};
+  return {ok:true,title:'Acquisizione 3D completata',message:(metadata.provisional3D?'Ho creato una preview 3D visibile e ruotabile: alcuni dettagli mancavano, ma ora puoi vedere il risultato finale.':'Ho creato e salvato il 3D nella scheda finale: GLB ruotabile + frame reali acquisiti dalla live.'),savedGpuVision:saved,gpuVision:payload,acquisition3D:payload.acquisition3D};
 }
 function v31106CancelAcquire3D(sessionId=''){
   const s=v31106AcquireSessions.get(String(sessionId||'')); if(s){ s.frames=[]; s.cleanup='cancelled'; v31106AcquireSessions.delete(String(sessionId)); }
@@ -10648,8 +10711,11 @@ function v3192BuildReal3DModel(key='', payload={}, mergedImages={}, meta={}){
     readyForRotation:true,
     viewer:'model-viewer'
   }, meta.acquisition||{});
+  const acqFrames=Array.isArray(meta.acquisitionFrames)?meta.acquisitionFrames:(Array.isArray(payload.acquisitionFrames)?payload.acquisitionFrames:(Array.isArray(render3d.acquisitionFrames)?render3d.acquisitionFrames:[]));
+  const workerFrames=Array.isArray(render3d.frames)?render3d.frames.slice(0,12):[];
+  const acqFrameDataUrls=acqFrames.map(x=>x&&x.dataUrl).filter(Boolean).slice(0,12);
   return {
-    version: payload.version || render3d.version || '33.4.5',
+    version: payload.version || render3d.version || '33.4.12',
     at: Date.now(),
     mode:'real_glb_mesh',
     realMeshGlb:true,
@@ -10658,7 +10724,9 @@ function v3192BuildReal3DModel(key='', payload={}, mergedImages={}, meta={}){
     engine: render3d.engine || 'SpesaMesh Depth Extrusion',
     front: mergedImages.productWhite || mergedImages.productTransparent || mergedImages.renderPro || '',
     back: mergedImages.backTransparent || '',
-    frames: Array.isArray(render3d.frames)?render3d.frames.slice(0,12):[],
+    frames: workerFrames.length?workerFrames:(acqFrameDataUrls.length?acqFrameDataUrls:[]),
+    acquisitionFrames: acqFrames.slice(0,12),
+    livePreviewFrames: acqFrameDataUrls,
     frameCount: Number(render3d.frameCount || (Array.isArray(render3d.frames)?render3d.frames.length:0) || 0),
     note: render3d.note || 'GLB mesh reale generato dal worker RunPod.',
     interaction:{rotatable:true,touchGesture:'drag',buttons:['front','left','back','right'],autoRotateDefault:true},
@@ -10707,7 +10775,7 @@ async function v3160BuildVirtual3D(key='',opts={}){
   const incomingProduct=Object.assign({}, payload.product||{});
   if(existing.labelBox){ oldProduct.labelBox=existing.labelBox; }
   if(oldProduct.labelBox){ incomingProduct.labelBox=oldProduct.labelBox; }
-  const current=Object.assign({}, existing, {ok:true,version:'33.4.5-real3d-v31.10.8',strictV33:true,renderPipelineVersion:'v31_10_8_live3d_persist_rotate_fix',images:mergedImages,product:Object.assign({},oldProduct,incomingProduct),labelBox:existing.labelBox||oldProduct.labelBox||null,teacherOpenAI:{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: 3D reale creato dal worker RunPod V33.4.5 con acquisizione prodotto.'}});
+  const current=Object.assign({}, existing, {ok:true,version:'33.4.12-real3d-v31.10.14',strictV33:true,renderPipelineVersion:'v31_10_14_live_build_visible_fix',images:mergedImages,product:Object.assign({},oldProduct,incomingProduct),labelBox:existing.labelBox||oldProduct.labelBox||null,teacherOpenAI:{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: 3D reale creato dal worker RunPod V33.4.12 con acquisizione prodotto.'}});
   current.model3D=v3192BuildReal3DModel(key,payload,mergedImages,{sourceFront:frontResolved.source||'',sourceBack:backOpts.backFilename||'',mode:'spesapronta_gpu_manual_3d'});
   current.render360=Object.assign({},current.model3D||{});
   const folder=v2842EnsureObjectFolder(rec);
