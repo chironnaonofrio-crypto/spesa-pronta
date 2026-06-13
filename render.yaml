@@ -27,7 +27,7 @@ services:
       - key: DISABLE_GOOGLE_HTML_SCRAPE
         value: 1
       - key: GPU_VISION_ENABLED
-        value: false
+        value: true
       - key: MAX_MEMORY_CACHE
         value: 120
       - key: MAX_DIAGNOSTIC_EVENTS
@@ -38,7 +38,11 @@ services:
         value: 2
       - key: MAX_STORED_DATA_URL_CHARS
         value: 0
+      - key: PRESERVE_GLB_DATA_URL
+        value: true
+      - key: MAX_STORED_GLB_DATA_URL_CHARS
+        value: 24000000
 
 # V31.6: conserva anteprime leggere anche in RAM-safe (non foto enormi)
-MAX_STORED_THUMB_DATA_URL_CHARS=140000
-MAX_PRODUCT_PHOTOS=8
+# MAX_STORED_THUMB_DATA_URL_CHARS=140000
+# MAX_PRODUCT_PHOTOS=8

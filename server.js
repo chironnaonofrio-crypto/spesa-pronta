@@ -65,6 +65,9 @@ const SPESA_MAX_BARCODE_CACHE = Math.max(80, Math.min(5000, Number(process.env.M
 const SPESA_MAX_GLOBAL_PRODUCTS = Math.max(120, Math.min(5000, Number(process.env.MAX_GLOBAL_PRODUCTS || process.env.SPESA_MAX_GLOBAL_PRODUCTS || (SPESA_RAM_SAFE ? 800 : 2500))));
 const SPESA_MAX_PRODUCT_PHOTOS = Math.max(6, Math.min(36, Number(process.env.MAX_PRODUCT_PHOTOS || process.env.SPESA_MAX_PRODUCT_PHOTOS || (SPESA_RAM_SAFE ? 8 : 36))));
 const SPESA_MAX_DATA_URL_CHARS = Math.max(0, Math.min(300000, Number(process.env.MAX_STORED_DATA_URL_CHARS || process.env.SPESA_MAX_DATA_URL_CHARS || (SPESA_RAM_SAFE ? 0 : 180000))));
+// V31.10.22: il GLB NON è una foto. Non deve essere troncato/cancellato dal RAM-safe, altrimenti il viewer resta bianco.
+const SPESA_PRESERVE_GLB_DATA_URL = !/^false$/i.test(String(process.env.PRESERVE_GLB_DATA_URL || process.env.SPESA_PRESERVE_GLB_DATA_URL || 'true'));
+const SPESA_MAX_GLB_DATA_URL_CHARS = Math.max(1000000, Math.min(80000000, Number(process.env.MAX_STORED_GLB_DATA_URL_CHARS || process.env.SPESA_MAX_GLB_DATA_URL_CHARS || 24000000)));
 // V31.7: in modalità RAM-safe non salviamo le foto enormi, ma conserviamo preview leggere per non rompere galleria/profilo/render.
 const SPESA_MAX_THUMB_DATA_URL_CHARS = Math.max(20000, Math.min(300000, Number(process.env.MAX_STORED_THUMB_DATA_URL_CHARS || process.env.SPESA_MAX_THUMB_DATA_URL_CHARS || (SPESA_RAM_SAFE ? 140000 : 240000))));
 if(SPESA_RAM_SAFE){
@@ -357,6 +360,12 @@ function spesaRamSafeMemoryMb(){
   }catch(_){ return {}; }
 }
 function spesaRamSafeIsDataUrl(v=''){ return /^data:image\/[a-z0-9.+-]+;base64,/i.test(String(v||'')); }
+function spesaRamSafeIsGlbDataUrl(v=''){
+  return /^data:(model\/gltf-binary|application\/octet-stream|model\/gltf\+json);base64,/i.test(String(v||''));
+}
+function spesaRamSafeIsGlbKey(key=''){
+  return /(glb|gltf|model3d|render360v3000|realmesh|meshdata|modeldataurl|glbdataurl)/i.test(String(key||''));
+}
 function spesaRamSafeLooksBase64(v=''){
   const s=String(v||'');
   return s.length>25000 && /^[A-Za-z0-9+/=\r\n]+$/.test(s.slice(0,2000));
@@ -374,6 +383,11 @@ function spesaRamSafeArrayLimit(key=''){
 function spesaRamSafeString(v='', key=''){
   const s=String(v==null?'':v);
   const k=String(key||'').toLowerCase();
+  // V31.10.22: GLB/data:model è il modello 3D finale. Non tagliarlo a 1600 caratteri.
+  if(SPESA_PRESERVE_GLB_DATA_URL && (spesaRamSafeIsGlbDataUrl(s) || (spesaRamSafeIsGlbKey(k) && /^data:/i.test(s)))){
+    if(s.length>SPESA_MAX_GLB_DATA_URL_CHARS) return '';
+    return s;
+  }
   if(spesaRamSafeIsDataUrl(s) || spesaRamSafeLooksBase64(s)){
     // V31.7: se è una preview/thumb o un render leggero, conservarla anche con MAX_STORED_DATA_URL_CHARS=0.
     const previewKey=/(thumb|thumbdataurl|preview|profile|representative|renderpro|productwhite|labelcrop|labelcropdataurl|displayurl|imagedataurl)$/i.test(k);
@@ -401,8 +415,8 @@ function spesaRamSafeCompactAny(value, key='', depth=0){
     const out={};
     for(const [k,v] of Object.entries(value)){
       const lk=String(k||'').toLowerCase();
-      if(SPESA_RAM_SAFE && /^(raw|full|original|buffer|blob|file|image|base64)$/i.test(k) && (typeof v==='string') && (spesaRamSafeIsDataUrl(v)||spesaRamSafeLooksBase64(v))) continue;
-      if(SPESA_RAM_SAFE && /(dataurl|data_url|imagedata|thumbdataurl|fulldataurl|originaldataurl|masterdataurl|transparentdataurl|whitedataurl|studiodataurl|semanticdataurl|render360dataurl|labelcropdataurl|producttransparent|productwhite|renderpro|labelcrop)$/i.test(k)){
+      if(SPESA_RAM_SAFE && /^(raw|full|original|buffer|blob|file|image|base64)$/i.test(k) && !spesaRamSafeIsGlbKey(k) && (typeof v==='string') && (spesaRamSafeIsDataUrl(v)||spesaRamSafeLooksBase64(v))) continue;
+      if(SPESA_RAM_SAFE && /(glbdataurl|modeldataurl|meshdataurl|dataurl|data_url|imagedata|thumbdataurl|fulldataurl|originaldataurl|masterdataurl|transparentdataurl|whitedataurl|studiodataurl|semanticdataurl|render360dataurl|labelcropdataurl|producttransparent|productwhite|renderpro|labelcrop)$/i.test(k)){
         const safe=spesaRamSafeCompactAny(v,k,depth+1);
         if(safe) out[k]=safe;
         continue;
@@ -436,7 +450,7 @@ function spesaRamSafeCompactDb(reason='runtime'){
   if(reason==='ensureDbShape' && global.__spesaRamSafeLastCompactAt && now-global.__spesaRamSafeLastCompactAt<15000) return {ok:true,skipped:true,throttled:true};
   global.__spesaRamSafeLastCompactAt=now;
   global.__spesaRamSafeCompacting=true;
-  const stats={reason,removedProducts:0,knowledgeEntries:0,barcodeEntries:0,mode:SPESA_MEMORY_MODE,limits:{diagnosticEvents:SPESA_MAX_DIAGNOSTIC_EVENTS,memoryCache:SPESA_MAX_MEMORY_CACHE,barcodeCache:SPESA_MAX_BARCODE_CACHE,globalProducts:SPESA_MAX_GLOBAL_PRODUCTS,productPhotos:SPESA_MAX_PRODUCT_PHOTOS,dataUrlChars:SPESA_MAX_DATA_URL_CHARS, thumbDataUrlChars:SPESA_MAX_THUMB_DATA_URL_CHARS}};
+  const stats={reason,removedProducts:0,knowledgeEntries:0,barcodeEntries:0,mode:SPESA_MEMORY_MODE,limits:{diagnosticEvents:SPESA_MAX_DIAGNOSTIC_EVENTS,memoryCache:SPESA_MAX_MEMORY_CACHE,barcodeCache:SPESA_MAX_BARCODE_CACHE,globalProducts:SPESA_MAX_GLOBAL_PRODUCTS,productPhotos:SPESA_MAX_PRODUCT_PHOTOS,dataUrlChars:SPESA_MAX_DATA_URL_CHARS, thumbDataUrlChars:SPESA_MAX_THUMB_DATA_URL_CHARS, glbDataUrlChars:SPESA_MAX_GLB_DATA_URL_CHARS, preserveGlb:SPESA_PRESERVE_GLB_DATA_URL}};
   try{
     const brain=db.assistantBrain;
     brain.learningAudit=Array.isArray(brain.learningAudit)?brain.learningAudit.slice(0,SPESA_MAX_DIAGNOSTIC_EVENTS):[];
@@ -496,7 +510,7 @@ function spesaRamSafeHealth(){
     seedLazy:!!getVisionSeedMemory().lazy,
     buildId:global.__SPESA_PRONTA_BUILD_ID||'V31.7-V32-ENDPOINT-BRIDGE',
     memory:spesaRamSafeMemoryMb(),
-    limits:{diagnosticEvents:SPESA_MAX_DIAGNOSTIC_EVENTS,memoryCache:SPESA_MAX_MEMORY_CACHE,barcodeCache:SPESA_MAX_BARCODE_CACHE,globalProducts:SPESA_MAX_GLOBAL_PRODUCTS,productPhotos:SPESA_MAX_PRODUCT_PHOTOS,dataUrlChars:SPESA_MAX_DATA_URL_CHARS, thumbDataUrlChars:SPESA_MAX_THUMB_DATA_URL_CHARS},
+    limits:{diagnosticEvents:SPESA_MAX_DIAGNOSTIC_EVENTS,memoryCache:SPESA_MAX_MEMORY_CACHE,barcodeCache:SPESA_MAX_BARCODE_CACHE,globalProducts:SPESA_MAX_GLOBAL_PRODUCTS,productPhotos:SPESA_MAX_PRODUCT_PHOTOS,dataUrlChars:SPESA_MAX_DATA_URL_CHARS, thumbDataUrlChars:SPESA_MAX_THUMB_DATA_URL_CHARS, glbDataUrlChars:SPESA_MAX_GLB_DATA_URL_CHARS, preserveGlb:SPESA_PRESERVE_GLB_DATA_URL},
     counts:{globalProducts:Object.keys(gpm.products||{}).length,knowledgeCache:Object.keys(kc.entries||{}).length,barcodeProducts:Object.keys(bb.products||{}).length,learningAudit:(brain.learningAudit||[]).length,households:Object.keys(db?.households||{}).length},
     lastCompact:brain.ramSafeV314||null,
     disabledHeavy:{googleHtmlScrape:String(process.env.DISABLE_GOOGLE_HTML_SCRAPE||'')==='1',gpuVisionEnabled:String(process.env.GPU_VISION_ENABLED||'').toLowerCase()==='true'}
@@ -4046,7 +4060,7 @@ const server = http.createServer(async (req,res)=>{
       const auth=v3100AuthHousehold(req,url,body);
       if(auth.error) return send(res, auth.error.status, auth.error.body);
       const sessionId=String(body.sessionId||url.searchParams.get('sessionId')||'').trim();
-      const result=await v31106BuildAcquire3D(sessionId);
+      const result=await v31106BuildAcquire3D(sessionId,{forcePreview:!!body.forcePreview,preferredEngine:body.preferredEngine||'',wantInlineGlb:!!body.wantInlineGlb});
       if(result.ok) await saveDb().catch(()=>{});
       return send(res,result.ok?200:400,result);
     }
@@ -10439,7 +10453,7 @@ async function v31106CallGpuAcquireFrame(buffer,mime='image/jpeg',opts={}){
   }catch(e){ return {ok:false,reason:e?.name==='AbortError'?'gpu_acquire_timeout':'gpu_acquire_fetch_error',error:String(e?.message||e)}; }
   finally{ clearTimeout(t); }
 }
-async function v31106CallGpuBuildFromAcquisition(front={},back={},side={},metadata={}){
+async function v31106CallGpuBuildFromAcquisition(front={},back={},side={},metadata={},extraViews={}){
   const cfg=v3100GpuConfig();
   if(!cfg.enabled||!cfg.url||!cfg.token) return {ok:false,reason:'gpu_not_ready'};
   if(typeof FormData==='undefined'||typeof Blob==='undefined') return {ok:false,reason:'node_formdata_unavailable'};
@@ -10449,6 +10463,8 @@ async function v31106CallGpuBuildFromAcquisition(front={},back={},side={},metada
     form.append('front', new Blob([front.buffer],{type:front.mime||'image/jpeg'}), front.filename||'front.jpg');
     if(back&&back.buffer) form.append('back', new Blob([back.buffer],{type:back.mime||'image/jpeg'}), back.filename||'back.jpg');
     if(side&&side.buffer) form.append('side', new Blob([side.buffer],{type:side.mime||'image/jpeg'}), side.filename||'side.jpg');
+    if(extraViews&&extraViews.top&&extraViews.top.buffer) form.append('top', new Blob([extraViews.top.buffer],{type:extraViews.top.mime||'image/jpeg'}), extraViews.top.filename||'top.jpg');
+    if(extraViews&&extraViews.bottom&&extraViews.bottom.buffer) form.append('bottom', new Blob([extraViews.bottom.buffer],{type:extraViews.bottom.mime||'image/jpeg'}), extraViews.bottom.filename||'bottom.jpg');
     form.append('metadata_json', JSON.stringify(metadata||{}));
     const r=await fetch(`${cfg.url}/build-from-acquisition`,{method:'POST',headers:{Authorization:`Bearer ${cfg.token}`,'X-Vision-Token':cfg.token},body:form,signal:ctrl.signal});
     const text=await r.text(); let data={}; try{data=JSON.parse(text)}catch{data={raw:text.slice(0,600)}}
@@ -10493,48 +10509,80 @@ async function v31106Acquire3DFrame(sessionId='',frameDataUrl='',frameIndex=0,cl
   if(data.printedText){ s.printedText=String([s.printedText,data.printedText].filter(Boolean).join(' ')).slice(0,2600); }
   if(data.ocr&&Array.isArray(data.ocr.words)){ for(const w of data.ocr.words){ if(w && !s.ocrWords.includes(w)) s.ocrWords.push(w); } s.ocrWords=s.ocrWords.slice(0,120); }
   if(data.barcodeValue){ s.barcodeValue=String(data.barcodeValue); if(!s.barcodeCandidates.includes(s.barcodeValue)) s.barcodeCandidates.push(s.barcodeValue); }
-  if(data.accepted){
+  const viewName=String(data.viewDetected||'unknown');
+  const geomView=['front','sideA','sideB','back','top','bottom'].includes(viewName);
+  const conf=Number(data.viewConfidence||0);
+  const frameType=String(data.frameType||'');
+  const geometryAccepted=!!data.accepted && geomView && conf>=75 && !/detail/i.test(frameType) && data.geometryAccepted!==false;
+  const rawParts=Array.isArray(data.partsDetected)?data.partsDetected:[];
+  const filteredParts=[];
+  const evidence=Array.isArray(data.evidence)?data.evidence.map(String):[];
+  const productFamily=String(data.productFamily||s.productFamily||'');
+  for(const p of rawParts){
+    if(p==='barcode'){ if(data.barcodeStatus==='confirmed' && String(data.barcodeValue||'').replace(/\D/g,'').length>=8) filteredParts.push(p); continue; }
+    if(p==='handleHole'){ if(/handle|detergent/i.test(productFamily) && evidence.some(e=>/handle/i.test(e))) filteredParts.push(p); continue; }
+    if(p==='frontLabel'){ if(data.labelStatus==='readable' || viewName==='front') filteredParts.push(p); continue; }
+    if(p==='textPanel'){ if(String(data.printedText||'').trim().length>=18) filteredParts.push(p); continue; }
+    if(p==='cap' || p==='lidOrTop'){ if(viewName==='top' || viewName==='front') filteredParts.push(p); continue; }
+    if(p==='base'){ if(viewName==='bottom') filteredParts.push(p); continue; }
+    filteredParts.push(p);
+  }
+  if(geometryAccepted){
     s.acceptedFrames++;
-    const frame={id:'f'+String(frameIndex).padStart(3,'0')+'_'+Date.now().toString(36),frameIndex,view:data.viewDetected||'',viewConfidence:Number(data.viewConfidence||0),frameType:data.frameType||'',distanceState:data.distanceState||'',parts:data.partsDetected||[],score:data.score||0,mime:parts.mime,buffer:parts.buffer,bytes:parts.buffer.length,metrics:data.metrics||{},descriptor:data.descriptor||null,printedText:data.printedText||'',barcodeValue:data.barcodeValue||'',at:Date.now()};
+    const frame={id:'f'+String(frameIndex).padStart(3,'0')+'_'+Date.now().toString(36),frameIndex,view:viewName,viewConfidence:conf,frameType:data.frameType||'',distanceState:data.distanceState||'',parts:filteredParts,score:data.score||0,mime:parts.mime,buffer:parts.buffer,bytes:parts.buffer.length,metrics:data.metrics||{},descriptor:data.descriptor||null,printedText:data.printedText||'',barcodeValue:data.barcodeValue||'',at:Date.now()};
     s.frames.push(frame);
     s.frames.sort((a,b)=>(Number(b.score||0)+Number(b.viewConfidence||0))-(Number(a.score||0)+Number(a.viewConfidence||0)));
-    s.frames=s.frames.slice(0,14);
+    s.frames=s.frames.slice(0,18);
     if(data.descriptor){ s.lastDescriptor=data.descriptor; s.lastMetrics=data.metrics||null; s.descriptors.push(data.descriptor); s.descriptors=s.descriptors.slice(-18); }
-    if(data.viewDetected==='front' && data.descriptor && !s.frontDescriptor){ s.frontDescriptor=data.descriptor; }
-    if(data.viewDetected && !['unknown','detail'].includes(data.viewDetected) && data.descriptor){ s.viewDescriptors[data.viewDetected]=data.descriptor; }
-    if(data.viewDetected && !['unknown','detail'].includes(data.viewDetected)) s.capturedViews[data.viewDetected]=true;
-    for(const p of (data.partsDetected||[])) s.capturedParts[p]=true;
+    if(viewName==='front' && data.descriptor && !s.frontDescriptor){ s.frontDescriptor=data.descriptor; }
+    if(data.descriptor){ s.viewDescriptors[viewName]=data.descriptor; }
+    s.capturedViews[viewName]=true;
+    for(const p of filteredParts) s.capturedParts[p]=true;
   }else{
     s.rejectedFrames++;
     if(data.descriptor){ s.lastDescriptor=data.descriptor; s.lastMetrics=data.metrics||null; }
+    // Detail frames can add OCR text only, never geometry/mesh proof.
+    if(data.labelStatus==='readable' && String(data.printedText||'').trim().length>=18) s.capturedParts.textPanel=true;
+    if(data.barcodeStatus==='confirmed' && String(data.barcodeValue||'').replace(/\D/g,'').length>=8) s.capturedParts.barcode=true;
   }
-  for(const v of (data.capturedViews||[])){ if(!['unknown','detail'].includes(v)) s.capturedViews[v]=true; }
-  for(const p of (data.capturedParts||[])) s.capturedParts[p]=true;
-  s.coveragePercent=Number(data.coveragePercent||s.coveragePercent||0);
-  s.missingViews=data.missingViews||s.missingViews||[];
-  s.missingParts=data.missingParts||s.missingParts||[];
-  // Strict Truth Gate: readiness only from worker, never by accepted frame count alone.
-  s.readyFor3D=!!data.readyFor3D;
-  s.lastInstruction=data.nextInstruction||s.lastInstruction;
+  const cv=Object.keys(s.capturedViews||{}).filter(k=>s.capturedViews[k]);
+  const cp=Object.keys(s.capturedParts||{}).filter(k=>s.capturedParts[k]);
+  const viewWeight={front:24,sideA:22,sideB:16,back:24,top:7,bottom:7};
+  const partWeight={frontLabel:7,textPanel:5,barcode:8,handleHole:5,cap:3,lidOrTop:3,base:4};
+  let cov=0; for(const v of cv) cov+=viewWeight[v]||0; for(const p of cp) cov+=partWeight[p]||0;
+  if(cv.length===1 && cv[0]==='front') cov=Math.min(cov,35);
+  s.coveragePercent=Math.max(0,Math.min(100,Math.round(cov)));
+  s.missingViews=['front','sideA','back','sideB'].filter(v=>!s.capturedViews[v]);
+  s.missingParts=['frontLabel','barcode'].filter(p=>!s.capturedParts[p]);
+  s.readyFor3D=!!(s.capturedViews.front && (s.capturedViews.sideA||s.capturedViews.sideB) && (s.capturedViews.back||s.coveragePercent>=65) && s.coveragePercent>=58);
+  const publicData=v31106SessionPublic(s);
+  publicData.preview3DEligible=!!(s.capturedViews.front && (s.capturedViews.sideA||s.capturedViews.sideB||s.capturedViews.back));
+  publicData.serverTruth={geometryAccepted,filteredParts,rawAccepted:!!data.accepted,rawView:viewName,rawReason:data.reason||'',rawConfidence:conf};
+  s.lastInstruction= geometryAccepted ? (data.nextInstruction||s.lastInstruction) : (viewName==='detail'?'Dettaglio ignorato per la mesh. Torna a una vista larga e ruota lentamente.':(data.nextInstruction||s.lastInstruction));
   s.lastFrameReason=data.reason||'';
-  return Object.assign({ok:true,accepted:!!data.accepted,frame:data},v31106SessionPublic(s));
+  return Object.assign({ok:true,accepted:geometryAccepted,frame:Object.assign({},data,{accepted:geometryAccepted,geometryAccepted,partsDetected:filteredParts,serverTruth:publicData.serverTruth})},publicData);
 }
 function v31106Acquire3DStatus(sessionId=''){
   v31106CleanSessions(); const s=v31106AcquireSessions.get(String(sessionId||'')); if(!s) return {ok:false,error:'session_not_found'}; return Object.assign({ok:true},v31106SessionPublic(s));
 }
-async function v31106BuildAcquire3D(sessionId=''){
+async function v31106BuildAcquire3D(sessionId='',opts={}){
   v31106CleanSessions();
   const s=v31106AcquireSessions.get(String(sessionId||'')); if(!s) return {ok:false,error:'session_not_found'};
   const rec=v3160Rec(s.key); if(!rec) return {ok:false,error:'product_not_found'};
-  if(!s.readyFor3D){
+  const forcePreview=!!opts.forcePreview;
+  const geomFrames=(Array.isArray(s.frames)?s.frames:[]).filter(f=>['front','sideA','sideB','back','top','bottom'].includes(String(f.view||'')) && f.buffer);
+  if(!s.readyFor3D && !forcePreview){
     return {ok:false,error:'not_ready_for_3d',message:'Non genero 3D: mancano ancora viste o prove reali.',status:v31106SessionPublic(s)};
   }
-  const front=v31106PickBestFrame(s,'front')||s.frames?.[0];
+  if(!geomFrames.length) return {ok:false,error:'no_geometry_frames',message:'Non ho frame geometrici veri. Inquadra fronte e lato con prodotto intero.'};
+  const front=v31106PickBestFrame(s,'front')||geomFrames[0];
   const back=v31106PickBestFrame(s,'back')||null;
   const side=v31106PickBestFrame(s,'sideA')||v31106PickBestFrame(s,'sideB')||null;
-  if(!front||!front.buffer) return {ok:false,error:'no_valid_frames',message:'Non ho ancora frame validi: continua la live.'};
-  const metadata={sessionId:s.sessionId,productFamily:s.productFamily,coveragePercent:s.coveragePercent,capturedViews:Object.keys(s.capturedViews).filter(k=>s.capturedViews[k]),capturedParts:Object.keys(s.capturedParts).filter(k=>s.capturedParts[k]),missingViews:s.missingViews,missingParts:s.missingParts,acceptedFrames:s.acceptedFrames,rejectedFrames:s.rejectedFrames,readyFor3D:s.readyFor3D,distanceAware:true,truthGate:true,objectCentricTracking:true,ocrWords:s.ocrWords||[],printedText:s.printedText||'',barcodeCandidates:s.barcodeCandidates||[],barcodeValue:s.barcodeValue||'',version:'professional-object-centric-3d-truth-ocr-v1'};
-  let build=await v31106CallGpuBuildFromAcquisition(front,back,side,metadata);
+  const top=v31106PickBestFrame(s,'top')||null;
+  const bottom=v31106PickBestFrame(s,'bottom')||null;
+  if(!front||!front.buffer) return {ok:false,error:'no_valid_front',message:'Mi serve almeno un frontale valido per costruire il 3D.'};
+  const metadata={sessionId:s.sessionId,productFamily:s.productFamily,coveragePercent:s.coveragePercent,capturedViews:Object.keys(s.capturedViews).filter(k=>s.capturedViews[k]),capturedParts:Object.keys(s.capturedParts).filter(k=>s.capturedParts[k]),missingViews:s.missingViews,missingParts:s.missingParts,acceptedFrames:s.acceptedFrames,rejectedFrames:s.rejectedFrames,readyFor3D:s.readyFor3D,forcePreview,distanceAware:true,truthGate:true,objectCentricTracking:true,ocrWords:s.ocrWords||[],printedText:s.printedText||'',barcodeCandidates:s.barcodeCandidates||[],barcodeValue:s.barcodeValue||'',version:'v31_10_22_glb_preserve_no_truncate',buildViews:{front:!!front,side:!!side,back:!!back,top:!!top,bottom:!!bottom}};
+  let build=await v31106CallGpuBuildFromAcquisition(front,back,side,metadata,{top,bottom});
   let payload=(build.ok&&build.data&&build.data.ok)?build.data:null;
   if(!payload){
     const fallback=await v3100CallGpuVision(front.buffer,front.mime,'render-3d',front.filename||'front.jpg', back&&back.buffer?{backBuffer:back.buffer,backMime:back.mime,backFilename:back.filename||'back.jpg'}:{});
@@ -10544,20 +10592,38 @@ async function v31106BuildAcquire3D(sessionId=''){
   payload.acquisition3D=Object.assign({},metadata,{status:'completed',cleanup:{temporaryFramesDeleted:true,savedFinalAssetsOnly:true}});
   payload.extractedText=payload.extractedText||{printedText:s.printedText||'',ocrWords:s.ocrWords||[]};
   payload.barcodeCandidate=payload.barcodeCandidate||s.barcodeValue||'';
-  const saved=await v3100PersistGpuVision(s.key,payload,'professional_video_live_acquisition_3d',{source:'professional_video_live_acquisition',reference:{sessionId:s.sessionId}});
+  const render3d=payload.render3d||{};
+  const glbDataUrl=String(render3d.glbDataUrl||payload.glbDataUrl||payload.modelUrl||'');
+  const glbBytes=glbDataUrl ? Math.round((glbDataUrl.split(',')[1]||'').length*0.75) : 0;
+  if(glbDataUrl && glbDataUrl.length>SPESA_MAX_GLB_DATA_URL_CHARS){
+    return {ok:false,error:'glb_too_large_for_current_limit',message:'GLB generato ma supera il limite MAX_STORED_GLB_DATA_URL_CHARS. Aumenta il limite o rigenera più leggero.',glbChars:glbDataUrl.length,glbBytes,limit:SPESA_MAX_GLB_DATA_URL_CHARS};
+  }
+  const saved=await v3100PersistGpuVision(s.key,payload,'professional_video_live_acquisition_3d',{source:'professional_video_live_acquisition',reference:{sessionId:s.sessionId},preserveGlb:true,glbBytes});
+  let model3D=null;
+  if(glbDataUrl){
+    model3D={version:payload.version||'33.4.17',at:Date.now(),mode:'real_glb_mesh',realMeshGlb:true,glbDataUrl,glbEndpoint:v3191GpuModelUrl(s.key),engine:render3d.engine||payload.engine||'Scanner3D GLB',qualityScore:render3d.qualityScore||payload.qualityScore||0,note:render3d.note||payload.message||'GLB generato da acquisizione live',frames:[],acquisition:payload.acquisition3D,pipeline:render3d.pipeline||[],glbBytes,glbChars:glbDataUrl.length,storagePolicy:'preserve_glb_v31_10_22_no_ram_safe_truncate'};
+  }
   if(saved){
-    saved.version='31.10.7-v33.4.4-pro-3d-truth-ocr';
-    saved.renderPipelineVersion='v31_10_7_pro_3d_truth_ocr_overlay';
+    saved.version='31.10.22-v33.4.17-glb-preserve-no-truncate';
+    saved.renderPipelineVersion='v31_10_22_glb_preserve_no_truncate';
     saved.acquisition3D=payload.acquisition3D;
     saved.extractedText=payload.extractedText;
     saved.barcodeCandidate=s.barcodeValue||saved.barcodeCandidate||'';
     saved.images=Object.assign({},saved.images||{},payload.images||{});
-    saved.model3D=saved.model3D||saved.render360||payload.render3d||{};
+    if(model3D){ saved.model3D=model3D; saved.render360=Object.assign({},model3D); }
   }
-  try{ const folder=v2842EnsureObjectFolder(rec); folder.acquisition3D=payload.acquisition3D; folder.gpuVisionV31=saved||folder.gpuVisionV31; rec.acquisition3D=payload.acquisition3D; if(s.printedText) rec.detectedText=Array.from(new Set([...(rec.detectedText||[]),s.printedText])); if(s.barcodeValue) rec.barcode=s.barcodeValue; }catch(_){ }
+  try{
+    const folder=v2842EnsureObjectFolder(rec);
+    folder.acquisition3D=payload.acquisition3D;
+    if(saved){ folder.gpuVisionV31=saved; folder.gpuVisionV33=saved; rec.gpuVisionV31=saved; rec.gpuVisionV33=saved; }
+    if(model3D){ folder.render360V3000=model3D; rec.render360V3000=model3D; }
+    rec.acquisition3D=payload.acquisition3D;
+    if(s.printedText) rec.detectedText=Array.from(new Set([...(rec.detectedText||[]),s.printedText]));
+    if(s.barcodeValue) rec.barcode=s.barcodeValue;
+  }catch(_){ }
   s.frames=[]; s.cleanup='completed'; s.status='completed';
   v31106AcquireSessions.delete(s.sessionId);
-  return {ok:true,title:'Acquisizione 3D completata',message:'Ho creato il modello 3D dai frame migliori e cancellato i frame temporanei.',savedGpuVision:saved,gpuVision:payload,acquisition3D:payload.acquisition3D};
+  return {ok:true,title:'Acquisizione 3D completata',message:glbDataUrl?'GLB reale creato e caricato nel viewer sotto scanner.':'Build completata ma GLB non trovato: controlla console.',savedGpuVision:saved,gpuVision:payload,render3d:render3d,glbDataUrl,modelUrl:glbDataUrl||v3191GpuModelUrl(s.key),acquisition3D:payload.acquisition3D,engine:render3d.engine||payload.engine||'',glbBytes,glbChars:glbDataUrl.length,storagePolicy:'preserve_glb_v31_10_22_no_ram_safe_truncate'};
 }
 function v31106CancelAcquire3D(sessionId=''){
   const s=v31106AcquireSessions.get(String(sessionId||'')); if(s){ s.frames=[]; s.cleanup='cancelled'; v31106AcquireSessions.delete(String(sessionId)); }
