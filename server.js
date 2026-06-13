@@ -10411,7 +10411,7 @@ function v31106SessionPublic(s={}){
     capturedViews:Object.keys(s.capturedViews||{}).filter(k=>s.capturedViews[k]),
     capturedParts:Object.keys(s.capturedParts||{}).filter(k=>s.capturedParts[k]),
     missingViews:s.missingViews||[], missingParts:s.missingParts||[], readyFor3D:!!s.readyFor3D,
-    autoBuildEligible:!!s.autoBuildEligible, buildRecommendation:s.buildRecommendation||'',
+    autoBuildEligible:!!s.autoBuildEligible, preview3DEligible:!!s.preview3DEligible, buildRecommendation:s.buildRecommendation||'',
     acceptedFrames:Number(s.acceptedFrames||0), rejectedFrames:Number(s.rejectedFrames||0),
     lastInstruction:s.lastInstruction||'Inquadra il prodotto intero e ruotalo lentamente.', lastFrameReason:s.lastFrameReason||'',
     currentView:s.currentView||'unknown', viewConfidence:Number(s.viewConfidence||0), frameType:s.frameType||'unknown', distanceState:s.distanceState||'unknown', motionType:s.motionType||'unknown',
@@ -10558,9 +10558,11 @@ async function v31106Acquire3DFrame(sessionId='',frameDataUrl='',frameIndex=0,cl
   s.missingParts=data.missingParts||s.missingParts||[];
   s.readyStreak=(data.readyFor3D && data.accepted)?(Number(s.readyStreak||0)+1):0;
   s.readyFor3D=!!data.readyFor3D && (Number(s.readyStreak||0)>=2 || Number(s.coveragePercent||0)>=82);
+  const geomViews=Object.keys(s.capturedViews||{}).filter(k=>s.capturedViews[k]&&['front','sideA','sideB','back','top','bottom'].includes(k));
+  s.preview3DEligible=!!(Number(s.coveragePercent||0)>=50 && Number(s.acceptedFrames||0)>=3 && (s.capturedViews.front || geomViews.length>=2));
   s.autoBuildEligible=!!s.readyFor3D;
   s.qualityHint=String(data.reason||'ok');
-  s.buildRecommendation=s.readyFor3D?'Copertura stabile: posso generare automaticamente il 3D.':(s.coveragePercent>=60?'Quasi pronto: completa le ultime viste o i dettagli mancanti.':'Sto ancora raccogliendo prove reali per il 3D.');
+  s.buildRecommendation=s.readyFor3D?'Copertura stabile: posso generare automaticamente il 3D.':(s.preview3DEligible?'Posso generare una preview 3D visibile anche se manca qualche dettaglio.':'Sto ancora raccogliendo prove reali per il 3D.');
   s.lastInstruction=v31106RefineInstruction(s, data);
   s.lastFrameReason=data.reason||'';
   return Object.assign({ok:true,accepted:!!data.accepted,frame:data},v31106SessionPublic(s));
@@ -10572,14 +10574,16 @@ async function v31106BuildAcquire3D(sessionId=''){
   v31106CleanSessions();
   const s=v31106AcquireSessions.get(String(sessionId||'')); if(!s) return {ok:false,error:'session_not_found'};
   const rec=v3160Rec(s.key); if(!rec) return {ok:false,error:'product_not_found'};
-  if(!s.readyFor3D){
+  const geomViewsForPreview=Object.keys(s.capturedViews||{}).filter(k=>s.capturedViews[k]&&['front','sideA','sideB','back','top','bottom'].includes(k));
+  const previewAllowed=!!(Number(s.coveragePercent||0)>=50 && Number(s.acceptedFrames||0)>=3 && (s.capturedViews.front || geomViewsForPreview.length>=2));
+  if(!s.readyFor3D && !previewAllowed){
     return {ok:false,error:'not_ready_for_3d',message:'Non genero 3D: la copertura non è ancora stabile o mancano ancora viste/prove reali.',status:v31106SessionPublic(s)};
   }
   const front=v31106PickBestFrame(s,'front')||s.frames?.[0];
   const back=v31106PickBestFrame(s,'back')||null;
   const side=v31106PickBestFrame(s,'sideA')||v31106PickBestFrame(s,'sideB')||null;
   if(!front||!front.buffer) return {ok:false,error:'no_valid_frames',message:'Non ho ancora frame validi: continua la live.'};
-  const metadata={sessionId:s.sessionId,productFamily:s.productFamily,coveragePercent:s.coveragePercent,capturedViews:Object.keys(s.capturedViews).filter(k=>s.capturedViews[k]),capturedParts:Object.keys(s.capturedParts).filter(k=>s.capturedParts[k]),missingViews:s.missingViews,missingParts:s.missingParts,acceptedFrames:s.acceptedFrames,rejectedFrames:s.rejectedFrames,readyFor3D:s.readyFor3D,distanceAware:true,truthGate:true,objectCentricTracking:true,ocrWords:s.ocrWords||[],printedText:s.printedText||'',barcodeCandidates:s.barcodeCandidates||[],barcodeValue:s.barcodeValue||'',version:'professional-object-centric-3d-truth-ocr-v1'};
+  const metadata={sessionId:s.sessionId,productFamily:s.productFamily,coveragePercent:s.coveragePercent,capturedViews:Object.keys(s.capturedViews).filter(k=>s.capturedViews[k]),capturedParts:Object.keys(s.capturedParts).filter(k=>s.capturedParts[k]),missingViews:s.missingViews,missingParts:s.missingParts,acceptedFrames:s.acceptedFrames,rejectedFrames:s.rejectedFrames,readyFor3D:s.readyFor3D,previewAllowed,provisional3D:!s.readyFor3D,distanceAware:true,truthGate:true,objectCentricTracking:true,ocrWords:s.ocrWords||[],printedText:s.printedText||'',barcodeCandidates:s.barcodeCandidates||[],barcodeValue:s.barcodeValue||'',version:'professional-object-centric-3d-truth-ocr-v2'};
   let build=await v31106CallGpuBuildFromAcquisition(front,back,side,metadata);
   let payload=(build.ok&&build.data&&build.data.ok)?build.data:null;
   if(!payload){
@@ -10615,7 +10619,7 @@ async function v31106BuildAcquire3D(sessionId=''){
   }catch(_){ }
   s.frames=[]; s.cleanup='completed'; s.status='completed';
   v31106AcquireSessions.delete(s.sessionId);
-  return {ok:true,title:'Acquisizione 3D completata',message:'Ho creato e salvato il GLB reale nella scheda finale 3D. Ora è anche ruotabile nel viewer.',savedGpuVision:saved,gpuVision:payload,acquisition3D:payload.acquisition3D};
+  return {ok:true,title:'Acquisizione 3D completata',message:(metadata.provisional3D?'Ho creato una preview 3D visibile e ruotabile: alcuni dettagli mancavano, ma ora puoi vedere il risultato finale.':'Ho creato e salvato il GLB reale nella scheda finale 3D. Ora è anche ruotabile nel viewer.'),savedGpuVision:saved,gpuVision:payload,acquisition3D:payload.acquisition3D};
 }
 function v31106CancelAcquire3D(sessionId=''){
   const s=v31106AcquireSessions.get(String(sessionId||'')); if(s){ s.frames=[]; s.cleanup='cancelled'; v31106AcquireSessions.delete(String(sessionId)); }
