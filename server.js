@@ -4004,7 +4004,7 @@ const server = http.createServer(async (req,res)=>{
       const dataUrl=String(model.glbDataUrl||model.glb||model.modelDataUrl||'');
       const parsed=(typeof v3191DecodeDataUrl==='function')?v3191DecodeDataUrl(dataUrl):null;
       if(!parsed||!parsed.buffer){
-        return send(res,404,{ok:false,error:'glb_not_found',message:'GLB reale non trovato in memoria. Premi Render 360° 3D dopo worker V33.4.4.'});
+        return send(res,404,{ok:false,error:'glb_not_found',message:'GLB reale non trovato in memoria. Premi ACQUISISCI PRODOTTO X 3D oppure Render 360° 3D dopo worker V33.4.13.'});
       }
       res.writeHead(200,{
         'Content-Type':'model/gltf-binary',
@@ -9894,8 +9894,8 @@ async function v3100GpuVisionHealth(){
   try{
     const r=await fetch(`${cfg.url}${cfg.healthPath}`,{headers:{'Authorization':`Bearer ${cfg.token}`,'X-Vision-Token':cfg.token},signal:ctrl.signal});
     let data={}; try{data=await r.json()}catch{data={raw:await r.text().catch(()=> '')}}
-    return {ok:r.ok,enabled:true,version:'V31.10.14_V33.4.12_live_build_fix_bridge',config:v3100PublicConfig(),gpuResponse:data,status:r.status};
-  }catch(e){ return {ok:false,enabled:true,version:'V31.10.14_V33.4.12_live_build_fix_bridge',config:v3100PublicConfig(),error:String(e?.message||e)}; }
+    return {ok:r.ok,enabled:true,version:'V31.10.15_V33.4.13_3d_isolated_final',config:v3100PublicConfig(),gpuResponse:data,status:r.status};
+  }catch(e){ return {ok:false,enabled:true,version:'V31.10.15_V33.4.13_3d_isolated_final',config:v3100PublicConfig(),error:String(e?.message||e)}; }
   finally{ clearTimeout(t); }
 }
 function v3100SlimGpuPayload(data={}){
@@ -10601,7 +10601,7 @@ async function v31106Acquire3DFrame(sessionId='',frameDataUrl='',frameIndex=0,cl
     s.rejectedFrames++;
     if(data.descriptor){ s.lastDescriptor=data.descriptor; s.lastMetrics=data.metrics||null; }
     if(String(data.reason||'')==='duplicate_angle' || String(data.reason||'')==='view_not_confident') s.duplicateStreak=Number(s.duplicateStreak||0)+1;
-    // V31.10.14: for visible preview, keep usable non-blurry frames too.
+    // V31.10.15: for visible preview, keep usable non-blurry frames too.
     const usablePreviewFrame=Number(data.metrics?.objectCoverage||0)>.045 && !['too_blurry','bad_exposure','product_cut_or_too_small'].includes(String(data.reason||''));
     if(usablePreviewFrame){
       const frame={id:'p'+String(frameIndex).padStart(3,'0')+'_'+Date.now().toString(36),frameIndex,view:data.viewDetected||'preview',viewConfidence:Number(data.viewConfidence||0),frameType:data.frameType||'',distanceState:data.distanceState||'',parts:data.partsDetected||[],score:Math.max(28,Number(data.score||0)-8),mime:parts.mime,buffer:parts.buffer,bytes:parts.buffer.length,metrics:data.metrics||{},descriptor:data.descriptor||null,printedText:data.printedText||'',barcodeValue:data.barcodeValue||'',previewFrame:true,at:Date.now()};
@@ -10657,32 +10657,11 @@ async function v31106BuildAcquire3D(sessionId='',opts={}){
   if(payload.render3d&&typeof payload.render3d==='object') payload.render3d.acquisitionFrames=acqPreview.items;
   payload.extractedText=payload.extractedText||{printedText:s.printedText||'',ocrWords:s.ocrWords||[]};
   payload.barcodeCandidate=payload.barcodeCandidate||s.barcodeValue||'';
-  const saved=await v3100PersistGpuVision(s.key,payload,'professional_video_live_acquisition_3d',{source:'professional_video_live_acquisition',reference:{sessionId:s.sessionId}});
-  if(saved){
-    saved.version='31.10.14-v33.4.12-live-build-fix';
-    saved.renderPipelineVersion='v31_10_14_live_build_visible_fix';
-    saved.acquisition3D=payload.acquisition3D;
-    saved.extractedText=payload.extractedText;
-    saved.barcodeCandidate=s.barcodeValue||saved.barcodeCandidate||'';
-    saved.images=Object.assign({},saved.images||{},payload.images||{});
-    const real3d=v3192BuildReal3DModel(s.key,payload,saved.images||{}, {sourceFront:front.filename||'',sourceBack:back?.filename||'',sourceSide:side?.filename||'',mode:'spesapronta_gpu_live_3d',acquisition:payload.acquisition3D,acquisitionFrames:acqPreview.items});
-    if(real3d){ saved.model3D=real3d; saved.render360=Object.assign({},real3d); }
-  }
-  try{
-    const folder=v2842EnsureObjectFolder(rec);
-    folder.acquisition3D=payload.acquisition3D;
-    folder.gpuVisionV31=saved||folder.gpuVisionV31;
-    folder.gpuVisionV33=saved||folder.gpuVisionV33;
-    if(saved?.model3D?.realMeshGlb){ folder.render360V3000=saved.model3D; rec.render360V3000=saved.model3D; }
-    rec.gpuVisionV31=saved||rec.gpuVisionV31;
-    rec.gpuVisionV33=saved||rec.gpuVisionV33;
-    rec.acquisition3D=payload.acquisition3D;
-    if(s.printedText) rec.detectedText=Array.from(new Set([...(rec.detectedText||[]),s.printedText]));
-    if(s.barcodeValue) rec.barcode=s.barcodeValue;
-  }catch(_){ }
+  const saved=v31115Persist3DOnly(s.key,payload,{sourceFront:front.filename||'',sourceBack:back?.filename||'',sourceSide:side?.filename||'',mode:'spesapronta_gpu_live_3d',acquisition:payload.acquisition3D,acquisitionFrames:acqPreview.items,printedText:s.printedText||'',barcodeValue:s.barcodeValue||'',coveragePercent:s.coveragePercent,capturedViews:metadata.capturedViews,capturedParts:metadata.capturedParts});
+  if(!saved){ return {ok:false,error:'3d_persist_failed',message:'La GPU ha risposto, ma il GLB non è stato salvato nella scheda. Rifai la live con prodotto intero e fermo.',gpuVision:payload}; }
   s.frames=[]; s.cleanup='completed'; s.status='completed';
   v31106AcquireSessions.delete(s.sessionId);
-  return {ok:true,title:'Acquisizione 3D completata',message:(metadata.provisional3D?'Ho creato una preview 3D visibile e ruotabile: alcuni dettagli mancavano, ma ora puoi vedere il risultato finale.':'Ho creato e salvato il 3D nella scheda finale: GLB ruotabile + frame reali acquisiti dalla live.'),savedGpuVision:saved,gpuVision:payload,acquisition3D:payload.acquisition3D};
+  return {ok:true,title:'Acquisizione 3D completata',message:(metadata.provisional3D?'Ho creato una preview 3D visibile e ruotabile senza toccare il render 2D.':'Ho creato e salvato il 3D nella scheda finale senza modificare il render 2D.'),savedGpuVision:saved,gpuVision:payload,acquisition3D:payload.acquisition3D};
 }
 function v31106CancelAcquire3D(sessionId=''){
   const s=v31106AcquireSessions.get(String(sessionId||'')); if(s){ s.frames=[]; s.cleanup='cancelled'; v31106AcquireSessions.delete(String(sessionId)); }
@@ -10715,7 +10694,7 @@ function v3192BuildReal3DModel(key='', payload={}, mergedImages={}, meta={}){
   const workerFrames=Array.isArray(render3d.frames)?render3d.frames.slice(0,12):[];
   const acqFrameDataUrls=acqFrames.map(x=>x&&x.dataUrl).filter(Boolean).slice(0,12);
   return {
-    version: payload.version || render3d.version || '33.4.12',
+    version: payload.version || render3d.version || '33.4.13',
     at: Date.now(),
     mode:'real_glb_mesh',
     realMeshGlb:true,
@@ -10732,6 +10711,44 @@ function v3192BuildReal3DModel(key='', payload={}, mergedImages={}, meta={}){
     interaction:{rotatable:true,touchGesture:'drag',buttons:['front','left','back','right'],autoRotateDefault:true},
     acquisition
   };
+}
+function v31115Persist3DOnly(key='',payload={},meta={}){
+  ensureDbShape();
+  const rec=v3160Rec(key); if(!rec || !payload || !payload.ok) return null;
+  const folder=v2842EnsureObjectFolder(rec);
+  const existing=folder.gpuVisionV31||rec.gpuVisionV31||{};
+  const oldImages=Object.assign({}, existing.images||{});
+  const mergedForPoster=Object.assign({}, oldImages, payload.images||{});
+  const model=v3192BuildReal3DModel(key,payload,mergedForPoster,meta)||{};
+  if(!model.realMeshGlb){ return null; }
+  const current=Object.assign({}, existing, {
+    ok:true,
+    version:'31.10.15-v33.4.13-3d-isolated-final',
+    strictV33:true,
+    renderPipelineVersion:'v31_10_15_3d_isolated_final',
+    profilePolicy:'manual_owner_only',
+    images:oldImages,
+    model3D:model,
+    render360:Object.assign({},model),
+    acquisition3D:payload.acquisition3D||meta.acquisition||{},
+    extractedText:payload.extractedText||existing.extractedText||{},
+    barcodeCandidate:meta.barcodeValue||payload.barcodeCandidate||existing.barcodeCandidate||'',
+    teacherOpenAI:Object.assign({called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: 3D creato in pipeline separata, senza toccare il render 2D.'}, existing.teacherOpenAI||{})
+  });
+  folder.gpuVisionV31=current;
+  folder.gpuVisionV33=current;
+  folder.render360V3000=model;
+  folder.acquisition3D=current.acquisition3D;
+  folder.updatedAt=Date.now();
+  rec.gpuVisionV31=current;
+  rec.gpuVisionV33=current;
+  rec.render360V3000=model;
+  rec.acquisition3D=current.acquisition3D;
+  rec.updatedAt=Date.now();
+  if(meta.printedText) rec.detectedText=Array.from(new Set([...(rec.detectedText||[]),meta.printedText]));
+  if(meta.barcodeValue) rec.barcode=meta.barcodeValue;
+  try{ updateGlobalLearningAudit({type:'gpu-3d-isolated-saved-v31-10-15',key,coverage:meta.coveragePercent||null,views:meta.capturedViews||[],profilePolicy:'manual_owner_only'}); }catch(_){ }
+  return current;
 }
 function v3180ClearLegacyGpuRender(rec={}){
   try{
@@ -10763,20 +10780,15 @@ async function v3160BuildVirtual3D(key='',opts={}){
   const existing=rec.objectFolder?.gpuVisionV31||rec.gpuVisionV31||{};
   const oldImages=Object.assign({}, existing.images||{});
   const incomingImages=Object.assign({}, payload.images||{});
-  // V31.10: Render 3D NON deve mai resettare/peggiorare l'etichetta già estratta.
-  const preservedLabelOnly = oldImages.labelOnly || '';
-  const preservedLabelCrop = oldImages.labelCrop || '';
-  delete incomingImages.labelOnly;
-  delete incomingImages.labelCrop;
-  const mergedImages=Object.assign({}, oldImages, incomingImages);
-  if(preservedLabelOnly) mergedImages.labelOnly=preservedLabelOnly;
-  if(preservedLabelCrop) mergedImages.labelCrop=preservedLabelCrop;
+  // V31.10.15: 3D isolato. Il Render 360° NON deve mai sovrascrivere renderPro2D / productWhite / profilo.
+  const mergedImages=Object.assign({}, oldImages);
+  const modelPosterImages=Object.assign({}, oldImages, incomingImages);
   const oldProduct=Object.assign({}, existing.product||{});
   const incomingProduct=Object.assign({}, payload.product||{});
   if(existing.labelBox){ oldProduct.labelBox=existing.labelBox; }
   if(oldProduct.labelBox){ incomingProduct.labelBox=oldProduct.labelBox; }
-  const current=Object.assign({}, existing, {ok:true,version:'33.4.12-real3d-v31.10.14',strictV33:true,renderPipelineVersion:'v31_10_14_live_build_visible_fix',images:mergedImages,product:Object.assign({},oldProduct,incomingProduct),labelBox:existing.labelBox||oldProduct.labelBox||null,teacherOpenAI:{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: 3D reale creato dal worker RunPod V33.4.12 con acquisizione prodotto.'}});
-  current.model3D=v3192BuildReal3DModel(key,payload,mergedImages,{sourceFront:frontResolved.source||'',sourceBack:backOpts.backFilename||'',mode:'spesapronta_gpu_manual_3d'});
+  const current=Object.assign({}, existing, {ok:true,version:'33.4.13-real3d-v31.10.15',strictV33:true,renderPipelineVersion:'v31_10_15_3d_isolated_final',images:mergedImages,product:Object.assign({},oldProduct,incomingProduct),labelBox:existing.labelBox||oldProduct.labelBox||null,teacherOpenAI:{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: 3D reale creato dal worker RunPod V33.4.13 con acquisizione prodotto.'}});
+  current.model3D=v3192BuildReal3DModel(key,payload,modelPosterImages,{sourceFront:frontResolved.source||'',sourceBack:backOpts.backFilename||'',mode:'spesapronta_gpu_manual_3d'});
   current.render360=Object.assign({},current.model3D||{});
   const folder=v2842EnsureObjectFolder(rec);
   folder.gpuVisionV33=current; rec.gpuVisionV33=current;
@@ -10822,9 +10834,9 @@ async function v3100GpuVisionAnalyze({key='',imageDataUrl='',imageUrl='',mode='a
   finally{ if(!force) global.__spesaGpuVisionLocks.delete(lockKey); }
 }
 try{ const prevFolder=v2842PublicObjectFolder; if(typeof prevFolder==='function'&&!global.__v3100GpuFolderWrapped){ v2842PublicObjectFolder=function(record={}){ const out=prevFolder.call(this,record)||{}; out.gpuVisionV31=(record.objectFolder&&record.objectFolder.gpuVisionV31)||record.gpuVisionV31||null; return out; }; global.__v3100GpuFolderWrapped=true; } }catch(_){ }
-try{ const prevBrain=publicServerBrainV2840; if(typeof prevBrain==='function'&&!global.__v3100BrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prevBrain.call(this,opts||{})||{}; out.version='V31.10.7 Pro 3D Truth Gate OCR Overlay'; out.gpuVisionV31=v3100PublicConfig(); return out; }; global.__v3100BrainWrapped=true; } }catch(_){ }
-try{ const prevPreflight=preflightSnapshotV98; if(typeof prevPreflight==='function'&&!global.__v3100PreflightWrapped){ preflightSnapshotV98=function(){ const s=prevPreflight.call(this)||{}; s.version='V31.10.7'; s.gpuVisionV31=v3100PublicConfig(); return s; }; global.__v3100PreflightWrapped=true; } }catch(_){ }
-console.log('[Spesa Pronta] V31.10.7 Pro 3D Truth Gate OCR Overlay active');
+try{ const prevBrain=publicServerBrainV2840; if(typeof prevBrain==='function'&&!global.__v3100BrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prevBrain.call(this,opts||{})||{}; out.version='V31.10.15 3D Isolated Final'; out.gpuVisionV31=v3100PublicConfig(); return out; }; global.__v3100BrainWrapped=true; } }catch(_){ }
+try{ const prevPreflight=preflightSnapshotV98; if(typeof prevPreflight==='function'&&!global.__v3100PreflightWrapped){ preflightSnapshotV98=function(){ const s=prevPreflight.call(this)||{}; s.version='V31.10.15'; s.gpuVisionV31=v3100PublicConfig(); return s; }; global.__v3100PreflightWrapped=true; } }catch(_){ }
+console.log('[Spesa Pronta] V31.10.15 3D Isolated Final active');
 
 
 // =============================================================
@@ -10847,7 +10859,7 @@ console.log('[Spesa Pronta] V31.10.7 Pro 3D Truth Gate OCR Overlay active');
       const prev=preflightSnapshotV98;
       preflightSnapshotV98=function(){
         const s=prev.call(this)||{};
-        s.version='V31.10.7';
+        s.version='V31.10.15';
         s.ramSafeV314=spesaRamSafeHealth();
         s.checks=Array.isArray(s.checks)?s.checks:[];
         s.checks.push({id:'render_ram_safe',label:'Render RAM Safe',ok:!!SPESA_RAM_SAFE,message:SPESA_RAM_SAFE?`Modalità ${SPESA_MEMORY_MODE}: cache/foto/dataset alleggeriti`:'Modalità PRO locale: RAM Safe non forzato'});
