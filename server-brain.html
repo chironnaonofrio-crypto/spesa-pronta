@@ -523,11 +523,11 @@
       @media(max-width:760px){#acq3dLive3DStage{min-height:240px}#acq3dLive3DModel{height:230px}.acq3dLiveControls{grid-template-columns:1fr 1fr}}
     </style>
     <div id="acq3dLive3DWrap">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>🧊 Viewer 3D live sotto scanner</b><span id="acq3dLive3DState" class="chip warn">attendo frame veri</span></div>
-      <div id="acq3dLive3DStage"><div id="acq3dLive3DShadow"></div><div id="acq3dLive3DModel"><div class="p front"><img id="acq3dLiveFront" alt="front"></div><div class="p back"><img id="acq3dLiveBack" alt="back"></div><div class="p side"><img id="acq3dLiveSide" alt="side"></div></div><div id="acq3dLive3DEmpty" style="position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:#60748e;font-weight:1000;padding:20px">Qui vedrai il modello 3D live mentre scansioni.<br>Non chiudo più la schermata prima di mostrartelo.</div></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>🧊 Viewer 3D vero sotto scanner</b><span id="acq3dLive3DState" class="chip warn">attendo frame veri</span></div>
+      <div id="acq3dLive3DStage"><div id="acq3dLive3DShadow"></div><div id="acq3dLive3DModel"><div class="p front"><img id="acq3dLiveFront" alt="front"></div><div class="p back"><img id="acq3dLiveBack" alt="back"></div><div class="p side"><img id="acq3dLiveSide" alt="side"></div></div><div id="acq3dLive3DEmpty" style="position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:#60748e;font-weight:1000;padding:20px">Qui vedrai solo una preview strutturale vera.<br>Niente più falso 3D da frame dettaglio.</div></div>
       <input id="acq3dLive3DRange" type="range" min="0" max="360" value="0">
       <div class="acq3dLiveControls"><button class="ghost" data-live3d-rot="0">Fronte</button><button class="ghost" data-live3d-rot="90">Lato</button><button class="ghost" data-live3d-rot="180">Retro</button><button class="primary" id="acq3dBuildInline">FERMA E CREA 3D</button></div>
-      <div class="acq3dLive3DInfo" id="acq3dLive3DInfo">La preview usa solo i frame accettati dalla scansione live. Il 2D non viene toccato.</div>
+      <div class="acq3dLive3DInfo" id="acq3dLive3DInfo">La preview usa solo viste geometriche reali (fronte/lato/retro/top/base). Il 2D non viene toccato.</div>
     </div>`;
   }
   function acq3dInjectLiveViewer(){
@@ -546,44 +546,63 @@
     if(model) model.style.setProperty('--rot', Number(deg||0)+'deg');
     if(range) range.value=String(Number(deg||0));
   }
-  function acq3dUpdateLive3D(data={}, frameDataUrl=''){
-    const state=$('acq3dLive3DState'), info=$('acq3dLive3DInfo'), empty=$('acq3dLive3DEmpty');
-    if(frameDataUrl && (data.accepted || data.preview3DEligible || data.frame?.accepted || data.coveragePercent>=25)){
-      const view=String(data.currentView||data.viewDetected||data.frame?.viewDetected||data.frame?.view||'front');
-      const item={src:frameDataUrl,view,at:Date.now(),score:Number(data.frame?.score||data.score||0),pct:Number(data.coveragePercent||0)};
-      acq3d.liveFrames.push(item); acq3d.liveFrames=acq3d.liveFrames.slice(-10);
-      if(view==='back') acq3d.liveSlots.back=frameDataUrl;
-      else if(view==='sideA'||view==='sideB'||view==='top'||view==='bottom') acq3d.liveSlots.side=frameDataUrl;
-      else if(view==='front'||!acq3d.liveSlots.front) acq3d.liveSlots.front=frameDataUrl;
-      if(!acq3d.liveSlots.front) acq3d.liveSlots.front=frameDataUrl;
-      if(!acq3d.liveSlots.side && acq3d.liveFrames.length>1) acq3d.liveSlots.side=frameDataUrl;
-      if(!acq3d.liveSlots.back && acq3d.liveFrames.length>2) acq3d.liveSlots.back=frameDataUrl;
-    }
-    const front=acq3d.liveSlots.front||acq3d.liveFrames[0]?.src||'';
-    const side=acq3d.liveSlots.side||front;
-    const back=acq3d.liveSlots.back||side||front;
-    if(front){
-      const f=$('acq3dLiveFront'), s=$('acq3dLiveSide'), b=$('acq3dLiveBack');
-      if(f) f.src=front; if(s) s.src=side; if(b) b.src=back;
-      if(empty) empty.style.display='none';
-      if(state){state.textContent=`preview live · ${acq3d.liveFrames.length} frame`; state.className='chip ok';}
-      if(info) info.textContent=`Vista: ${data.currentView||data.viewDetected||'verifica'} · copertura ${Number(data.coveragePercent||0)}% · ${data.lastInstruction||data.nextInstruction||'continuo acquisizione'}`;
-    }else{
-      if(state){state.textContent='attendo frame veri'; state.className='chip warn';}
-    }
+
+function acq3dUpdateLive3D(data={}, frameDataUrl=''){
+  const state=$('acq3dLive3DState'), info=$('acq3dLive3DInfo'), empty=$('acq3dLive3DEmpty');
+  const geomViews=new Set(['front','back','sideA','sideB','top','bottom']);
+  const view=String(data.currentView||data.viewDetected||data.frame?.viewDetected||data.frame?.view||'unknown');
+  const previewReady=!!(data.preview3DEligible || data.preview3DReady || data.readyFor3D);
+  const conf=Number(data.viewConfidence||data.frame?.viewConfidence||0);
+  const isGeom=geomViews.has(view);
+  const accepted=!!(data.accepted || data.frame?.accepted);
+  if(frameDataUrl && accepted && isGeom && conf>=75){
+    const item={src:frameDataUrl,view,at:Date.now(),score:Number(data.frame?.score||data.score||0),pct:Number(data.coveragePercent||0)};
+    acq3d.liveFrames.push(item); acq3d.liveFrames=acq3d.liveFrames.slice(-12);
+    if(view==='front') acq3d.liveSlots.front=frameDataUrl;
+    else if(view==='back') acq3d.liveSlots.back=frameDataUrl;
+    else if(view==='sideA' || view==='sideB') acq3d.liveSlots.side=frameDataUrl;
+    else if(view==='top' || view==='bottom'){ if(!acq3d.liveSlots.side) acq3d.liveSlots.side=frameDataUrl; }
   }
-  function acq3dShowFinalModel(productKey='', data={}){
-    acq3d.built=true; acq3d.sessionId=''; acq3dStopTimer(); acq3dStopAutoBuild(); acq3dStopStream();
-    const stage=$('acq3dLive3DStage'), state=$('acq3dLive3DState'), info=$('acq3dLive3DInfo');
-    const url=`/api/gpu-vision/model-3d?key=${encodeURIComponent(productKey||acq3d.currentProductKey||'')}&ts=${Date.now()}`;
-    if(stage){ stage.innerHTML=`<model-viewer id="acq3dFinalModelViewer" style="width:100%;height:320px;min-height:300px;border-radius:20px;background:linear-gradient(180deg,#fff,#eef6ff)" src="${url}" camera-controls touch-action="pan-y" auto-rotate rotation-per-second="24deg" shadow-intensity="1.1" exposure="1.05" camera-orbit="45deg 70deg 145%" field-of-view="32deg"></model-viewer>`; }
-    if(state){state.textContent='GLB finale caricato qui sotto'; state.className='chip ok';}
-    if(info) info.innerHTML='Questo è il modello finale dentro la schermata scanner. Trascinalo col dito. Il 2D è rimasto separato.';
-    const btn=$('acq3dBuildInline'); if(btn){btn.textContent='3D CREATO'; btn.disabled=true;}
-    const b=$('acq3dBuild'); if(b){b.textContent='3D creato'; b.disabled=true;}
+  const front=acq3d.liveSlots.front||'';
+  const side=acq3d.liveSlots.side||'';
+  const back=acq3d.liveSlots.back||'';
+  const enoughForStructuralPreview=previewReady && !!front && !!(side || back);
+  const f=$('acq3dLiveFront'), s=$('acq3dLiveSide'), b=$('acq3dLiveBack');
+  if(enoughForStructuralPreview){
+    if(f) f.src=front;
+    if(s) s.src=side || back || front;
+    if(b) b.src=back || side || front;
+    if(empty) empty.style.display='none';
+    if(state){state.textContent=`preview strutturale · ${acq3d.liveFrames.length} viste`; state.className='chip ok';}
+    if(info) info.textContent=`Viste reali raccolte: ${[front?'fronte':'',side?'lato':'',back?'retro':''].filter(Boolean).join(' · ')} · copertura ${Number(data.coveragePercent||0)}% · ${data.lastInstruction||data.nextInstruction||'continuo acquisizione'}`;
+  }else{
+    if(f) f.removeAttribute('src'); if(s) s.removeAttribute('src'); if(b) b.removeAttribute('src');
+    if(empty){
+      empty.style.display='grid';
+      const needFront=!front, needSide=!side && !back;
+      empty.innerHTML=`Raccolgo viste strutturali vere.<br>${needFront?'Mi serve il fronte. ':''}${needSide?'Poi mostrami un lato o il retro. ':''}<span style="color:#43607f">Niente più falso 3D da dettagli o zoom.</span>`;
+    }
+    if(state){state.textContent='attendo viste geometriche vere'; state.className='chip warn';}
+    if(info) info.textContent=`Vista: ${view} · copertura ${Number(data.coveragePercent||0)}% · ${data.lastInstruction||data.nextInstruction||'continuo acquisizione'}`;
   }
+}
+
+function acq3dShowFinalModel(productKey='', data={}){
+  acq3d.built=true; acq3d.sessionId=''; acq3dStopTimer(); acq3dStopAutoBuild(); acq3dStopStream();
+  const stage=$('acq3dLive3DStage'), state=$('acq3dLive3DState'), info=$('acq3dLive3DInfo');
+  const inlineUrl=data?.modelUrl || data?.render3d?.glbDataUrl || data?.glbDataUrl || '';
+  const persistedUrl=`/api/gpu-vision/model-3d?key=${encodeURIComponent(productKey||acq3d.currentProductKey||'')}&ts=${Date.now()}`;
+  const finalUrl=inlineUrl || persistedUrl;
+  if(stage){
+    stage.innerHTML=`<model-viewer id="acq3dFinalModelViewer" style="width:100%;height:320px;min-height:300px;border-radius:20px;background:linear-gradient(180deg,#fff,#eef6ff)" src="${finalUrl}" camera-controls touch-action="pan-y" auto-rotate rotation-per-second="24deg" shadow-intensity="1.1" exposure="1.05" camera-orbit="45deg 70deg 145%" field-of-view="32deg"></model-viewer><div style="position:absolute;left:12px;right:12px;bottom:12px;background:rgba(255,255,255,.92);border:1px solid #dce8f7;border-radius:14px;padding:8px 10px;font-size:12px;font-weight:900;color:#284261">Motore: ${esc(data?.render3d?.engine || data?.engine || 'TRUE 3D engine')} · Sorgente GLB: ${inlineUrl?'risposta build immediata':'modello persistito nel server'}</div>`;
+  }
+  if(state){state.textContent='GLB finale caricato qui sotto'; state.className='chip ok';}
+  if(info) info.innerHTML='Questo è il modello finale dentro la schermata scanner. Trascinalo col dito. Il GLB viene preso subito dalla risposta di build e poi resta persistito nel server.';
+  const btn=$('acq3dBuildInline'); if(btn){btn.textContent='3D CREATO'; btn.disabled=true;}
+  const b=$('acq3dBuild'); if(b){b.textContent='3D creato'; b.disabled=true;}
+}
   function acq3dHtml(){
-    return `<div id="acq3dOverlay" style="position:fixed;inset:0;z-index:99999;background:rgba(5,16,32,.84);backdrop-filter:blur(10px);display:grid;place-items:center;padding:14px"><div style="width:min(1060px,100%);max-height:96vh;overflow:auto;background:#f8fbff;border:1px solid #cfe0f7;border-radius:28px;box-shadow:0 28px 90px rgba(0,0,0,.35);padding:14px"><div style="display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:10px"><div><h2 style="margin:0;font-size:22px">☄️ Assistente SPESAPRONTA GPU</h2><p style="margin:4px 0 0;color:#5b6e86;font-weight:800">Professional Object-Centric 3D Tracking · Truth Gate · OCR GPU · Barcode multiframe</p></div><button id="acq3dClose" class="ghost">Ferma e crea 3D</button></div><div style="display:grid;grid-template-columns:minmax(0,1.25fr) minmax(310px,.75fr);gap:12px"><div style="background:#071426;border-radius:24px;overflow:hidden;position:relative;min-height:390px"><video id="acq3dVideo" playsinline autoplay muted style="width:100%;height:100%;min-height:390px;object-fit:cover;display:block"></video><canvas id="acq3dFx" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;mix-blend-mode:screen"></canvas><canvas id="acq3dCanvas" hidden></canvas><div id="acq3dOverlayHint" style="position:absolute;left:14px;right:14px;bottom:14px;background:rgba(255,255,255,.90);border-radius:18px;padding:12px 14px;font-weight:1000;color:#0e2541;border:1px solid rgba(20,130,255,.35)">Inquadra il prodotto intero. La copertura sale solo con prove reali.</div><div id="acq3dHud" style="position:absolute;left:14px;top:14px;right:14px;display:flex;gap:8px;flex-wrap:wrap"></div></div><div style="display:grid;gap:10px"><div style="background:#fff;border:1px solid #d9e8fb;border-radius:22px;padding:12px"><b>Copertura reale 3D</b><div style="height:14px;background:#eaf2fb;border-radius:999px;overflow:hidden;margin:8px 0"><div id="acq3dBar" style="height:100%;width:0%;background:linear-gradient(90deg,#16a085,#58d68d);border-radius:999px"></div></div><div id="acq3dPercent" style="font-weight:1000">0%</div><small style="display:block;color:#66798f;font-weight:800;margin-top:4px">Puoi creare una preview 3D appena ho un frame buono; finale migliore con lati/retro/base.</small></div><div id="acq3dChecklist" style="background:#fff;border:1px solid #d9e8fb;border-radius:22px;padding:12px;display:grid;gap:6px;font-weight:850"></div><div style="background:#fff;border:1px solid #d9e8fb;border-radius:22px;padding:12px"><b>Istruzione</b><p id="acq3dInstruction" style="margin:8px 0 0;color:#213a57;font-weight:900">Preparo la camera…</p><div id="acq3dRecommendation" style="margin-top:8px;color:#5c7088;font-weight:900;font-size:13px">Consiglio GPU: appena ho 1 frame buono puoi creare una preview 3D visibile.</div></div><div style="display:flex;flex-wrap:wrap;gap:8px"><button class="primary" id="acq3dBuild" disabled>Crea 3D dalla live</button><button class="ghost" id="acq3dPause">Pausa</button><button class="ghost" id="acq3dVoice">Voce ON</button><button class="danger" id="acq3dCancel">Annulla / elimina frame</button></div><details style="background:#fff;border:1px solid #d9e8fb;border-radius:18px;padding:10px" open><summary style="font-weight:1000">Console debug acquisizione</summary><pre id="acq3dDebug" style="white-space:pre-wrap;font-size:12px;max-height:260px;overflow:auto"></pre></details></div></div></div></div>`;
+    return `<div id="acq3dOverlay" style="position:fixed;inset:0;z-index:99999;background:rgba(5,16,32,.84);backdrop-filter:blur(10px);display:grid;place-items:center;padding:14px"><div style="width:min(1060px,100%);max-height:96vh;overflow:auto;background:#f8fbff;border:1px solid #cfe0f7;border-radius:28px;box-shadow:0 28px 90px rgba(0,0,0,.35);padding:14px"><div style="display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:10px"><div><h2 style="margin:0;font-size:22px">☄️ Assistente SPESAPRONTA GPU</h2><p style="margin:4px 0 0;color:#5b6e86;font-weight:800">ULTRA TRUE 3D Hybrid Reconstruction · Truth Gate · OCR GPU · Barcode multiframe</p></div><button id="acq3dClose" class="ghost">Ferma e crea 3D</button></div><div style="display:grid;grid-template-columns:minmax(0,1.25fr) minmax(310px,.75fr);gap:12px"><div style="background:#071426;border-radius:24px;overflow:hidden;position:relative;min-height:390px"><video id="acq3dVideo" playsinline autoplay muted style="width:100%;height:100%;min-height:390px;object-fit:cover;display:block"></video><canvas id="acq3dFx" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;mix-blend-mode:screen"></canvas><canvas id="acq3dCanvas" hidden></canvas><div id="acq3dOverlayHint" style="position:absolute;left:14px;right:14px;bottom:14px;background:rgba(255,255,255,.90);border-radius:18px;padding:12px 14px;font-weight:1000;color:#0e2541;border:1px solid rgba(20,130,255,.35)">Inquadra il prodotto intero. La copertura sale solo con prove reali.</div><div id="acq3dHud" style="position:absolute;left:14px;top:14px;right:14px;display:flex;gap:8px;flex-wrap:wrap"></div></div><div style="display:grid;gap:10px"><div style="background:#fff;border:1px solid #d9e8fb;border-radius:22px;padding:12px"><b>Copertura reale 3D</b><div style="height:14px;background:#eaf2fb;border-radius:999px;overflow:hidden;margin:8px 0"><div id="acq3dBar" style="height:100%;width:0%;background:linear-gradient(90deg,#16a085,#58d68d);border-radius:999px"></div></div><div id="acq3dPercent" style="font-weight:1000">0%</div><small style="display:block;color:#66798f;font-weight:800;margin-top:4px">La preview appare solo con geometria reale. Finale migliore con fronte + lato + retro + top/base.</small></div><div id="acq3dChecklist" style="background:#fff;border:1px solid #d9e8fb;border-radius:22px;padding:12px;display:grid;gap:6px;font-weight:850"></div><div style="background:#fff;border:1px solid #d9e8fb;border-radius:22px;padding:12px"><b>Istruzione</b><p id="acq3dInstruction" style="margin:8px 0 0;color:#213a57;font-weight:900">Preparo la camera…</p><div id="acq3dRecommendation" style="margin-top:8px;color:#5c7088;font-weight:900;font-size:13px">Consiglio GPU: raccogli fronte, lato, retro e se possibile top/base: il motore 3D li userà per una mesh più precisa.</div></div><div style="display:flex;flex-wrap:wrap;gap:8px"><button class="primary" id="acq3dBuild" disabled>Genera mesh GLB</button><button class="ghost" id="acq3dPause">Pausa</button><button class="ghost" id="acq3dVoice">Voce ON</button><button class="danger" id="acq3dCancel">Annulla / elimina frame</button></div><details style="background:#fff;border:1px solid #d9e8fb;border-radius:18px;padding:10px" open><summary style="font-weight:1000">Console debug acquisizione</summary><pre id="acq3dDebug" style="white-space:pre-wrap;font-size:12px;max-height:260px;overflow:auto"></pre></details></div></div></div></div>`;
   }
 
   function acq3dDrawOverlay(data={}){
@@ -622,7 +641,7 @@
     if(ins) ins.textContent=txt;
     if(hint) hint.textContent=txt;
     if(rec) rec.textContent='Consiglio GPU: '+(data.buildRecommendation||data.frame?.analysisAdvice||'Continuo a verificare le prove reali.');
-    if(build){ const canPreview=!!data.preview3DEligible || Number(data.temporaryFrames||0)>0 || Number(data.acceptedFrames||0)>0; build.disabled=!canPreview; build.textContent=data.readyFor3D?'Genera 360° / 3D finale':(canPreview?'Crea 3D dalla live':'Crea 3D dalla live'); }
+    if(build){ const canPreview=!!(data.preview3DEligible || data.preview3DReady || data.readyFor3D || (Array.isArray(data.capturedViews) && data.capturedViews.length>0) || Number(data.temporaryFrames||0)>0 || Number(data.acceptedFrames||0)>0); build.disabled=!canPreview; build.textContent=data.readyFor3D?'Genera mesh GLB finale':(canPreview?'Genera mesh GLB':'Genera mesh GLB'); }
     const cadence=Number(data.captureCadenceMs|| (String(data.lastFrameReason||'').includes('blurry')?1350:(data.frameType==='detail_view'?1250:(data.readyFor3D?950:1100))));
     if(Math.abs(cadence-Number(acq3d.intervalMs||1100))>=120 && !acq3d.paused) acq3dSetTimer(cadence);
     if(data.readyFor3D && data.autoBuildEligible && !acq3d.paused) acq3dStartAutoBuild(); else acq3dStopAutoBuild();
@@ -660,7 +679,7 @@
   }
   async function acq3dCloseSmart(){
     const st=acq3d.lastStatus||{};
-    const hasFrames=Number(st.acceptedFrames||0)>0 || Number(st.temporaryFrames||0)>0 || !!st.preview3DEligible || !!st.readyFor3D;
+    const hasFrames=Number(st.acceptedFrames||0)>0 || Number(st.temporaryFrames||0)>0 || !!(st.preview3DEligible || st.preview3DReady || st.readyFor3D) || (Array.isArray(st.capturedViews) && st.capturedViews.length>0);
     if(hasFrames){
       const btn=$('acq3dClose'); if(btn) btn.textContent='Creo 3D…';
       await acq3dBuild(true);
@@ -687,10 +706,10 @@
   }
   async function acq3dBuild(forcePreview=false){
     const s=getSettings(); const notice=$('notice'); const buildKey=acq3d.productKey||(currentProduct()?.key)||''; acq3dStopTimer(); acq3dStopAutoBuild();
-    if(notice){notice.className='notice warn';notice.innerHTML='<span>☄️</span><div><b>Genero 3D da acquisizione live…</b><span>Uso i frame della live, salvo il GLB e preparo la preview ruotabile.</span></div>';}
-    acq3dSpeak('Creo il modello 3D con i frame acquisiti dalla live.', true);
+    if(notice){notice.className='notice warn';notice.innerHTML='<span>☄️</span><div><b>Genero mesh GLB 3D vera da acquisizione live…</b><span>Uso viste geometriche reali, costruisco il GLB hybrid multiview e lo mostro subito sotto lo scanner.</span></div>';}
+    acq3dSpeak('Creo il modello 3D vero con i frame geometrici acquisiti dalla live, usando un motore hybrid multiview.', true);
     try{
-      const r=await fetchJson('/api/gpu-vision/acquire-3d/build',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+s.token},body:JSON.stringify({householdId:s.householdId,sessionId:acq3d.sessionId,forcePreview:true}),cache:'no-store'});
+      if($('acq3dLive3DState')){$('acq3dLive3DState').textContent='costruisco mesh 3D vera…'; $('acq3dLive3DState').className='chip warn';} if($('acq3dLive3DInfo')){$('acq3dLive3DInfo').textContent='Sto costruendo una mesh GLB vera con motore hybrid multiview (voxel volume + ricostruzione geometrica + fallback intelligente).';} const r=await fetchJson('/api/gpu-vision/acquire-3d/build',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+s.token},body:JSON.stringify({householdId:s.householdId,sessionId:acq3d.sessionId,forcePreview:true,preferredEngine:'ultra_true_3d_hybrid',wantInlineGlb:true,wantTopBottom:true,wantQualityScore:true}),cache:'no-store'});
       const data=r.data||{};
       if(r.ok&&data.ok){ if(notice){notice.className='notice ok';notice.innerHTML=`<span>✅</span><div><b>${esc(data.title||'3D generato')}</b><span>${esc(data.message||'Modello 3D pronto. Lo vedi anche sotto lo scanner.')}</span></div>`;} acq3dShowFinalModel(buildKey||acq3d.currentProductKey||'', data); await load(); state.selectedKey=buildKey||state.selectedKey; state.tab='render'; applyFilter(); }
       else { acq3dRenderStatus(Object.assign({},acq3d.lastStatus||{},{lastInstruction:data.message||data.error||'Build 3D non riuscita',buildError:data})); }
@@ -698,7 +717,7 @@
   }
   async function acq3dFinishOrClose(){
     const st=acq3d.lastStatus||{};
-    const hasFrames=Number(st.acceptedFrames||0)>0 || !!st.preview3DEligible || !!st.readyFor3D;
+    const hasFrames=Number(st.acceptedFrames||0)>0 || !!(st.preview3DEligible || st.preview3DReady || st.readyFor3D) || (Array.isArray(st.capturedViews) && st.capturedViews.length>0);
     if(hasFrames){
       const btn=$('acq3dClose'); if(btn) btn.textContent='Creo 3D…';
       await acq3dBuild(true);
@@ -709,7 +728,7 @@
 
   async function openAcquire3DLive(){
     const p=currentProduct(); const s=getSettings(); if(!p){alert('Seleziona un prodotto');return;}
-    acq3d.currentProductKey=p.key; acq3d.built=false; acq3d.liveFrames=[]; acq3d.liveSlots={front:'',side:'',back:''};
+    acq3d.currentProductKey=p.key; acq3d.built=false; acq3d.liveFrames=[]; acq3d.liveSlots={front:'',side:'',back:'',top:''};
     await acq3dClose(false).catch(()=>{});
     document.body.insertAdjacentHTML('beforeend', acq3dHtml());
     acq3dInjectLiveViewer();
@@ -830,7 +849,7 @@
     d.querySelector('#btnV30OpenOfficial')?.addEventListener('click',()=>{const src=(d.querySelector('#v30OfficialRenderImg')?.src)||(currentProduct()?.fields?.objectFolder?.officialRenderV3000?.officialDataUrl)||(currentProduct()?.fields?.objectFolder?.officialRenderV3000?.studioDataUrl)||'';const w=window.open('about:blank','_blank');if(w){w.document.write('<title>Render ufficiale V30</title><body style="margin:0;background:#f4f8ff;display:grid;place-items:center;min-height:100vh"><img style="max-width:96vw;max-height:96vh;object-fit:contain;border-radius:22px" src="'+String(src).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"></body>');}});
     d.querySelector('#btnV30CopySources')?.addEventListener('click',()=>copyText(JSON.stringify(currentProduct()?.fields?.objectFolder?.referenceImagesV3000||currentProduct()?.fields?.objectFolder?.referenceCandidatesV3000||[],null,2),'Fonti render copiate ✅'));
     d.querySelector('#btnV30TestGoogle')?.addEventListener('click',v30TestGoogleApi);
-    d.querySelector('#btnV302ForceMarker')?.addEventListener('click',()=>alert('V31.10.17 attiva ✅ V33.4.14 pipeline 3D isolata + viewer ruotabile'));
+    d.querySelector('#btnV302ForceMarker')?.addEventListener('click',()=>alert('V31.10.19 attiva ✅ V33.4.16 ULTRA TRUE 3D hybrid + GLB persistente'));
     d.querySelector('#btnGpuRenderPro')?.addEventListener('click',()=>gpuVisionProAction('render-pro',false));
     d.querySelector('#btnGpuLabelOnly')?.addEventListener('click',()=>gpuVisionProAction('label',false));
     d.querySelector('#btnGpu3DRender')?.addEventListener('click',openAcquire3DLive);
