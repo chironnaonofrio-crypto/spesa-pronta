@@ -4004,7 +4004,7 @@ const server = http.createServer(async (req,res)=>{
       const dataUrl=String(model.glbDataUrl||model.glb||model.modelDataUrl||'');
       const parsed=(typeof v3191DecodeDataUrl==='function')?v3191DecodeDataUrl(dataUrl):null;
       if(!parsed||!parsed.buffer){
-        return send(res,404,{ok:false,error:'glb_not_found',message:'GLB reale non trovato in memoria. Premi ACQUISISCI PRODOTTO X 3D oppure Render 360° 3D dopo worker V33.4.13.'});
+        return send(res,404,{ok:false,error:'glb_not_found',message:'GLB reale non trovato in memoria. Premi ACQUISISCI PRODOTTO X 3D oppure Render 360° 3D dopo worker V33.4.14.'});
       }
       res.writeHead(200,{
         'Content-Type':'model/gltf-binary',
@@ -9894,8 +9894,8 @@ async function v3100GpuVisionHealth(){
   try{
     const r=await fetch(`${cfg.url}${cfg.healthPath}`,{headers:{'Authorization':`Bearer ${cfg.token}`,'X-Vision-Token':cfg.token},signal:ctrl.signal});
     let data={}; try{data=await r.json()}catch{data={raw:await r.text().catch(()=> '')}}
-    return {ok:r.ok,enabled:true,version:'V31.10.15_V33.4.13_3d_isolated_final',config:v3100PublicConfig(),gpuResponse:data,status:r.status};
-  }catch(e){ return {ok:false,enabled:true,version:'V31.10.15_V33.4.13_3d_isolated_final',config:v3100PublicConfig(),error:String(e?.message||e)}; }
+    return {ok:r.ok,enabled:true,version:'V31.10.16_V33.4.14_3d_isolated_final',config:v3100PublicConfig(),gpuResponse:data,status:r.status};
+  }catch(e){ return {ok:false,enabled:true,version:'V31.10.16_V33.4.14_3d_isolated_final',config:v3100PublicConfig(),error:String(e?.message||e)}; }
   finally{ clearTimeout(t); }
 }
 function v3100SlimGpuPayload(data={}){
@@ -10419,7 +10419,7 @@ function v31106SessionPublic(s={}){
     printedText:s.printedText||'', ocrWords:Array.from(new Set([...(s.ocrWords||[])]).values()).slice(0,80), evidence:s.evidence||[],
     overlay:s.overlay||null,
     temporaryFrames:Number((s.frames||[]).length), voiceEnabled:true, cleanup:s.cleanup||'pending',
-    debug:{frontDescriptor:!!s.frontDescriptor,lastDescriptor:!!s.lastDescriptor,viewDescriptors:Object.keys(s.viewDescriptors||{}),barcodeCandidates:s.barcodeCandidates||[],lastMetrics:s.lastMetrics||null,readyStreak:Number(s.readyStreak||0),duplicateStreak:Number(s.duplicateStreak||0),gpuErrorStreak:Number(s.gpuErrorStreak||0),lastAcceptedView:s.lastAcceptedView||'',qualityHint:s.qualityHint||''}
+    debug:{frontDescriptor:!!s.frontDescriptor,lastDescriptor:!!s.lastDescriptor,viewDescriptors:Object.keys(s.viewDescriptors||{}),barcodeCandidates:s.barcodeCandidates||[],lastMetrics:s.lastMetrics||null,readyStreak:Number(s.readyStreak||0),duplicateStreak:Number(s.duplicateStreak||0),gpuErrorStreak:Number(s.gpuErrorStreak||0),lastAcceptedView:s.lastAcceptedView||'',qualityHint:s.qualityHint||'',serverTruthGate:s.serverTruthGate||null}
   };
 }
 function v31106PickBestFrame(s={},view='front',opts={}){
@@ -10500,6 +10500,84 @@ function v31106RefineInstruction(s={}, data={}){
   if(dist==='farther' && Number(s.coveragePercent||0)<35) return 'Avvicinati ancora un po’: il prodotto è troppo piccolo per capire bene la forma.';
   return txt;
 }
+
+function v31116LooksLikeBarcode(v=''){
+  return /^\d{8,14}$/.test(String(v||'').replace(/\D/g,''));
+}
+function v31116FrameCenterOk(metrics={}){
+  const b=metrics.bbox||{}; const sw=Number(b.sourceW||0), sh=Number(b.sourceH||0), x=Number(b.x||0), y=Number(b.y||0), w=Number(b.w||0), h=Number(b.h||0);
+  if(!sw||!sh||!w||!h) return {ok:false,reason:'bbox_missing'};
+  const cx=(x+w/2)/sw, cy=(y+h/2)/sh;
+  const cut=(x<4||y<4||x+w>sw-5||y+h>sh-5);
+  const ok=cx>.18&&cx<.82&&cy>.10&&cy<.92&&!cut;
+  return {ok,reason:ok?'ok':(cut?'object_cut_edge':'object_not_centered'),cx:Number(cx.toFixed(3)),cy:Number(cy.toFixed(3)),cut};
+}
+function v31116SanitizeGpu3DFrame(raw={},s={}){
+  const data=Object.assign({},raw||{});
+  const metrics=data.metrics||{};
+  const bboxState=v31116FrameCenterOk(metrics);
+  const cov=Number(metrics.objectCoverage||0);
+  let view=String(data.viewDetected||'unknown');
+  const originalView=view;
+  let accepted=!!data.accepted;
+  let reason=String(data.reason||'ok');
+  const conf=Number(data.viewConfidence||0);
+  const frameType=String(data.frameType||'unknown');
+  const evidence=Array.isArray(data.evidence)?data.evidence.map(String):[];
+  const productVisible=cov>=0.055 && cov<=0.78 && bboxState.ok;
+  const isGeometry=['front','sideA','sideB','back','top','bottom'].includes(view);
+  const minConf={front:76,sideA:82,sideB:82,back:84,top:86,bottom:86};
+  const evidenceText=evidence.join(' ').toLowerCase();
+  const isTilt=/tilt|top|bottom|base|vertical|sotto|fondo/.test(evidenceText) || frameType==='tilt_view';
+  if(!productVisible){ accepted=false; reason=bboxState.reason==='ok'?'server_gate_product_size':bboxState.reason; view='unknown'; }
+  if(accepted && isGeometry && conf < (minConf[view]||82)){ accepted=false; reason='server_gate_low_confidence_'+view; view='unknown'; }
+  if(accepted && ['top','bottom'].includes(view) && !isTilt){ accepted=false; reason='server_gate_tilt_not_proven'; view='unknown'; }
+  if(accepted && view==='back' && !(/rear|retro|barcode|text|different|pannello/.test(evidenceText) || data.barcodeValue)){ accepted=false; reason='server_gate_back_not_proven'; view='unknown'; }
+  if(accepted && ['sideA','sideB'].includes(view) && !(/side|lato|shape|angle|rotation|narrow|distinct/.test(evidenceText))){ accepted=false; reason='server_gate_side_not_proven'; view='unknown'; }
+  const safeParts=[];
+  const rawParts=Array.isArray(data.partsDetected)?data.partsDetected.map(String):[];
+  const hasText=String(data.printedText||data.ocr?.plainText||'').trim().length>=10 || !!data.ocr?.ok;
+  const barcodeValue=String(data.barcodeValue||data.barcode?.value||'').replace(/\D/g,'');
+  if(rawParts.includes('frontLabel') && (data.labelStatus==='readable'||hasText) && productVisible) safeParts.push('frontLabel');
+  if((rawParts.includes('textPanel')||hasText) && productVisible) safeParts.push('textPanel');
+  if(v31116LooksLikeBarcode(barcodeValue)){ safeParts.push('barcode'); data.barcodeValue=barcodeValue; data.barcodeStatus='confirmed'; }
+  else { if(data.barcodeStatus==='confirmed') data.barcodeStatus='detected_not_decoded'; data.barcodeValue=''; }
+  if(rawParts.includes('handleHole') && productVisible && (['front','sideA','sideB'].includes(originalView)||/handle|manico|foro/.test(evidenceText))) safeParts.push('handleHole');
+  if(rawParts.includes('cap') && productVisible && ['front','sideA','sideB','top'].includes(originalView)) safeParts.push('cap');
+  if(rawParts.includes('base') && productVisible && originalView==='bottom') safeParts.push('base');
+  if(rawParts.includes('rearPanel') && productVisible && originalView==='back') safeParts.push('rearPanel');
+  if(!accepted && safeParts.length && productVisible){ accepted=true; view='detail'; reason=reason.startsWith('server_gate')?reason:'detail_data_only'; }
+  data.accepted=accepted;
+  data.reason=reason;
+  data.viewDetected=accepted&&isGeometry?originalView:view;
+  if(!accepted && !safeParts.length) data.viewDetected='unknown';
+  data.partsDetected=Array.from(new Set(safeParts));
+  data.capturedViews=[]; data.capturedParts=[];
+  data.readyFor3D=false;
+  data.coveragePercent=Number(s.coveragePercent||0);
+  data.serverTruthGate={ok:accepted,productVisible,objectCoverage:cov,bbox:bboxState,originalView,finalView:data.viewDetected,reason,minConfidence:minConf[originalView]||0,viewConfidence:conf,safeParts:data.partsDetected};
+  if(reason.startsWith('server_gate')||['object_cut_edge','object_not_centered','bbox_missing','server_gate_product_size'].includes(reason)){
+    data.nextInstruction='Frame non valido per il 3D: centra il prodotto intero, non tagliarlo, poi ruota lentamente.';
+  }
+  return data;
+}
+function v31116Recompute3DStatus(s={}){
+  const views=Object.keys(s.capturedViews||{}).filter(k=>s.capturedViews[k]);
+  const parts=Object.keys(s.capturedParts||{}).filter(k=>s.capturedParts[k]);
+  const vw={front:22,sideA:18,sideB:18,back:24,top:8,bottom:10};
+  const pw={frontLabel:8,textPanel:6,barcode:8,handleHole:6,cap:4,base:4,rearPanel:5};
+  let pct=0; for(const v of views)pct+=vw[v]||0; for(const p of parts)pct+=pw[p]||0;
+  const geom=views.filter(v=>['front','sideA','sideB','back','top','bottom'].includes(v));
+  if(!views.includes('front')) pct=Math.min(pct,45);
+  if(!views.includes('back')) pct=Math.min(pct,68);
+  if(!views.some(v=>['sideA','sideB'].includes(v))) pct=Math.min(pct,48);
+  if(geom.length<=1) pct=Math.min(pct,35);
+  pct=Math.max(0,Math.min(100,Math.round(pct)));
+  const missingViews=['front','sideA','back','sideB','top','bottom'].filter(v=>!views.includes(v));
+  const missingParts=['frontLabel','barcode'].filter(p=>!parts.includes(p));
+  const ready=views.includes('front') && views.includes('back') && views.some(v=>['sideA','sideB'].includes(v)) && pct>=62 && Number(s.frames?.length||0)>=3;
+  return {coveragePercent:pct,missingViews,missingParts,readyFor3D:ready,views,parts};
+}
 async function v31106CallGpuAcquireFrame(buffer,mime='image/jpeg',opts={}){
   const cfg=v3100GpuConfig();
   if(!cfg.enabled||!cfg.url||!cfg.token) return {ok:false,reason:'gpu_not_ready',config:v3100PublicConfig()};
@@ -10563,7 +10641,8 @@ async function v31106Acquire3DFrame(sessionId='',frameDataUrl='',frameIndex=0,cl
     clientMotion:clientMotion||{}
   };
   const gpu=await v31106CallGpuAcquireFrame(parts.buffer,parts.mime,{frameIndex,coverage,filename:`${s.key}_${frameIndex}.jpg`});
-  const data=(gpu.ok&&gpu.data&&gpu.data.ok)?gpu.data:null;
+  let data=(gpu.ok&&gpu.data&&gpu.data.ok)?gpu.data:null;
+  if(data) data=v31116SanitizeGpu3DFrame(data,s);
   if(!data){
     s.rejectedFrames++;
     s.gpuErrorStreak=Number(s.gpuErrorStreak||0)+1;
@@ -10572,6 +10651,7 @@ async function v31106Acquire3DFrame(sessionId='',frameDataUrl='',frameIndex=0,cl
     s.lastInstruction=s.gpuErrorStreak>=2?'La GPU non sta rispondendo bene. Metti in pausa, controlla il worker e poi riprendi.':'Non riesco ad analizzare questo frame. Continua lentamente o verifica GPU.';
     return Object.assign({ok:true,accepted:false,gpuError:gpu},v31106SessionPublic(s));
   }
+  s.serverTruthGate=data.serverTruthGate||null;
   s.productFamily=data.productFamily||s.productFamily;
   s.currentView=data.viewDetected||'unknown'; s.viewConfidence=Number(data.viewConfidence||0); s.frameType=data.frameType||'unknown'; s.distanceState=data.distanceState||'unknown'; s.motionType=data.motionType||'unknown';
   s.gpuErrorStreak=0; s.barcodeStatus=data.barcodeStatus||s.barcodeStatus||'not_seen'; s.labelStatus=data.labelStatus||s.labelStatus||'unknown'; s.evidence=Array.isArray(data.evidence)?data.evidence:[]; s.overlay=data.overlay||s.overlay||null;
@@ -10601,7 +10681,7 @@ async function v31106Acquire3DFrame(sessionId='',frameDataUrl='',frameIndex=0,cl
     s.rejectedFrames++;
     if(data.descriptor){ s.lastDescriptor=data.descriptor; s.lastMetrics=data.metrics||null; }
     if(String(data.reason||'')==='duplicate_angle' || String(data.reason||'')==='view_not_confident') s.duplicateStreak=Number(s.duplicateStreak||0)+1;
-    // V31.10.15: for visible preview, keep usable non-blurry frames too.
+    // V31.10.16: for visible preview, keep usable non-blurry frames too.
     const usablePreviewFrame=Number(data.metrics?.objectCoverage||0)>.045 && !['too_blurry','bad_exposure','product_cut_or_too_small'].includes(String(data.reason||''));
     if(usablePreviewFrame){
       const frame={id:'p'+String(frameIndex).padStart(3,'0')+'_'+Date.now().toString(36),frameIndex,view:data.viewDetected||'preview',viewConfidence:Number(data.viewConfidence||0),frameType:data.frameType||'',distanceState:data.distanceState||'',parts:data.partsDetected||[],score:Math.max(28,Number(data.score||0)-8),mime:parts.mime,buffer:parts.buffer,bytes:parts.buffer.length,metrics:data.metrics||{},descriptor:data.descriptor||null,printedText:data.printedText||'',barcodeValue:data.barcodeValue||'',previewFrame:true,at:Date.now()};
@@ -10610,18 +10690,17 @@ async function v31106Acquire3DFrame(sessionId='',frameDataUrl='',frameIndex=0,cl
       s.frames=s.frames.slice(0,14);
     }
   }
-  for(const v of (data.capturedViews||[])){ if(!['unknown','detail'].includes(v)) s.capturedViews[v]=true; }
-  for(const p of (data.capturedParts||[])) s.capturedParts[p]=true;
-  s.coveragePercent=Number(data.coveragePercent||s.coveragePercent||0);
-  s.missingViews=data.missingViews||s.missingViews||[];
-  s.missingParts=data.missingParts||s.missingParts||[];
-  s.readyStreak=(data.readyFor3D && data.accepted)?(Number(s.readyStreak||0)+1):0;
-  s.readyFor3D=!!data.readyFor3D && (Number(s.readyStreak||0)>=2 || Number(s.coveragePercent||0)>=82);
-  const geomViews=Object.keys(s.capturedViews||{}).filter(k=>s.capturedViews[k]&&['front','sideA','sideB','back','top','bottom'].includes(k));
+  const recomputed=v31116Recompute3DStatus(s);
+  s.coveragePercent=recomputed.coveragePercent;
+  s.missingViews=recomputed.missingViews;
+  s.missingParts=recomputed.missingParts;
+  s.readyStreak=(recomputed.readyFor3D && data.accepted)?(Number(s.readyStreak||0)+1):0;
+  s.readyFor3D=!!recomputed.readyFor3D && (Number(s.readyStreak||0)>=1 || Number(s.coveragePercent||0)>=76);
+  const geomViews=recomputed.views.filter(k=>['front','sideA','sideB','back','top','bottom'].includes(k));
   s.preview3DEligible=!!((Array.isArray(s.frames)&&s.frames.length>=1) || (Number(s.acceptedFrames||0)>=1 && (Number(s.coveragePercent||0)>=25 || s.capturedViews.front || geomViews.length>=1)));
   s.autoBuildEligible=!!s.readyFor3D;
   s.qualityHint=String(data.reason||'ok');
-  s.buildRecommendation=s.readyFor3D?'Copertura stabile: posso generare automaticamente il 3D.':(s.preview3DEligible?'Puoi già premere “Crea 3D con frame attuali”: creo una preview visibile e ruotabile dai frame della live.':'Sto ancora raccogliendo almeno un frame utilizzabile per creare il 3D.');
+  s.buildRecommendation=s.readyFor3D?'Copertura vera stabile: posso generare il 3D finale.':(s.preview3DEligible?'Preview possibile dai frame veri, ma per il finale mi servono fronte + lato + retro reali.':'Sto ancora raccogliendo almeno un frame realmente valido.');
   s.lastInstruction=v31106RefineInstruction(s, data);
   s.lastFrameReason=data.reason||'';
   return Object.assign({ok:true,accepted:!!data.accepted,frame:data},v31106SessionPublic(s));
@@ -10694,7 +10773,7 @@ function v3192BuildReal3DModel(key='', payload={}, mergedImages={}, meta={}){
   const workerFrames=Array.isArray(render3d.frames)?render3d.frames.slice(0,12):[];
   const acqFrameDataUrls=acqFrames.map(x=>x&&x.dataUrl).filter(Boolean).slice(0,12);
   return {
-    version: payload.version || render3d.version || '33.4.13',
+    version: payload.version || render3d.version || '33.4.14',
     at: Date.now(),
     mode:'real_glb_mesh',
     realMeshGlb:true,
@@ -10723,7 +10802,7 @@ function v31115Persist3DOnly(key='',payload={},meta={}){
   if(!model.realMeshGlb){ return null; }
   const current=Object.assign({}, existing, {
     ok:true,
-    version:'31.10.15-v33.4.13-3d-isolated-final',
+    version:'31.10.16-v33.4.14-hard-truth-3d',
     strictV33:true,
     renderPipelineVersion:'v31_10_15_3d_isolated_final',
     profilePolicy:'manual_owner_only',
@@ -10780,14 +10859,14 @@ async function v3160BuildVirtual3D(key='',opts={}){
   const existing=rec.objectFolder?.gpuVisionV31||rec.gpuVisionV31||{};
   const oldImages=Object.assign({}, existing.images||{});
   const incomingImages=Object.assign({}, payload.images||{});
-  // V31.10.15: 3D isolato. Il Render 360° NON deve mai sovrascrivere renderPro2D / productWhite / profilo.
+  // V31.10.16: 3D isolato. Il Render 360° NON deve mai sovrascrivere renderPro2D / productWhite / profilo.
   const mergedImages=Object.assign({}, oldImages);
   const modelPosterImages=Object.assign({}, oldImages, incomingImages);
   const oldProduct=Object.assign({}, existing.product||{});
   const incomingProduct=Object.assign({}, payload.product||{});
   if(existing.labelBox){ oldProduct.labelBox=existing.labelBox; }
   if(oldProduct.labelBox){ incomingProduct.labelBox=oldProduct.labelBox; }
-  const current=Object.assign({}, existing, {ok:true,version:'33.4.13-real3d-v31.10.15',strictV33:true,renderPipelineVersion:'v31_10_15_3d_isolated_final',images:mergedImages,product:Object.assign({},oldProduct,incomingProduct),labelBox:existing.labelBox||oldProduct.labelBox||null,teacherOpenAI:{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: 3D reale creato dal worker RunPod V33.4.13 con acquisizione prodotto.'}});
+  const current=Object.assign({}, existing, {ok:true,version:'33.4.14-real3d-v31.10.16',strictV33:true,renderPipelineVersion:'v31_10_15_3d_isolated_final',images:mergedImages,product:Object.assign({},oldProduct,incomingProduct),labelBox:existing.labelBox||oldProduct.labelBox||null,teacherOpenAI:{called:false,reason:'not_needed',result:'Nessuna chiamata OpenAI: 3D reale creato dal worker RunPod V33.4.14 con acquisizione prodotto.'}});
   current.model3D=v3192BuildReal3DModel(key,payload,modelPosterImages,{sourceFront:frontResolved.source||'',sourceBack:backOpts.backFilename||'',mode:'spesapronta_gpu_manual_3d'});
   current.render360=Object.assign({},current.model3D||{});
   const folder=v2842EnsureObjectFolder(rec);
@@ -10834,9 +10913,9 @@ async function v3100GpuVisionAnalyze({key='',imageDataUrl='',imageUrl='',mode='a
   finally{ if(!force) global.__spesaGpuVisionLocks.delete(lockKey); }
 }
 try{ const prevFolder=v2842PublicObjectFolder; if(typeof prevFolder==='function'&&!global.__v3100GpuFolderWrapped){ v2842PublicObjectFolder=function(record={}){ const out=prevFolder.call(this,record)||{}; out.gpuVisionV31=(record.objectFolder&&record.objectFolder.gpuVisionV31)||record.gpuVisionV31||null; return out; }; global.__v3100GpuFolderWrapped=true; } }catch(_){ }
-try{ const prevBrain=publicServerBrainV2840; if(typeof prevBrain==='function'&&!global.__v3100BrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prevBrain.call(this,opts||{})||{}; out.version='V31.10.15 3D Isolated Final'; out.gpuVisionV31=v3100PublicConfig(); return out; }; global.__v3100BrainWrapped=true; } }catch(_){ }
-try{ const prevPreflight=preflightSnapshotV98; if(typeof prevPreflight==='function'&&!global.__v3100PreflightWrapped){ preflightSnapshotV98=function(){ const s=prevPreflight.call(this)||{}; s.version='V31.10.15'; s.gpuVisionV31=v3100PublicConfig(); return s; }; global.__v3100PreflightWrapped=true; } }catch(_){ }
-console.log('[Spesa Pronta] V31.10.15 3D Isolated Final active');
+try{ const prevBrain=publicServerBrainV2840; if(typeof prevBrain==='function'&&!global.__v3100BrainWrapped){ publicServerBrainV2840=function(opts={}){ const out=prevBrain.call(this,opts||{})||{}; out.version='V31.10.16 3D Isolated Final'; out.gpuVisionV31=v3100PublicConfig(); return out; }; global.__v3100BrainWrapped=true; } }catch(_){ }
+try{ const prevPreflight=preflightSnapshotV98; if(typeof prevPreflight==='function'&&!global.__v3100PreflightWrapped){ preflightSnapshotV98=function(){ const s=prevPreflight.call(this)||{}; s.version='V31.10.16'; s.gpuVisionV31=v3100PublicConfig(); return s; }; global.__v3100PreflightWrapped=true; } }catch(_){ }
+console.log('[Spesa Pronta] V31.10.16 3D Isolated Final active');
 
 
 // =============================================================
@@ -10859,7 +10938,7 @@ console.log('[Spesa Pronta] V31.10.15 3D Isolated Final active');
       const prev=preflightSnapshotV98;
       preflightSnapshotV98=function(){
         const s=prev.call(this)||{};
-        s.version='V31.10.15';
+        s.version='V31.10.16';
         s.ramSafeV314=spesaRamSafeHealth();
         s.checks=Array.isArray(s.checks)?s.checks:[];
         s.checks.push({id:'render_ram_safe',label:'Render RAM Safe',ok:!!SPESA_RAM_SAFE,message:SPESA_RAM_SAFE?`Modalità ${SPESA_MEMORY_MODE}: cache/foto/dataset alleggeriti`:'Modalità PRO locale: RAM Safe non forzato'});
