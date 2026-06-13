@@ -65,7 +65,7 @@ const SPESA_MAX_BARCODE_CACHE = Math.max(80, Math.min(5000, Number(process.env.M
 const SPESA_MAX_GLOBAL_PRODUCTS = Math.max(120, Math.min(5000, Number(process.env.MAX_GLOBAL_PRODUCTS || process.env.SPESA_MAX_GLOBAL_PRODUCTS || (SPESA_RAM_SAFE ? 800 : 2500))));
 const SPESA_MAX_PRODUCT_PHOTOS = Math.max(6, Math.min(36, Number(process.env.MAX_PRODUCT_PHOTOS || process.env.SPESA_MAX_PRODUCT_PHOTOS || (SPESA_RAM_SAFE ? 8 : 36))));
 const SPESA_MAX_DATA_URL_CHARS = Math.max(0, Math.min(300000, Number(process.env.MAX_STORED_DATA_URL_CHARS || process.env.SPESA_MAX_DATA_URL_CHARS || (SPESA_RAM_SAFE ? 0 : 180000))));
-// V31.10.22: il GLB NON è una foto. Non deve essere troncato/cancellato dal RAM-safe, altrimenti il viewer resta bianco.
+// V31.10.23: il GLB NON è una foto. Non deve essere troncato/cancellato dal RAM-safe, altrimenti il viewer resta bianco.
 const SPESA_PRESERVE_GLB_DATA_URL = !/^false$/i.test(String(process.env.PRESERVE_GLB_DATA_URL || process.env.SPESA_PRESERVE_GLB_DATA_URL || 'true'));
 const SPESA_MAX_GLB_DATA_URL_CHARS = Math.max(1000000, Math.min(80000000, Number(process.env.MAX_STORED_GLB_DATA_URL_CHARS || process.env.SPESA_MAX_GLB_DATA_URL_CHARS || 24000000)));
 // V31.7: in modalità RAM-safe non salviamo le foto enormi, ma conserviamo preview leggere per non rompere galleria/profilo/render.
@@ -383,7 +383,7 @@ function spesaRamSafeArrayLimit(key=''){
 function spesaRamSafeString(v='', key=''){
   const s=String(v==null?'':v);
   const k=String(key||'').toLowerCase();
-  // V31.10.22: GLB/data:model è il modello 3D finale. Non tagliarlo a 1600 caratteri.
+  // V31.10.23: GLB/data:model è il modello 3D finale. Non tagliarlo a 1600 caratteri.
   if(SPESA_PRESERVE_GLB_DATA_URL && (spesaRamSafeIsGlbDataUrl(s) || (spesaRamSafeIsGlbKey(k) && /^data:/i.test(s)))){
     if(s.length>SPESA_MAX_GLB_DATA_URL_CHARS) return '';
     return s;
@@ -4013,12 +4013,17 @@ const server = http.createServer(async (req,res)=>{
       const rec=(typeof v3160Rec==='function')?v3160Rec(key):null;
       if(!rec) return send(res,404,{ok:false,error:'product_not_found'});
       const folder=(typeof v2842EnsureObjectFolder==='function')?v2842EnsureObjectFolder(rec):(rec.objectFolder||{});
+      v31124ResetLegacy3DForRecord(rec,'model_endpoint_guard');
       const gv=folder.gpuVisionV33||rec.gpuVisionV33||folder.gpuVisionV31||rec.gpuVisionV31||{};
       const model=gv.model3D||gv.render360||folder.render360V3000||rec.render360V3000||{};
-      const dataUrl=String(model.glbDataUrl||model.glb||model.modelDataUrl||'');
+      const trust=(typeof v31124ModelTrustInfo==='function')?v31124ModelTrustInfo(model):{ok:false,blockedReason:'guard_unavailable'};
+      if(!trust.ok){
+        return send(res,404,{ok:false,error:trust.blockedReason||'glb_not_trusted',message:'GLB legacy/sporco bloccato: acquisisci di nuovo il prodotto con V31.10.24 / V33.4.19.'});
+      }
+      const dataUrl=String(trust.glbDataUrl||'');
       const parsed=(typeof v3191DecodeDataUrl==='function')?v3191DecodeDataUrl(dataUrl):null;
       if(!parsed||!parsed.buffer){
-        return send(res,404,{ok:false,error:'glb_not_found',message:'GLB reale non trovato in memoria. Premi Render 360° 3D dopo worker V33.4.4.'});
+        return send(res,404,{ok:false,error:'glb_not_found',message:'GLB reale non trovato in memoria. Premi Render 360° 3D dopo worker V33.4.19.'});
       }
       res.writeHead(200,{
         'Content-Type':'model/gltf-binary',
@@ -10417,6 +10422,75 @@ async function v3160ExtractLabelOnly(key='',opts={}){
 const v31106AcquireSessions = global.__spesaV31106AcquireSessions || (global.__spesaV31106AcquireSessions = new Map());
 function v31106SessionId(){ return 'acq3d_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8); }
 function v31106Now(){ return Date.now(); }
+function v31124ModelTrustInfo(model={}){
+  const version=String(model.version||'');
+  const engine=String(model.engine||'');
+  const mode=String(model.mode||'');
+  const storagePolicy=String(model.storagePolicy||'');
+  const note=String(model.note||'');
+  const pipeline=Array.isArray(model.pipeline)?model.pipeline.join(' '):String(model.pipeline||'');
+  const meta=[version,engine,mode,storagePolicy,note,pipeline].filter(Boolean).join(' ').toLowerCase();
+  const glbDataUrl=String(model.glbDataUrl||model.glb||model.modelDataUrl||'');
+  const hasGlb=/^data:model\/gltf-binary;base64,/i.test(glbDataUrl);
+  const realMesh=!!(model.realMeshGlb && hasGlb);
+  const dirtyLegacy=/spesamesh\s*depth\s*extrusion|depth\s*extrusion|v33\.4\.14|v33\.4\.15|rollback|balanced\s*silhouette|contour\s*hole|refine\s*safe/i.test(meta);
+  const trustedFamily=/scanner3d|object.?mask|acquisition|hard.?gate|hard.?reset|no.?dirty.?glb|glb.?preserve|v33\.4\.18|v33\.4\.19/i.test(meta) || !!(model.acquisition && typeof model.acquisition==='object');
+  const blockedReason=!realMesh?'missing_real_glb':(dirtyLegacy?'legacy_engine_blocked':(!trustedFamily?'untrusted_model_family':''));
+  return {ok:!!(realMesh && !dirtyLegacy && trustedFamily),realMesh,dirtyLegacy,trustedFamily,blockedReason,version,engine,meta,glbDataUrl};
+}
+function v31124SanitizeGpuVision3D(record={},reason='') {
+  try{
+    if(!record || typeof record!=='object') return false;
+    const model=record.model3D||record.render360||{};
+    const trust=v31124ModelTrustInfo(model);
+    if(!model || !Object.keys(model).length) return false;
+    if(trust.ok) return false;
+    delete record.model3D; delete record.render360;
+    record.blockedLegacy3D={at:Date.now(),reason:reason||trust.blockedReason||'legacy_3d_hidden',engine:trust.engine||'',version:trust.version||''};
+    record.message='3D legacy nascosto: serve GLB reale scanner3D pulito.';
+    return true;
+  }catch(_){ return false; }
+}
+function v31124ResetLegacy3DForRecord(rec={},reason='') {
+  try{
+    const folder=v2842EnsureObjectFolder(rec);
+    let changed=false;
+    changed=v31124SanitizeGpuVision3D(folder.gpuVisionV33||(folder.gpuVisionV33={}),reason)||changed;
+    changed=v31124SanitizeGpuVision3D(rec.gpuVisionV33||(rec.gpuVisionV33={}),reason)||changed;
+    changed=v31124SanitizeGpuVision3D(folder.gpuVisionV31||(folder.gpuVisionV31={}),reason)||changed;
+    changed=v31124SanitizeGpuVision3D(rec.gpuVisionV31||(rec.gpuVisionV31={}),reason)||changed;
+    const folderModel=folder.render360V3000||{};
+    if(Object.keys(folderModel).length && !v31124ModelTrustInfo(folderModel).ok){ delete folder.render360V3000; changed=true; }
+    const recModel=rec.render360V3000||{};
+    if(Object.keys(recModel).length && !v31124ModelTrustInfo(recModel).ok){ delete rec.render360V3000; changed=true; }
+    if(changed){
+      folder.last3DReset={at:Date.now(),reason:reason||'legacy_3d_reset_v31_10_24'};
+      rec.last3DReset=folder.last3DReset;
+    }
+    return changed;
+  }catch(_){ return false; }
+}
+function v31124FrameGeometryGate(data={}){
+  const viewName=String(data.viewDetected||'unknown');
+  const geomView=['front','sideA','sideB','back','top','bottom'].includes(viewName);
+  const conf=Number(data.viewConfidence||0);
+  const frameType=String(data.frameType||'');
+  const overlay=(data.overlay&&typeof data.overlay==='object')?data.overlay:{};
+  const bbox=(overlay.bbox&&typeof overlay.bbox==='object')?overlay.bbox:((data.metrics&&data.metrics.bbox)||{});
+  const sourceW=Number(bbox.sourceW||overlay.sourceW||data.metrics?.sourceW||0);
+  const sourceH=Number(bbox.sourceH||overlay.sourceH||data.metrics?.sourceH||0);
+  const bw=Number(bbox.w||0), bh=Number(bbox.h||0);
+  const bboxCoverage=(sourceW>0&&sourceH>0&&bw>0&&bh>0)?((bw*bh)/(sourceW*sourceH)):Number(data.metrics?.objectCoverage||overlay.coverage||0);
+  const aspect=bw>0&&bh>0?(bw/bh):Number(overlay.aspect||data.metrics?.aspect||0);
+  const objectOnly=data.objectOnly!==false && overlay.objectOnly!==false;
+  const maskVisible=data.objectAlwaysVisible!==false;
+  const enoughCoverage=bboxCoverage>=0.16 && bboxCoverage<=0.93;
+  const saneAspect=!aspect || (aspect>=0.18 && aspect<=4.5);
+  const detailRejected=!/detail/i.test(frameType);
+  const confidenceAccepted=conf>=78;
+  const accepted=!!data.accepted && geomView && confidenceAccepted && detailRejected && objectOnly && maskVisible && enoughCoverage && saneAspect && data.geometryAccepted!==false;
+  return {accepted,viewName,geomView,conf,frameType,bboxCoverage,aspect,objectOnly,maskVisible,enoughCoverage,saneAspect};
+}
 function v31106CleanSessions(){ const now=Date.now(); for(const [id,s] of v31106AcquireSessions.entries()){ if(!s || now-Number(s.updatedAt||s.createdAt||0)>30*60*1000){ v31106AcquireSessions.delete(id); } } }
 function v31106SessionPublic(s={}){
   return {
@@ -10431,8 +10505,9 @@ function v31106SessionPublic(s={}){
     barcodeStatus:s.barcodeStatus||'not_seen', barcodeValue:s.barcodeValue||'', labelStatus:s.labelStatus||'unknown',
     printedText:s.printedText||'', ocrWords:Array.from(new Set([...(s.ocrWords||[])]).values()).slice(0,80), evidence:s.evidence||[],
     overlay:s.overlay||null,
+    geometryFrames:Number(s.acceptedFrames||0),
     temporaryFrames:Number((s.frames||[]).length), voiceEnabled:true, cleanup:s.cleanup||'pending',
-    debug:{frontDescriptor:!!s.frontDescriptor,lastDescriptor:!!s.lastDescriptor,viewDescriptors:Object.keys(s.viewDescriptors||{}),barcodeCandidates:s.barcodeCandidates||[],lastMetrics:s.lastMetrics||null}
+    debug:{frontDescriptor:!!s.frontDescriptor,lastDescriptor:!!s.lastDescriptor,viewDescriptors:Object.keys(s.viewDescriptors||{}),barcodeCandidates:s.barcodeCandidates||[],lastMetrics:s.lastMetrics||null,last3DReset:s.last3DReset||null}
   };
 }
 function v31106PickBestFrame(s={},view='front'){ const frames=Array.isArray(s.frames)?s.frames:[]; let best=null; for(const f of frames){ let score=Number(f.score||0); if(f.view===view) score+=45; if(view==='front' && Array.isArray(f.parts)&&f.parts.includes('frontLabel')) score+=24; if(view==='back' && Array.isArray(f.parts)&&f.parts.includes('barcode')) score+=18; if(!best||score>best._score){ best=Object.assign({_score:score},f); } } return best; }
@@ -10476,6 +10551,7 @@ async function v31106CallGpuBuildFromAcquisition(front={},back={},side={},metada
 function v31106StartAcquire3D(key='',opts={}){
   v31106CleanSessions();
   const rec=v3160Rec(key); if(!rec) return {ok:false,error:'product_not_found'};
+  v31124ResetLegacy3DForRecord(rec,'start_new_acquisition_v31_10_24');
   const sessionId=v31106SessionId();
   const s={sessionId,key,householdId:opts.householdId||'',status:'active',createdAt:Date.now(),updatedAt:Date.now(),frames:[],descriptors:[],viewDescriptors:{},frontDescriptor:null,lastDescriptor:null,lastMetrics:null,barcodeCandidates:[],ocrWords:[],printedText:'',capturedViews:{},capturedParts:{},missingViews:['front','sideA','back','sideB','top','bottom'],missingParts:['frontLabel','barcode'],coveragePercent:0,acceptedFrames:0,rejectedFrames:0,productFamily:'unknown_product',readyFor3D:false,currentView:'unknown',viewConfidence:0,frameType:'unknown',distanceState:'unknown',motionType:'unknown',barcodeStatus:'not_seen',barcodeValue:'',labelStatus:'unknown',evidence:[],overlay:null,lastInstruction:'Inquadra il prodotto intero. Ruotalo lentamente: non assegno lati senza prove visive.',lastFrameReason:'',cleanup:'pending'};
   v31106AcquireSessions.set(sessionId,s);
@@ -10509,11 +10585,12 @@ async function v31106Acquire3DFrame(sessionId='',frameDataUrl='',frameIndex=0,cl
   if(data.printedText){ s.printedText=String([s.printedText,data.printedText].filter(Boolean).join(' ')).slice(0,2600); }
   if(data.ocr&&Array.isArray(data.ocr.words)){ for(const w of data.ocr.words){ if(w && !s.ocrWords.includes(w)) s.ocrWords.push(w); } s.ocrWords=s.ocrWords.slice(0,120); }
   if(data.barcodeValue){ s.barcodeValue=String(data.barcodeValue); if(!s.barcodeCandidates.includes(s.barcodeValue)) s.barcodeCandidates.push(s.barcodeValue); }
-  const viewName=String(data.viewDetected||'unknown');
-  const geomView=['front','sideA','sideB','back','top','bottom'].includes(viewName);
-  const conf=Number(data.viewConfidence||0);
-  const frameType=String(data.frameType||'');
-  const geometryAccepted=!!data.accepted && geomView && conf>=75 && !/detail/i.test(frameType) && data.geometryAccepted!==false;
+  const gate=v31124FrameGeometryGate(data);
+  const viewName=gate.viewName;
+  const geomView=gate.geomView;
+  const conf=gate.conf;
+  const frameType=gate.frameType;
+  const geometryAccepted=gate.accepted;
   const rawParts=Array.isArray(data.partsDetected)?data.partsDetected:[];
   const filteredParts=[];
   const evidence=Array.isArray(data.evidence)?data.evidence.map(String):[];
@@ -10554,10 +10631,12 @@ async function v31106Acquire3DFrame(sessionId='',frameDataUrl='',frameIndex=0,cl
   s.coveragePercent=Math.max(0,Math.min(100,Math.round(cov)));
   s.missingViews=['front','sideA','back','sideB'].filter(v=>!s.capturedViews[v]);
   s.missingParts=['frontLabel','barcode'].filter(p=>!s.capturedParts[p]);
-  s.readyFor3D=!!(s.capturedViews.front && (s.capturedViews.sideA||s.capturedViews.sideB) && (s.capturedViews.back||s.coveragePercent>=65) && s.coveragePercent>=58);
+  s.readyFor3D=!!(s.capturedViews.front && (s.capturedViews.sideA||s.capturedViews.sideB) && s.capturedViews.back && s.coveragePercent>=58 && Number(s.acceptedFrames||0)>=3);
   const publicData=v31106SessionPublic(s);
-  publicData.preview3DEligible=!!(s.capturedViews.front && (s.capturedViews.sideA||s.capturedViews.sideB||s.capturedViews.back));
-  publicData.serverTruth={geometryAccepted,filteredParts,rawAccepted:!!data.accepted,rawView:viewName,rawReason:data.reason||'',rawConfidence:conf};
+  publicData.preview3DEligible=!!(s.capturedViews.front && (s.capturedViews.sideA||s.capturedViews.sideB) && Number(s.acceptedFrames||0)>=2);
+  publicData.autoBuildEligible=!!s.readyFor3D;
+  publicData.serverTruth={geometryAccepted,filteredParts,rawAccepted:!!data.accepted,rawView:viewName,rawReason:data.reason||'',rawConfidence:conf,bboxCoverage:gate.bboxCoverage,aspect:gate.aspect,objectOnly:gate.objectOnly,maskVisible:gate.maskVisible};
+  publicData.debug=Object.assign({},publicData.debug||{}, {serverTruthGate:{ok:geometryAccepted,reason:geometryAccepted?'accepted':(gate.geomView?(gate.conf<78?'low_confidence':(!gate.enoughCoverage?'mask_dirty_or_incomplete':(!gate.saneAspect?'distorted_bbox':(!gate.objectOnly?'not_object_only':'rejected')))):'view_not_geometry'),coverage:Number(gate.bboxCoverage||0),aspect:Number(gate.aspect||0)}});
   s.lastInstruction= geometryAccepted ? (data.nextInstruction||s.lastInstruction) : (viewName==='detail'?'Dettaglio ignorato per la mesh. Torna a una vista larga e ruota lentamente.':(data.nextInstruction||s.lastInstruction));
   s.lastFrameReason=data.reason||'';
   return Object.assign({ok:true,accepted:geometryAccepted,frame:Object.assign({},data,{accepted:geometryAccepted,geometryAccepted,partsDetected:filteredParts,serverTruth:publicData.serverTruth})},publicData);
@@ -10569,7 +10648,7 @@ async function v31106BuildAcquire3D(sessionId='',opts={}){
   v31106CleanSessions();
   const s=v31106AcquireSessions.get(String(sessionId||'')); if(!s) return {ok:false,error:'session_not_found'};
   const rec=v3160Rec(s.key); if(!rec) return {ok:false,error:'product_not_found'};
-  const forcePreview=!!opts.forcePreview;
+  const forcePreview=!!opts.forcePreview && !!s.readyFor3D;
   const geomFrames=(Array.isArray(s.frames)?s.frames:[]).filter(f=>['front','sideA','sideB','back','top','bottom'].includes(String(f.view||'')) && f.buffer);
   if(!s.readyFor3D && !forcePreview){
     return {ok:false,error:'not_ready_for_3d',message:'Non genero 3D: mancano ancora viste o prove reali.',status:v31106SessionPublic(s)};
@@ -10581,19 +10660,24 @@ async function v31106BuildAcquire3D(sessionId='',opts={}){
   const top=v31106PickBestFrame(s,'top')||null;
   const bottom=v31106PickBestFrame(s,'bottom')||null;
   if(!front||!front.buffer) return {ok:false,error:'no_valid_front',message:'Mi serve almeno un frontale valido per costruire il 3D.'};
-  const metadata={sessionId:s.sessionId,productFamily:s.productFamily,coveragePercent:s.coveragePercent,capturedViews:Object.keys(s.capturedViews).filter(k=>s.capturedViews[k]),capturedParts:Object.keys(s.capturedParts).filter(k=>s.capturedParts[k]),missingViews:s.missingViews,missingParts:s.missingParts,acceptedFrames:s.acceptedFrames,rejectedFrames:s.rejectedFrames,readyFor3D:s.readyFor3D,forcePreview,distanceAware:true,truthGate:true,objectCentricTracking:true,ocrWords:s.ocrWords||[],printedText:s.printedText||'',barcodeCandidates:s.barcodeCandidates||[],barcodeValue:s.barcodeValue||'',version:'v31_10_22_glb_preserve_no_truncate',buildViews:{front:!!front,side:!!side,back:!!back,top:!!top,bottom:!!bottom}};
+  if(!side||!side.buffer) return {ok:false,error:'no_valid_side',message:'Non creo GLB deformati: mi serve almeno un lato reale pulito oltre al frontale.',status:v31106SessionPublic(s)};
+  const metadata={sessionId:s.sessionId,productFamily:s.productFamily,coveragePercent:s.coveragePercent,capturedViews:Object.keys(s.capturedViews).filter(k=>s.capturedViews[k]),capturedParts:Object.keys(s.capturedParts).filter(k=>s.capturedParts[k]),missingViews:s.missingViews,missingParts:s.missingParts,acceptedFrames:s.acceptedFrames,rejectedFrames:s.rejectedFrames,readyFor3D:s.readyFor3D,forcePreview,distanceAware:true,truthGate:true,objectCentricTracking:true,ocrWords:s.ocrWords||[],printedText:s.printedText||'',barcodeCandidates:s.barcodeCandidates||[],barcodeValue:s.barcodeValue||'',version:'v31_10_24_hard_reset_clean_gate',buildViews:{front:!!front,side:!!side,back:!!back,top:!!top,bottom:!!bottom}};
   let build=await v31106CallGpuBuildFromAcquisition(front,back,side,metadata,{top,bottom});
   let payload=(build.ok&&build.data&&build.data.ok)?build.data:null;
-  if(!payload){
-    const fallback=await v3100CallGpuVision(front.buffer,front.mime,'render-3d',front.filename||'front.jpg', back&&back.buffer?{backBuffer:back.buffer,backMime:back.mime,backFilename:back.filename||'back.jpg'}:{});
-    if(fallback.ok&&fallback.data) payload=fallback.data;
+  // V31.10.23: MAI fallback a render-3d da frontale singolo.
+  // Quel fallback creava GLB deformati con tavolo/sfondo dentro. Se la GPU rifiuta, mostro errore chiaro.
+  if(!payload||!payload.ok){
+    return {ok:false,error:(build?.data?.error||'build_failed'),gpuBuild:build,status:v31106SessionPublic(s),message:(build?.data?.message||'La GPU ha rifiutato il GLB perché la maschera/lato non sono puliti. Continua acquisizione: fronte + lato reale su sfondo semplice.')};
   }
-  if(!payload||!payload.ok){ return {ok:false,error:'build_failed',gpuBuild:build,message:'La GPU non ha generato il 3D. Continua acquisizione o controlla RunPod.'}; }
   payload.acquisition3D=Object.assign({},metadata,{status:'completed',cleanup:{temporaryFramesDeleted:true,savedFinalAssetsOnly:true}});
   payload.extractedText=payload.extractedText||{printedText:s.printedText||'',ocrWords:s.ocrWords||[]};
   payload.barcodeCandidate=payload.barcodeCandidate||s.barcodeValue||'';
   const render3d=payload.render3d||{};
-  const glbDataUrl=String(render3d.glbDataUrl||payload.glbDataUrl||payload.modelUrl||'');
+  const trustBuilt=v31124ModelTrustInfo({version:payload.version||render3d.version||'',engine:render3d.engine||payload.engine||'',mode:render3d.mode||payload.mode||'real_glb_mesh',storagePolicy:'v31_10_24_hard_reset_clean_gate',note:render3d.note||payload.message||'',pipeline:render3d.pipeline||[],realMeshGlb:!!(render3d.realMeshGlb!==false),glbDataUrl:String(render3d.glbDataUrl||payload.glbDataUrl||payload.modelUrl||''),acquisition:payload.acquisition3D||{}});
+  if(!trustBuilt.ok){
+    return {ok:false,error:trustBuilt.blockedReason||'blocked_dirty_legacy_model',message:'Build 3D bloccato: il worker ha restituito un motore legacy/sporco oppure un GLB non affidabile. Non salvo più modelli stile SpesaMesh Depth Extrusion.',engine:trustBuilt.engine||'',version:trustBuilt.version||'',status:v31106SessionPublic(s)};
+  }
+  const glbDataUrl=String(trustBuilt.glbDataUrl||'');
   const glbBytes=glbDataUrl ? Math.round((glbDataUrl.split(',')[1]||'').length*0.75) : 0;
   if(glbDataUrl && glbDataUrl.length>SPESA_MAX_GLB_DATA_URL_CHARS){
     return {ok:false,error:'glb_too_large_for_current_limit',message:'GLB generato ma supera il limite MAX_STORED_GLB_DATA_URL_CHARS. Aumenta il limite o rigenera più leggero.',glbChars:glbDataUrl.length,glbBytes,limit:SPESA_MAX_GLB_DATA_URL_CHARS};
@@ -10601,11 +10685,11 @@ async function v31106BuildAcquire3D(sessionId='',opts={}){
   const saved=await v3100PersistGpuVision(s.key,payload,'professional_video_live_acquisition_3d',{source:'professional_video_live_acquisition',reference:{sessionId:s.sessionId},preserveGlb:true,glbBytes});
   let model3D=null;
   if(glbDataUrl){
-    model3D={version:payload.version||'33.4.17',at:Date.now(),mode:'real_glb_mesh',realMeshGlb:true,glbDataUrl,glbEndpoint:v3191GpuModelUrl(s.key),engine:render3d.engine||payload.engine||'Scanner3D GLB',qualityScore:render3d.qualityScore||payload.qualityScore||0,note:render3d.note||payload.message||'GLB generato da acquisizione live',frames:[],acquisition:payload.acquisition3D,pipeline:render3d.pipeline||[],glbBytes,glbChars:glbDataUrl.length,storagePolicy:'preserve_glb_v31_10_22_no_ram_safe_truncate'};
+    model3D={version:payload.version||'33.4.19',at:Date.now(),mode:'real_glb_mesh',realMeshGlb:true,glbDataUrl,glbEndpoint:v3191GpuModelUrl(s.key),engine:render3d.engine||payload.engine||'Scanner3D GLB',qualityScore:render3d.qualityScore||payload.qualityScore||0,note:render3d.note||payload.message||'GLB generato da acquisizione live',frames:[],acquisition:payload.acquisition3D,pipeline:render3d.pipeline||[],glbBytes,glbChars:glbDataUrl.length,storagePolicy:'preserve_glb_v31_10_24_hard_reset_clean_gate'};
   }
   if(saved){
-    saved.version='31.10.22-v33.4.17-glb-preserve-no-truncate';
-    saved.renderPipelineVersion='v31_10_22_glb_preserve_no_truncate';
+    saved.version='31.10.24-v33.4.19-hard-reset-clean-gate';
+    saved.renderPipelineVersion='v31_10_24_hard_reset_clean_gate';
     saved.acquisition3D=payload.acquisition3D;
     saved.extractedText=payload.extractedText;
     saved.barcodeCandidate=s.barcodeValue||saved.barcodeCandidate||'';
@@ -10623,7 +10707,7 @@ async function v31106BuildAcquire3D(sessionId='',opts={}){
   }catch(_){ }
   s.frames=[]; s.cleanup='completed'; s.status='completed';
   v31106AcquireSessions.delete(s.sessionId);
-  return {ok:true,title:'Acquisizione 3D completata',message:glbDataUrl?'GLB reale creato e caricato nel viewer sotto scanner.':'Build completata ma GLB non trovato: controlla console.',savedGpuVision:saved,gpuVision:payload,render3d:render3d,glbDataUrl,modelUrl:glbDataUrl||v3191GpuModelUrl(s.key),acquisition3D:payload.acquisition3D,engine:render3d.engine||payload.engine||'',glbBytes,glbChars:glbDataUrl.length,storagePolicy:'preserve_glb_v31_10_22_no_ram_safe_truncate'};
+  return {ok:true,title:'Acquisizione 3D completata',message:glbDataUrl?'GLB reale creato e caricato nel viewer sotto scanner.':'Build completata ma GLB non trovato: controlla console.',savedGpuVision:saved,gpuVision:payload,render3d:render3d,glbDataUrl,modelUrl:glbDataUrl||v3191GpuModelUrl(s.key),acquisition3D:payload.acquisition3D,engine:render3d.engine||payload.engine||'',glbBytes,glbChars:glbDataUrl.length,storagePolicy:'preserve_glb_v31_10_24_hard_reset_clean_gate'};
 }
 function v31106CancelAcquire3D(sessionId=''){
   const s=v31106AcquireSessions.get(String(sessionId||'')); if(s){ s.frames=[]; s.cleanup='cancelled'; v31106AcquireSessions.delete(String(sessionId)); }
@@ -10644,6 +10728,7 @@ function v3180ClearLegacyGpuRender(rec={}){
     const folder=v2842EnsureObjectFolder(rec);
     if(folder.gpuVisionV31 && !String(folder.gpuVisionV31?.version||'').includes('33')) folder.gpuVisionV31={ok:false,version:'legacy_hidden',images:{},model3D:{},render360:{},message:'Legacy render nascosto: serve Render 360° 3D V33 reale.'};
     if(rec.gpuVisionV31 && !String(rec.gpuVisionV31?.version||'').includes('33')) rec.gpuVisionV31=folder.gpuVisionV31;
+    v31124ResetLegacy3DForRecord(rec,'clear_legacy_gpu_render');
     delete folder.render360V3000; delete rec.render360V3000;
   }catch(_){}
 }

@@ -46,3 +46,8 @@ services:
 # V31.6: conserva anteprime leggere anche in RAM-safe (non foto enormi)
 # MAX_STORED_THUMB_DATA_URL_CHARS=140000
 # MAX_PRODUCT_PHOTOS=8
+
+      - key: SPESA_ALLOW_SINGLE_VIEW_3D
+        value: 0
+      - key: SPESA_REQUIRE_CLEAN_MASK_FOR_GLB
+        value: 1
