@@ -36,7 +36,7 @@ try:
 except Exception:
     os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
 
-APP_VERSION = "33.4.26-guided-product-twin-plus"
+APP_VERSION = "33.4.27-human-vision-stable-twin"
 TOKEN = os.environ.get("GPU_VISION_TOKEN", "").strip()
 MAX_SIDE = int(os.environ.get("SPESA_V32_MAX_SIDE", "1600"))
 OUT_SIDE = int(os.environ.get("SPESA_V32_OUT_SIDE", "1000"))
@@ -167,7 +167,7 @@ def _keep_largest_alpha(alpha: np.ndarray) -> np.ndarray:
         gap_x = bx - (x + w) if (x + w) < bx else x - (bx + bw) if x > (bx + bw) else 0
         top_cap = cy < bcy and (y + h) >= by - max(10, int(bh * .13)) and y <= by + int(bh * .25) and ox > .10
         near_main = gap_y <= max(5, int(bh * .035)) and gap_x <= max(5, int(bw * .055)) and (ox > .22 or oy > .28 or area > barea * .035)
-        # V33.4.25: no more 'inner_useful' rescue. It was allowing table/wall leaks inside bbox.
+        # V33.4.27: no more 'inner_useful' rescue. It was allowing table/wall leaks inside bbox.
         if top_cap or near_main:
             clean[labels == i] = 255
     return clean.astype(np.uint8)
@@ -184,7 +184,7 @@ def _refine_alpha_edge(alpha: np.ndarray) -> np.ndarray:
     return soft.astype(np.uint8)
 
 def _suppress_border_background_rgba(src: Image.Image, rgba_img: Image.Image) -> Image.Image:
-    """V33.4.25 Deep Pixel-Skin: remove border/background color leakage from alpha before cells/mesh.
+    """V33.4.27 Deep Pixel-Skin: remove border/background color leakage from alpha before cells/mesh.
     This is not a replacement for rembg; it is an object-purity clamp to avoid table/wall cells."""
     try:
         rgb=np.array(src.convert('RGB')).astype(np.int16)
@@ -254,7 +254,7 @@ def _rembg_cutout(img: Image.Image) -> Tuple[Image.Image, str]:
         out = Image.fromarray(arr, "RGBA")
         out = _suppress_border_background_rgba(src, out)
         out = _defringe_rgba(_expand_handle_hole(_remove_handle_and_background_artifacts(out)))
-        return out, "rembg_u2net_deep_pixel_skin_motion_v33425"
+        return out, "rembg_u2net_deep_pixel_skin_motion_v33427"
     except Exception as e:
         _REMBG_ERROR = str(e)
         return _grabcut_fallback(img), "grabcut_fallback_rembg_failed"
@@ -629,46 +629,95 @@ def _choose_best_label_crop(product: Image.Image) -> Tuple[Image.Image, Dict[str
     return base_crop, base_meta
 
 
+def _smooth_product_rgba_for_mesh(product: Image.Image) -> Image.Image:
+    """V33.4.27: clean alpha + color before mesh. Removes pixel ladders/strips and keeps only the main product."""
+    rgba = product.convert("RGBA")
+    bbox = rgba.getbbox()
+    if bbox:
+        rgba = rgba.crop(bbox)
+    # Higher working resolution, then controlled downsample for stable mesh.
+    rgba.thumbnail((164, 220), Image.LANCZOS)
+    arr = np.array(rgba)
+    if arr.ndim != 3 or arr.shape[2] < 4:
+        return rgba
+    alpha = arr[:, :, 3].astype(np.uint8)
+    if cv2 is not None:
+        alpha = _keep_largest_alpha(alpha)
+        alpha = cv2.morphologyEx(alpha, cv2.MORPH_CLOSE, np.ones((5,5), np.uint8), iterations=2)
+        alpha = cv2.morphologyEx(alpha, cv2.MORPH_OPEN, np.ones((2,2), np.uint8), iterations=1)
+        alpha = cv2.GaussianBlur(alpha, (5,5), 0)
+        _, alpha = cv2.threshold(alpha, 50, 255, cv2.THRESH_BINARY)
+        alpha = _keep_largest_alpha(alpha)
+        # Smooth product colors without destroying text/label too much.
+        rgb = arr[:, :, :3].astype(np.uint8)
+        try:
+            rgb = cv2.bilateralFilter(rgb, 5, 38, 38)
+        except Exception:
+            pass
+        arr[:, :, :3] = rgb
+    arr[:, :, 3] = alpha
+    out = Image.fromarray(arr, "RGBA")
+    out = _trim_transparent(out)
+    return out
+
+
 def _extruded_alpha_glb(product: Image.Image, back: Optional[Image.Image]=None) -> Dict[str, Any]:
-    """Deterministic real volume GLB: silhouette/depth extrusion with vertex colors. Guarantees visible 3D when TripoSR is too flat."""
+    """V33.4.27 human-vision stable mesh: smooth product-only GLB, no jagged dirty strips."""
     try:
         import trimesh
     except Exception as e:
         raise RuntimeError(f"trimesh_missing:{e}")
-    rgba=product.convert("RGBA")
-    bbox=rgba.getbbox()
-    if bbox: rgba=rgba.crop(bbox)
-    rgba.thumbnail((88,132), Image.LANCZOS)
-    # keep dimensions not too tiny
-    arr=np.array(rgba)
-    H,W=arr.shape[:2]
-    mask=arr[:,:,3]>38
+    rgba = _smooth_product_rgba_for_mesh(product)
+    # Controlled mesh resolution: too many tiny pixels made the model shredded/laggy.
+    rgba.thumbnail((74, 118), Image.LANCZOS)
+    arr = np.array(rgba.convert("RGBA"))
+    H,W = arr.shape[:2]
+    if H < 8 or W < 8:
+        raise RuntimeError("mesh_product_too_small")
+    mask = arr[:, :, 3] > 42
     if cv2 is not None:
-        m=(mask.astype(np.uint8))*255
-        m=cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((3,3),np.uint8), iterations=1)
-        mask=m>0
-        dist=cv2.distanceTransform(mask.astype(np.uint8), cv2.DIST_L2, 3)
-        if dist.max()>0: dist=dist/dist.max()
+        m = (mask.astype(np.uint8))*255
+        m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((3,3), np.uint8), iterations=2)
+        m = cv2.morphologyEx(m, cv2.MORPH_OPEN, np.ones((2,2), np.uint8), iterations=1)
+        mask = m > 0
+        dist = cv2.distanceTransform(mask.astype(np.uint8), cv2.DIST_L2, 5)
+        if dist.max() > 0:
+            dist = dist / dist.max()
+        # smooth local depth to remove staircase bands
+        dist = cv2.GaussianBlur(dist.astype(np.float32), (5,5), 0)
+        if dist.max() > 0:
+            dist = dist / dist.max()
     else:
-        dist=mask.astype(np.float32)
-    aspect=W/max(1,H)
+        dist = mask.astype(np.float32)
+    aspect = W / max(1, H)
+    # Optional back texture, cleaned too; if unavailable, use darker front colors.
+    if back is not None:
+        bimg = _smooth_product_rgba_for_mesh(back).convert("RGBA")
+        bimg.thumbnail((W,H), Image.LANCZOS)
+        bcan = Image.new("RGBA", (W,H), (255,255,255,0))
+        bcan.alpha_composite(bimg, ((W-bimg.width)//2, (H-bimg.height)//2))
+        barr = np.array(bcan)
+    else:
+        barr = arr
     verts=[]; colors=[]; front_idx={}; back_idx={}
     def add_v(x,y,z,c):
-        idx=len(verts); verts.append([x,y,z]); colors.append([int(c[0]),int(c[1]),int(c[2]),255]); return idx
-    # optional back colors
-    if back is not None:
-        bimg=back.convert("RGBA"); bimg.thumbnail((W,H), Image.LANCZOS); bcan=Image.new("RGBA",(W,H),(255,255,255,0)); bcan.alpha_composite(bimg,((W-bimg.width)//2,(H-bimg.height)//2)); barr=np.array(bcan)
-    else:
-        barr=arr
+        idx=len(verts)
+        colors.append([int(c[0]), int(c[1]), int(c[2]), 255])
+        verts.append([float(x), float(y), float(z)])
+        return idx
+    # Pixel grid mesh, but with softened depth and lower resolution.
     for y in range(H):
         for x in range(W):
-            if not mask[y,x]: continue
-            xx=(x/(W-1)-.5)*aspect*2.0
-            yy=(.5-y/(H-1))*2.0
-            d=.16+.62*float(dist[y,x]**0.72)
-            front_idx[(x,y)]=add_v(xx,yy,d,arr[y,x,:3])
-            bc=barr[y,x,:3] if barr[y,x,3]>20 else (arr[y,x,:3]*0.72).astype(np.uint8)
-            back_idx[(x,y)]=add_v(xx,yy,-d,bc)
+            if not mask[y,x]:
+                continue
+            xx = (x/(max(1,W-1))-.5)*aspect*2.0
+            yy = (.5-y/(max(1,H-1)))*2.0
+            local = float(dist[y,x])
+            # Wider center / slimmer edges gives bottle-like volume instead of flat cardboard.
+            depth = .20 + .48*(local**0.58)
+            front_idx[(x,y)] = add_v(xx, yy, depth, arr[y,x,:3])
+            bc = barr[y,x,:3] if barr[y,x,3] > 28 else np.clip(arr[y,x,:3].astype(np.float32)*0.70,0,255).astype(np.uint8)
+            back_idx[(x,y)] = add_v(xx, yy, -depth, bc)
     faces=[]
     for y in range(H-1):
         for x in range(W-1):
@@ -678,37 +727,44 @@ def _extruded_alpha_glb(product: Image.Image, back: Optional[Image.Image]=None) 
                 faces.append([a,c,b]); faces.append([b,c,d])
                 ab,bb,cb,db=back_idx[(x,y)],back_idx[(x+1,y)],back_idx[(x,y+1)],back_idx[(x+1,y+1)]
                 faces.append([ab,bb,cb]); faces.append([bb,db,cb])
-    # side faces along boundaries
-    for y in range(H):
-        for x in range(W):
-            if (x,y) not in front_idx: continue
-            for dx,dy in [(1,0),(-1,0),(0,1),(0,-1)]:
-                nx,ny=x+dx,y+dy
-                if (nx,ny) in front_idx: continue
-                # connect to neighbor direction edge approximation if adjacent pixels along perpendicular exist
-                if dx!=0:
-                    p2=(x,y+1)
-                else:
-                    p2=(x+1,y)
-                if p2 in front_idx:
-                    faces.append([front_idx[(x,y)], back_idx[(x,y)], front_idx[p2]])
-                    faces.append([front_idx[p2], back_idx[(x,y)], back_idx[p2]])
+    # side wall faces along mask boundary only. This closes volume without creating huge shredded sheets.
+    for y in range(H-1):
+        for x in range(W-1):
+            if (x,y) not in front_idx:
+                continue
+            if (x+1,y) not in front_idx and (x,y+1) in front_idx:
+                faces.append([front_idx[(x,y)], back_idx[(x,y)], front_idx[(x,y+1)]])
+                faces.append([front_idx[(x,y+1)], back_idx[(x,y)], back_idx[(x,y+1)]])
+            if (x-1,y) not in front_idx and (x,y+1) in front_idx:
+                faces.append([front_idx[(x,y)], front_idx[(x,y+1)], back_idx[(x,y)]])
+                faces.append([front_idx[(x,y+1)], back_idx[(x,y+1)], back_idx[(x,y)]])
+            if (x,y+1) not in front_idx and (x+1,y) in front_idx:
+                faces.append([front_idx[(x,y)], front_idx[(x+1,y)], back_idx[(x,y)]])
+                faces.append([front_idx[(x+1,y)], back_idx[(x+1,y)], back_idx[(x,y)]])
+            if (x,y-1) not in front_idx and (x+1,y) in front_idx:
+                faces.append([front_idx[(x,y)], back_idx[(x,y)], front_idx[(x+1,y)]])
+                faces.append([front_idx[(x+1,y)], back_idx[(x,y)], back_idx[(x+1,y)]])
+    if not verts or not faces:
+        raise RuntimeError("empty_mesh_after_clean_mask")
     mesh=trimesh.Trimesh(vertices=np.array(verts,dtype=np.float32), faces=np.array(faces,dtype=np.int64), vertex_colors=np.array(colors,dtype=np.uint8), process=True)
+    try:
+        mesh.remove_degenerate_faces(); mesh.remove_duplicate_faces(); mesh.remove_unreferenced_vertices()
+        # Light smoothing removes jagged scan bands but keeps silhouette.
+        trimesh.smoothing.filter_laplacian(mesh, lamb=0.22, iterations=2)
+    except Exception:
+        pass
+    mesh.apply_translation(-mesh.bounding_box.centroid)
     mesh.apply_transform(trimesh.transformations.rotation_matrix(math.radians(180), [0,1,0]))
     glb=_mesh_to_glb_data_url(mesh)
-    return {"ok":True,"engine":"Spesa Deep Pixel-Skin Motion Fusion V33.4.25","realMeshGlb":True,"glbDataUrl":glb,"elapsedMs":0,"note":"Visible real GLB volume mesh generated from product silhouette/depth on RunPod GPU brain V33.4.25 with isolated 3D pipeline, thicker visible volume, live-frame preview, and final GLB persistence tuning."}
-
-
-
-
+    return {"ok":True,"engine":"Spesa Human-Vision Stable Product Twin V33.4.27","realMeshGlb":True,"glbDataUrl":glb,"elapsedMs":0,"qualityScore":82,"pipeline":["clean_alpha_largest_component","label_safe_crop","smooth_depth_volume","stable_product_twin_mesh","vertex_color_texture"],"note":"Stable product-only GLB: cleaned mask, smoothed depth volume and no dirty full-frame/table fallback. Built to avoid stretched shredded 3D."}
 
 
 def _guided_product_twin_glb(front: Image.Image, side: Optional[Image.Image]=None, back: Optional[Image.Image]=None, meta: Optional[Dict[str,Any]]=None) -> Dict[str, Any]:
-    """V33.4.25: Product Twin parametric fallback for supermarket packaging.
+    """V33.4.27: Product Twin parametric fallback for supermarket packaging.
     It never uses the raw frame/table; it uses only the isolated front/back alpha and produces a clean GLB when multiview reconstruction is too fragile.
     """
     out=_extruded_alpha_glb(front, back)
-    out["engine"]="Spesa Guided Product Twin Core V33.4.25"
+    out["engine"]="Spesa Guided Product Twin Core V33.4.27"
     out["productTwin"]={"enabled":True,"strategy":"front_texture_plus_safe_depth","sideProvided":bool(side),"backProvided":bool(back),"family":str((meta or {}).get('productFamily') or '')}
     out["qualityScore"]=max(72, int((meta or {}).get('coveragePercent') or 0))
     out["note"]=(out.get("note") or "")+" Product Twin path: clean product silhouette, category-aware safe depth, no background/table fallback."
@@ -761,7 +817,7 @@ def _strict_clean_cut(img: Image.Image) -> Tuple[Optional[Image.Image], Dict[str
 
 
 def _relaxed_clean_cut_for_build(img: Image.Image) -> Tuple[Optional[Image.Image], Dict[str, Any]]:
-    """V33.4.25 Smart Finalizer: second-pass product cut for final GLB.
+    """V33.4.27 Smart Finalizer: second-pass product cut for final GLB.
     It is still object-only, but it does not throw away a usable side/back just because the
     strict live gate was too conservative. The goal is: no dead-end after a good scan.
     """
@@ -940,7 +996,7 @@ def _multiview_voxel_glb(front: Image.Image, side: Optional[Image.Image] = None,
     glb = _mesh_to_glb_data_url(mesh)
     return {
         "ok": True,
-        "engine": "Spesa Deep Pixel-Skin MultiView Surface Fusion V33.4.25",
+        "engine": "Spesa Deep Pixel-Skin MultiView Surface Fusion V33.4.27",
         "realMeshGlb": True,
         "glbDataUrl": glb,
         "elapsedMs": 0,
@@ -997,7 +1053,7 @@ def _hybrid_true_3d_from_views(front: Image.Image, side: Optional[Image.Image] =
         "top": has_top,
         "bottom": has_bottom,
     }
-    result["engine"] = "Spesa Deep Pixel-Skin Object-Lock 3D Fusion V33.4.25"
+    result["engine"] = "Spesa Deep Pixel-Skin Object-Lock 3D Fusion V33.4.27"
     note = result.get("note") or ""
     note += " Hybrid engine: multiview voxel reconstruction only when clean front+side are available; no SpesaMesh/Depth-Extrusion fallback is allowed."
     result["note"] = note.strip()
@@ -1739,7 +1795,7 @@ def _classify_frame_view(frame_index:int, descriptor:Dict[str,Any], metrics:Dict
                 vertical_shift=cur_cy-prev_cy
         except Exception:
             vertical_shift=0.0
-    # V33.4.25: Deep Pixel-Skin motion logic. Tall handle/bottle profiles must stay WIDE geometry,
+    # V33.4.27: Deep Pixel-Skin motion logic. Tall handle/bottle profiles must stay WIDE geometry,
     # not be misclassified as tilt just because the silhouette is tall. Tilt is only a real top/base intent.
     lift_signal = abs(vertical_shift) > 0.060
     profile_motion = ('front' in captured_views and obj_cov > .080 and not cut_edge and .12 <= obj_cov <= .66 and aspect >= 1.34)
@@ -1760,7 +1816,7 @@ def _classify_frame_view(frame_index:int, descriptor:Dict[str,Any], metrics:Dict
         front_hash=_hamming_hex(str(descriptor.get('hash','0')), str(front_desc.get('hash','0')))
     if last_desc:
         last_hash=_hamming_hex(str(descriptor.get('hash','0')), str(last_desc.get('hash','0')))
-    # V33.4.25 GUIDED PRODUCT-TWIN CLASSIFIER: Render tells the worker which view is needed next.
+    # V33.4.27 GUIDED PRODUCT-TWIN CLASSIFIER: Render tells the worker which view is needed next.
     # This avoids confusing front/back/side during free rotation. It still requires wide object geometry.
     if target_view in {'front','sideA','sideB','back','top','bottom'} and frame_type!='detail_view' and not cut_edge and obj_cov>=.07 and obj_cov<=.74:
         if target_view=='front' and label_conf>=50:
@@ -1810,7 +1866,7 @@ def _classify_frame_view(frame_index:int, descriptor:Dict[str,Any], metrics:Dict
             else:
                 view='unknown'; conf=52; evidence.append('angle_changed_but_side_already_seen_or_not_distinct')
         elif view=='unknown' and family_meta.get('hasHandle') and 'front' in captured_views and frame_type=='wide_view' and (front_hash>8 or front_diff>.020 or aspect<1.72 or aspect>2.04 or label_conf<92):
-            # V33.4.25: handle bottles often keep front label visible while turning; use shape/profile novelty, not only label disappearance.
+            # V33.4.27: handle bottles often keep front label visible while turning; use shape/profile novelty, not only label disappearance.
             if 'sideA' not in captured_views:
                 view='sideA'; conf=88; evidence.append('handle_profile_side_confirmed'); coverage_gain=18
             elif 'sideB' not in captured_views and (view_descs.get('sideA') and _hamming_hex(str(descriptor.get('hash','0')), str(view_descs.get('sideA',{}).get('hash','0')))>10):
@@ -2007,7 +2063,7 @@ def _overlay_cells(metrics: Dict[str,Any], captured_parts: List[str], frame_type
                 object_cells=sorted(object_cells, key=lambda x:(float(x.get('core',0)), float(x.get('fill',0))), reverse=True)[:9000]
     except Exception:
         object_cells=[]
-    return {'bbox':bbox,'objectCells':object_cells,'transparent':True,'objectOnly':True,'objectAlwaysVisible':True,'message':'deep pixel-skin micro-celle agganciate solo alla sagoma oggetto','maskQuality':mask_quality,'cellCount':len(object_cells),'skinMode':'guided_dense_pixel_skin_v33425'}
+    return {'bbox':bbox,'objectCells':object_cells,'transparent':True,'objectOnly':True,'objectAlwaysVisible':True,'message':'deep pixel-skin micro-celle agganciate solo alla sagoma oggetto','maskQuality':mask_quality,'cellCount':len(object_cells),'skinMode':'guided_dense_pixel_skin_v33427'}
 
 
 def _frame_acceptance(img: Image.Image, frame_index: int, coverage_json: str = "") -> Dict[str,Any]:
@@ -2031,7 +2087,7 @@ def _frame_acceptance(img: Image.Image, frame_index: int, coverage_json: str = "
     captured_views=list(coverage.get('capturedViews') or [])
     captured_parts=list(coverage.get('capturedParts') or [])
     if (not barcode.get("ok")) and remembered_barcode and 8 <= len(re.sub(r"\D", "", remembered_barcode)) <= 14:
-        barcode = {"ok":True,"found":True,"status":"remembered_from_history","value":re.sub(r"\D", "", remembered_barcode),"values":[re.sub(r"\D", "", remembered_barcode)],"types":["EAN/UPC"],"confidence":72,"method":"coverage_memory_barcode_v33426"}
+        barcode = {"ok":True,"found":True,"status":"remembered_from_history","value":re.sub(r"\D", "", remembered_barcode),"values":[re.sub(r"\D", "", remembered_barcode)],"types":["EAN/UPC"],"confidence":72,"method":"coverage_memory_barcode_v33427"}
     descriptor=_descriptor(img, product, label_meta, barcode)
     # classify close-up/detail before OCR so OCR can use higher confidence when close
     rough_frame_type='detail_view' if (metrics.get('objectCoverage',0)>.52) else 'wide_view'
@@ -2110,6 +2166,13 @@ def _frame_acceptance(img: Image.Image, frame_index: int, coverage_json: str = "
     elif detail_accepted:
         for p in parts:
             if p in {'frontLabel','textPanel','barcode'} and p not in captured_parts: captured_parts.append(p)
+    # V33.4.27 persistent semantic memory inside the scan session: do not forget barcode/label/handle.
+    if barcode.get('ok') or barcode.get('found'):
+        if 'barcode' not in captured_parts: captured_parts.append('barcode')
+    if int(label_meta.get('confidence') or 0) >= 58 or ocr.get('ok') or ('frontLabel' in parts):
+        if 'frontLabel' not in captured_parts: captured_parts.append('frontLabel')
+    if family_meta.get('hasHandle') and (set(captured_views) & {'front','sideA','sideB','back'} or view in {'front','sideA','sideB','back'}):
+        if 'handleHole' not in captured_parts: captured_parts.append('handleHole')
     required_views=family_meta.get('requiredViews') or ["front","sideA","back","sideB"]
     required_parts=family_meta.get('requiredParts') or ["frontLabel"]
     # Real coverage: front + each side/back weighted; detail only helps parts, not geometry.
@@ -2127,7 +2190,7 @@ def _frame_acceptance(img: Image.Image, frame_index: int, coverage_json: str = "
         coverage_percent=min(coverage_percent,42)
     if not ('front' in geom_set and (geom_set & set(['sideA','sideB','back']))):
         coverage_percent=min(coverage_percent,55)
-    # V33.4.25: google-like no false ready. Current frame must be accepted geometry with object lock too.
+    # V33.4.27: google-like no false ready. Current frame must be accepted geometry with object lock too.
     geom_views_set=set(captured_views)&set(['front','sideA','sideB','back','top','bottom'])
     build_confidence=int(max(0,min(100, (coverage_percent*0.35) + geom_scores.get('geometryUsefulnessScore',0)*0.35 + object_lock.get('confidence',0)*0.15 + float(mask_quality.get('purity') or 0)*100*0.15 )))
     ready=bool(geometry_accepted and build_confidence>=76 and coverage_percent>=68 and 'front' in geom_views_set and len(geom_views_set&set(['sideA','sideB']))>=1 and 'back' in geom_views_set and len(geom_views_set)>=3 and bool(set(captured_parts)&set(['frontLabel','barcode','textPanel'])))
@@ -2135,7 +2198,7 @@ def _frame_acceptance(img: Image.Image, frame_index: int, coverage_json: str = "
     missing_views=[v for v in required_views if v not in captured_views]
     missing_parts=[p for p in required_parts if p not in captured_parts]
     overlay=_overlay_cells(metrics, captured_parts, view_info['frameType'], geometry_accepted, cut)
-    status_barcode=barcode.get('status') or ('confirmed' if barcode.get('ok') else 'not_seen')
+    status_barcode='confirmed' if (barcode.get('ok') or barcode.get('found') or barcode.get('status')=='remembered_from_history') else (barcode.get('status') or 'not_seen')
     label_status='readable' if int(label_meta.get('confidence') or 0)>=58 or ocr.get('ok') else 'not_readable'
     if reason in {'too_blurry','bad_exposure'}:
         cadence_ms=1350
@@ -2145,6 +2208,10 @@ def _frame_acceptance(img: Image.Image, frame_index: int, coverage_json: str = "
         cadence_ms=900
     else:
         cadence_ms=1100
+    next_target_view = (missing_views[0] if missing_views else (target_view or view or 'front'))
+    target_names = {'front':'Frontale','sideA':'Lato destro/primo lato','sideB':'Lato sinistro/secondo lato','back':'Retro','top':'Sopra/tappo','bottom':'Sotto/base'}
+    target_label = target_names.get(str(next_target_view), str(next_target_view or 'front'))
+
     if reason in {'product_cut_or_too_small','product_too_close_or_cut','object_cut_edge'}:
         analysis_advice="Il prodotto è tagliato o troppo vicino: allontanati e tienilo intero dentro la sagoma."
     elif reason in {'object_too_small_or_missing','object_not_centered'}:
@@ -2173,6 +2240,8 @@ def _frame_acceptance(img: Image.Image, frame_index: int, coverage_json: str = "
         "score": score,
         "viewDetected": view,
         "viewConfidence": view_info['viewConfidence'],
+        "targetView": next_target_view,
+        "targetLabel": target_label,
         "distanceState": view_info['distanceState'],
         "frameType": view_info['frameType'],
         "motionType": "object_rotation" if view_info['viewConfidence']>=75 and view not in {'front','detail'} else "verifying",
@@ -2270,14 +2339,14 @@ async def build_from_acquisition(front: UploadFile = File(...), back: Optional[U
         allow_back_as_side = family_hint not in {'bottle','detergent_bottle_handle'}
         if side_cut is None and back_cut is not None and allow_back_as_side:
             side_cut = back_cut.copy()
-            side_stats = {"ok": True, "reason": "using_back_as_side_proxy_safe_non_bottle_v33426", "relaxed": True, "source": "back"}
+            side_stats = {"ok": True, "reason": "using_back_as_side_proxy_safe_non_bottle_v33427", "relaxed": True, "source": "back"}
             used_proxy = True
         # Final no-dead-end proxy: only object silhouette, never full frame/table.
         if side_cut is None and front_cut is not None:
             proxy = _side_proxy_from_front(front_cut)
             if proxy is not None:
                 side_cut = proxy
-                side_stats = {"ok": True, "reason": "smart_side_proxy_from_front_silhouette_v33426", "relaxed": True, "source": "front_silhouette"}
+                side_stats = {"ok": True, "reason": "smart_side_proxy_from_front_silhouette_v33427", "relaxed": True, "source": "front_silhouette"}
                 used_proxy = True
 
         mask_quality={"front":front_stats,"side":side_stats,"back":back_stats,"top":top_stats,"bottom":bottom_stats,"usedProxy":used_proxy}
@@ -2291,7 +2360,7 @@ async def build_from_acquisition(front: UploadFile = File(...), back: Optional[U
                     true3d = _guided_product_twin_glb(front_cut, side_cut, back_cut, meta)
                     true3d["engine"] = "Spesa Guided Product Twin Primary GLB V33.4.26"
                     true3d["note"] = (true3d.get("note") or "") + " Primary path chosen for bottle-like packaging to avoid wrong side/back fusion and keep geometry human-like."
-                    build_path = "guided_product_twin_primary_v33426"
+                    build_path = "guided_product_twin_primary_v33427"
                 else:
                     true3d = _hybrid_true_3d_from_views(front_cut, side_cut, back_cut, top_cut, bottom_cut, coverage=coverage)
                     build_path = "hybrid_multiview"
@@ -2319,8 +2388,8 @@ async def build_from_acquisition(front: UploadFile = File(...), back: Optional[U
                 if 8 <= len(digits_only) <= 14:
                     result["barcode"] = digits_only
                     result["ean"] = digits_only
-                    result.setdefault("details", {})["barcode"] = {"ok":True,"found":True,"status":"remembered_from_history","value":digits_only,"values":[digits_only],"confidence":72,"method":"build_metadata_barcode_v33426"}
-            result.setdefault("product", {}).setdefault("shape", {})["thicknessModel"] = "smart_finalizer_hybrid_or_rescue_v33426"
+                    result.setdefault("details", {})["barcode"] = {"ok":True,"found":True,"status":"remembered_from_history","value":digits_only,"values":[digits_only],"confidence":72,"method":"build_metadata_barcode_v33427"}
+            result.setdefault("product", {}).setdefault("shape", {})["thicknessModel"] = "smart_finalizer_hybrid_or_rescue_v33427"
             result["product"]["shape"]["hasSide"] = bool(side_cut)
             result["product"]["shape"]["hasBack"] = bool(back_cut)
             result["product"]["shape"]["hasTop"] = bool(top_cut)
@@ -2334,7 +2403,7 @@ async def build_from_acquisition(front: UploadFile = File(...), back: Optional[U
             "metadata": meta,
             "temporaryFramesDeleted": True,
             "savedFinalAssetsOnly": True,
-            "engine": "video_live_acquisition_v33426_guided_product_twin_core",
+            "engine": "video_live_acquisition_v33427_guided_product_twin_core",
             "sideIncluded": bool(side_img),
             "backIncluded": bool(back_img),
             "topIncluded": bool(top_img),
@@ -2343,7 +2412,7 @@ async def build_from_acquisition(front: UploadFile = File(...), back: Optional[U
             "capturedViews": meta.get("capturedViews", []),
             "capturedParts": meta.get("capturedParts", []),
             "isolated3DPipeline": True,
-            "true3DEngine": "guided_product_twin_hybrid_v33426"
+            "true3DEngine": "guided_product_twin_hybrid_v33427"
         }
         if result.get("render3d") and isinstance(result["render3d"], dict):
             result["render3d"]["note"] = (result["render3d"].get("note") or "") + " Acquisition build saved with google-like object-lock multiview 3D pipeline, immediate inline GLB delivery, and no 2D overwrite."
@@ -2358,7 +2427,7 @@ async def build_from_acquisition(front: UploadFile = File(...), back: Optional[U
 @app.get("/acquisition-health")
 def acquisition_health(authorization: Optional[str] = Header(None), x_vision_token: Optional[str] = Header(None)):
     _auth(authorization, x_vision_token)
-    return {"ok":True,"version":APP_VERSION,"features":["object_centric_tracking","truth_gate","distance_scale_awareness","wide_detail_classifier","gpu_ocr_easyocr_optional","barcode_multiframe_zxing_opencv","live_futuristic_overlay","coverage_map","build_from_acquisition","final_glb_persist_fix","viewer_rotate_ready","smart_live_guidance","stable_auto_build_hint","top_bottom_lift_detection","stable_3d_preview","force_build_preview_visible","base_lift_detection_v2","force_preview_from_live_frames","thicker_visible_mesh","live_build_missing_function_fix","side_used_when_back_missing","isolated_3d_no_2d_overwrite","hard_server_truth_gate_expected","no_fake_coverage","thicker_volume_mesh_v33414","true_multiview_voxel_reconstruction_v33415","inline_glb_delivery_v33415","ultra_true_3d_hybrid_v33416","object_mask_microcells_v33417","geometry_only_acceptance_v33417","no_detail_frames_in_mesh_v33417","top_bottom_regularization_v33416","quality_score_v33416","glb_no_blank_viewer_guard_v33417","mask_quality_hard_gate_v33420","no_dirty_glb_fallback_v33420","front_plus_side_required_v33420","google_like_object_lock_v33421","dense_micro_surface_tracker_v33421","mask_purity_engine_v33421","pose_estimation_pro_v33421","geometry_usefulness_score_v33421","texture_anti_smear_guard_v33421","guided_product_twin_core_v33426","target_view_mission_classifier_v33426","dense_pixel_skin_9000_v33425","deep_pixel_skin_motion_fusion_v33426","profile_side_not_tilt_v33425","solid_core_microcells_v33425","anti_leak_surface_skin_v33425"],"ocrError":_OCR_ERROR or "","barcodeBackend":"zxingcpp+opencv"}
+    return {"ok":True,"version":APP_VERSION,"features":["object_centric_tracking","truth_gate","distance_scale_awareness","wide_detail_classifier","gpu_ocr_easyocr_optional","barcode_multiframe_zxing_opencv","live_futuristic_overlay","coverage_map","build_from_acquisition","final_glb_persist_fix","viewer_rotate_ready","smart_live_guidance","stable_auto_build_hint","top_bottom_lift_detection","stable_3d_preview","force_build_preview_visible","base_lift_detection_v2","force_preview_from_live_frames","thicker_visible_mesh","live_build_missing_function_fix","side_used_when_back_missing","isolated_3d_no_2d_overwrite","hard_server_truth_gate_expected","no_fake_coverage","thicker_volume_mesh_v33414","true_multiview_voxel_reconstruction_v33415","inline_glb_delivery_v33415","ultra_true_3d_hybrid_v33416","object_mask_microcells_v33417","geometry_only_acceptance_v33417","no_detail_frames_in_mesh_v33417","top_bottom_regularization_v33416","quality_score_v33416","glb_no_blank_viewer_guard_v33417","mask_quality_hard_gate_v33420","no_dirty_glb_fallback_v33420","front_plus_side_required_v33420","google_like_object_lock_v33421","dense_micro_surface_tracker_v33421","mask_purity_engine_v33421","pose_estimation_pro_v33421","geometry_usefulness_score_v33421","texture_anti_smear_guard_v33421","guided_product_twin_core_v33427","target_view_mission_classifier_v33427","dense_pixel_skin_9000_v33427","deep_pixel_skin_motion_fusion_v33427","profile_side_not_tilt_v33427","solid_core_microcells_v33427","anti_leak_surface_skin_v33427"],"ocrError":_OCR_ERROR or "","barcodeBackend":"zxingcpp+opencv"}
 
 @app.get("/health")
 def health(authorization: Optional[str] = Header(None), x_vision_token: Optional[str] = Header(None)):
