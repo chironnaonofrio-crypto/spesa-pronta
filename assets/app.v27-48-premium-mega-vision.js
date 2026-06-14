@@ -2644,6 +2644,7 @@ function syncScanResultFromFields(el, result={}){
   const unit=read('[data-scan-unit]');
   const expiry=read('[data-scan-expiry]');
   const cat=read('[data-scan-cat]');
+  const barcode=read('[data-scan-barcode]').replace(/\D+/g,'');
   const damage=read('[data-scan-damage]');
   const trustedFromEvidence = result.labelScanMerged ? deriveTrustedLabelFields(result) : {};
   if(name && !/^es\./i.test(name) && !isBadScanName(name)) result.productName=name;
@@ -2663,6 +2664,7 @@ function syncScanResultFromFields(el, result={}){
   if(unit) result.unit=unit;
   if(expiry) result.expiryDate=expiry;
   if(cat) result.category=cat;
+  if(barcode){ result.barcode=barcode; result.ean=barcode; }
   result=applyRealityCategoryGuard(result);
   if(damage) { result.damageType=damage; result.isDamaged=!/^integro$/i.test(damage); }
   const currentTokens=specificProductTokens([result.productName,result.brand,result.variant].join(' '));
@@ -3148,6 +3150,7 @@ function mergeLabelVisionIntoResultCard(el,base={},extra={},dataUrl='', stepArg=
   if(extra.category && el.dataset.userCategoryEdited!=='1') setField('[data-scan-cat]', extra.category, (step==='label' && hasStrongCurrentLabelEvidence(extra)) || step==='barcode');
   if(step==='barcode' && barcodeCandidate){
     base.barcode=barcodeCandidate; extra.barcode=barcodeCandidate; el.dataset.barcodeScanDone='1';
+    setField('[data-scan-barcode]', barcodeCandidate, true);
   }
   if(extra.isDamaged && extra.damageType) setField('[data-scan-damage]', extra.damageType, true);
   base.productName = el.querySelector('[data-scan-name]')?.value?.trim() || base.productName || extra.productName || '';
@@ -5181,6 +5184,7 @@ function addScannerResult(result){
       <label><small>Nome prodotto</small><input data-scan-name autocomplete="off" data-user-editable="1" value="${esc(result.productName||'')}" placeholder="${esc(placeholder)}"></label>
       <div class="scan-grid-3 pro detail"><label><small>Marca</small><input data-scan-brand autocomplete="off" data-user-editable="1" value="${esc(result.brand||'')}" placeholder="Es. Vera, Levissima, Divella"></label><label><small>Formato / capienza</small><input data-scan-size value="${esc(result.estimatedSize||'')}" placeholder="Es. 2 L, 1,5 L, 500 ml"></label><label><small>Quantità pezzi</small><input data-scan-qty type="number" min="0" step="0.1" value="${esc(result.quantity||1)}"></label></div>
       <div class="scan-grid-3 pro detail"><label><small>Unità</small><input data-scan-unit value="${esc(result.unit||'pz')}"></label><label><small>Scadenza</small><input data-scan-expiry value="${esc(result.expiryDate||'')}" placeholder="Es. 12/08/2026"></label><label><small>Categoria</small><select data-scan-cat>${categoryOptions(result.category||'food')}</select></label></div>
+      <label><small>Barcode / EAN</small><input data-scan-barcode value="${esc(result.barcode||result.ean||'')}" placeholder="Es. 8001234567890"></label>
       <label><small>Stato prodotto</small><input data-scan-damage value="${esc(result.isDamaged?(result.damageType||'Danneggiato'):'Integro')}" placeholder="Integro / rotto / ammaccato"></label>
       <div class="scan-actions-row"><button class="secondary-btn" type="button" data-scan-recap>Riepilogo AI</button><button class="outline-btn" type="button" data-rescan-label>Rifai etichetta</button><button class="outline-btn" type="button" data-rescan-expiry>Rifai scadenza</button><button class="outline-btn" type="button" data-rescan-barcode>Rifai barcode</button><button class="danger-btn" type="button" data-force-rescan>Rifai questo</button><button class="danger-btn" type="button" data-delete-scan>Elimina</button><button class="primary-btn" data-confirm-scan>Conferma e aggiungi in casa</button></div>`}
     </div>
@@ -5206,7 +5210,7 @@ function addScannerResult(result){
     if(!pending){ liveScanPendingResult=false; liveScanAwaitNextOk=false; setActiveScannerResult(null); if(liveScanActive){ resumeLiveAutoScan(900); } }
     toast('Risultato eliminato');
   });
-  el.querySelectorAll('[data-scan-name],[data-scan-brand],[data-scan-size],[data-scan-qty],[data-scan-unit],[data-scan-expiry],[data-scan-cat],[data-scan-damage]').forEach(field=>{
+  el.querySelectorAll('[data-scan-name],[data-scan-brand],[data-scan-size],[data-scan-qty],[data-scan-unit],[data-scan-expiry],[data-scan-cat],[data-scan-barcode],[data-scan-damage]').forEach(field=>{
     field.addEventListener('input',(ev)=>{ markScanFieldUserEdited(el,field,ev); result=syncScanResultFromFields(el,result); refreshScanResultCard(el,result); try{ refreshGuidedScannerUx('field-change'); }catch{} });
     field.addEventListener('change',(ev)=>{ markScanFieldUserEdited(el,field,ev); result=syncScanResultFromFields(el,result); refreshScanResultCard(el,result); try{ refreshGuidedScannerUx('field-change'); }catch{} });
     field.addEventListener('focus',()=>setActiveScannerResult(el));
@@ -6870,7 +6874,7 @@ window.SPESA_PRONTA_VERSION='v28.43-pro-cinematic-onboarding';
   function bindDraftAutosave(el){
     if(!el || el.dataset.draftAutosaveBound==='1') return;
     el.dataset.draftAutosaveBound='1';
-    el.querySelectorAll('[data-scan-name],[data-scan-brand],[data-scan-size],[data-scan-qty],[data-scan-unit],[data-scan-expiry],[data-scan-cat],[data-scan-damage]').forEach(n=>{
+    el.querySelectorAll('[data-scan-name],[data-scan-brand],[data-scan-size],[data-scan-qty],[data-scan-unit],[data-scan-expiry],[data-scan-cat],[data-scan-barcode],[data-scan-damage]').forEach(n=>{
       n.addEventListener('input',()=>scheduleScanDraftSave('field-input'));
       n.addEventListener('change',()=>scheduleScanDraftSave('field-change'));
     });
@@ -8933,7 +8937,7 @@ try{ if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV9
     if(el && !hasValidBarcode(el,rOf(el)) && !isBarcodeSkipped(el) && String(el.dataset.liveFollowupStep||'')!=='barcode') setBarcodeStep(el,'Serve ancora il barcode: non lo considero completato finché non viene letto o saltato.');
     updatePanelButtons();
   },900);
-  try{ window.SPESA_PRONTA_VERSION='v28.59-pro-barcode-hard-lock'; window.SPESA_PRONTA_BUILD=Object.assign({},window.SPESA_PRONTA_BUILD||{}, {version:'V28.59', proMode:true, barcodeHardLock:true, barcodeRequiresValidGtinOrManualSkip:true}); }catch(_){ }
+  try{ window.SPESA_PRONTA_VERSION='v28.59b-pro-barcode-visible-guided3d'; window.SPESA_PRONTA_BUILD=Object.assign({},window.SPESA_PRONTA_BUILD||{}, {version:'V28.59b', proMode:true, barcodeHardLock:true, barcodeRequiresValidGtinOrManualSkip:true}); }catch(_){ }
   try{ if(typeof logAiDiagnosticV98==='function') setTimeout(()=>logAiDiagnosticV98('v2859-barcode-hard-lock-ready',{barcodeStep:'valid_gtin_or_manual_skip_only', preventsAutoAdvance:true}),1200); }catch(_){ }
 })();
 
