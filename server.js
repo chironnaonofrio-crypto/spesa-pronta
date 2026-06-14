@@ -4018,12 +4018,12 @@ const server = http.createServer(async (req,res)=>{
       const model=gv.model3D||gv.render360||folder.render360V3000||rec.render360V3000||{};
       const trust=(typeof v31124ModelTrustInfo==='function')?v31124ModelTrustInfo(model):{ok:false,blockedReason:'guard_unavailable'};
       if(!trust.ok){
-        return send(res,404,{ok:false,error:trust.blockedReason||'glb_not_trusted',message:'GLB legacy/sporco bloccato: acquisisci di nuovo il prodotto con V31.10.28 / V33.4.23.'});
+        return send(res,404,{ok:false,error:trust.blockedReason||'glb_not_trusted',message:'GLB legacy/sporco bloccato: acquisisci di nuovo il prodotto con V31.10.30 / V33.4.25.'});
       }
       const dataUrl=String(trust.glbDataUrl||'');
       const parsed=(typeof v3191DecodeDataUrl==='function')?v3191DecodeDataUrl(dataUrl):null;
       if(!parsed||!parsed.buffer){
-        return send(res,404,{ok:false,error:'glb_not_found',message:'GLB reale non trovato in memoria. Premi Render 360° 3D dopo worker V33.4.23.'});
+        return send(res,404,{ok:false,error:'glb_not_found',message:'GLB reale non trovato in memoria. Premi Render 360° 3D dopo worker V33.4.25.'});
       }
       res.writeHead(200,{
         'Content-Type':'model/gltf-binary',
@@ -10434,7 +10434,7 @@ function v31124ModelTrustInfo(model={}){
   const hasGlb=/^data:model\/gltf-binary;base64,/i.test(glbDataUrl);
   const realMesh=!!(model.realMeshGlb && hasGlb);
   const dirtyLegacy=/spesamesh\s*depth\s*extrusion|depth\s*extrusion|v33\.4\.14|v33\.4\.15|rollback|balanced\s*silhouette|contour\s*hole|refine\s*safe/i.test(meta);
-  const trustedFamily=/scanner3d|object.?mask|acquisition|hard.?gate|hard.?reset|no.?dirty.?glb|glb.?preserve|google.?like|object.?lock|fusion|v33\.4\.18|v33\.4\.19|v33\.4\.20|v33\.4\.21|v33\.4\.22|v33\.4\.20|v33\.4\.21/i.test(meta) || !!(model.acquisition && typeof model.acquisition==='object');
+  const trustedFamily=/scanner3d|object.?mask|acquisition|hard.?gate|hard.?reset|no.?dirty.?glb|glb.?preserve|google.?like|object.?lock|fusion|v33\.4\.18|v33\.4\.19|v33\.4\.20|v33\.4\.21|v33\.4\.22|v33\.4\.23|v33\.4\.24|v33\.4\.25|smart.?finalizer|no.?dead.?end|product.?twin|guided.?scan|v33\.4\.20|v33\.4\.21/i.test(meta) || !!(model.acquisition && typeof model.acquisition==='object');
   const blockedReason=!realMesh?'missing_real_glb':(dirtyLegacy?'legacy_engine_blocked':(!trustedFamily?'untrusted_model_family':''));
   return {ok:!!(realMesh && !dirtyLegacy && trustedFamily),realMesh,dirtyLegacy,trustedFamily,blockedReason,version,engine,meta,glbDataUrl};
 }
@@ -10464,7 +10464,7 @@ function v31124ResetLegacy3DForRecord(rec={},reason='') {
     const recModel=rec.render360V3000||{};
     if(Object.keys(recModel).length && !v31124ModelTrustInfo(recModel).ok){ delete rec.render360V3000; changed=true; }
     if(changed){
-      folder.last3DReset={at:Date.now(),reason:reason||'legacy_3d_reset_v31_10_28'};
+      folder.last3DReset={at:Date.now(),reason:reason||'legacy_3d_reset_v31_10_30_guided_product_twin'};
       rec.last3DReset=folder.last3DReset;
     }
     return changed;
@@ -10523,6 +10523,7 @@ function v31106SessionPublic(s={}){
     overlay:s.overlay||null,
     objectLock:s.objectLock||null, maskQuality:s.maskQuality||null, poseEstimate:s.poseEstimate||null, geometryScores:s.geometryScores||null, buildQuality:s.buildQuality||null,
     geometryFrames:Number(s.acceptedFrames||0),
+    missionMode:s.missionMode||'guided_product_twin', targetView:s.targetView||v31130TargetView(s), targetLabel:v31130ViewLabel(s.targetView||v31130TargetView(s)), targetInstruction:s.targetInstruction||v31130TargetInstruction(s), productTwinMode:s.productTwinMode!==false, canProductTwinBuild:v31130CanProductTwinBuild(s), missionOrder:V31130_MISSION_ORDER,
     readyFor3DStable:!!s.readyFor3DStable, readyBlockedReason:s.readyBlockedReason||'',
     temporaryFrames:Number((s.frames||[]).length), voiceEnabled:true, cleanup:s.cleanup||'pending',
     debug:{frontDescriptor:!!s.frontDescriptor,lastDescriptor:!!s.lastDescriptor,viewDescriptors:Object.keys(s.viewDescriptors||{}),barcodeCandidates:s.barcodeCandidates||[],lastMetrics:s.lastMetrics||null,last3DReset:s.last3DReset||null,lastFrameAccepted:!!s.lastFrameAccepted,rejectedSinceAccepted:Number(s.rejectedSinceAccepted||0),lastAcceptedAt:Number(s.lastAcceptedAt||0),lastObjectLock:s.objectLock||null,lastMaskQuality:s.maskQuality||null,lastGeometryScores:s.geometryScores||null}
@@ -10566,14 +10567,57 @@ async function v31106CallGpuBuildFromAcquisition(front={},back={},side={},metada
   }catch(e){ return {ok:false,reason:e?.name==='AbortError'?'gpu_build_timeout':'gpu_build_fetch_error',error:String(e?.message||e)}; }
   finally{ clearTimeout(t); }
 }
+
+// =============================================================
+// V31.10.30 GUIDED PRODUCT TWIN CORE
+// Mission-based capture: the GPU no longer guesses freely. Render tells it
+// exactly which view is needed next (front -> side -> back -> top/base) and
+// allows a safe product-twin GLB when front+side are clean, avoiding dead-ends.
+// =============================================================
+const V31130_MISSION_ORDER=['front','sideA','back','sideB','top','bottom'];
+function v31130ViewLabel(v=''){
+  return ({front:'frontale',sideA:'lato destro/sinistro',sideB:'secondo lato',back:'retro',top:'sopra/tappo',bottom:'sotto/base',buildReady:'pronto per Product Twin'})[String(v||'')]||'angolo migliore';
+}
+function v31130TargetView(s={}){
+  const cv=s.capturedViews||{};
+  if(!cv.front) return 'front';
+  if(!(cv.sideA||cv.sideB)) return 'sideA';
+  if(!cv.back && Number(s.acceptedFrames||0)<5) return 'back';
+  if(!cv.sideB && cv.sideA && Number(s.acceptedFrames||0)<6) return 'sideB';
+  if(!cv.top && Number(s.acceptedFrames||0)<7) return 'top';
+  if(!cv.bottom && Number(s.acceptedFrames||0)<8) return 'bottom';
+  return 'buildReady';
+}
+function v31130TargetInstruction(s={}){
+  const t=v31130TargetView(s);
+  const common=' Tieni il prodotto intero dentro la sagoma, sfondo pulito, movimento lento.';
+  if(t==='front') return 'Missione 1: mostrami il FRONTALE con etichetta leggibile.'+common;
+  if(t==='sideA') return 'Missione 2: ruota di 70-90° e mostrami un LATO reale/profilo.'+common;
+  if(t==='back') return 'Missione 3: mostrami il RETRO, barcode o pannello testo se presente.'+common;
+  if(t==='sideB') return 'Missione 4: mostra l’altro lato/profilo, diverso dal primo.'+common;
+  if(t==='top') return 'Missione 5: inclina appena per SOPRA/tappo senza tagliare il prodotto.'+common;
+  if(t==='bottom') return 'Missione 6: inclina per SOTTO/base, prodotto sempre intero.'+common;
+  return 'Dati sufficienti: posso generare Product Twin / GLB finale.';
+}
+function v31130CanProductTwinBuild(s={}){
+  const cv=s.capturedViews||{};
+  const cp=s.capturedParts||{};
+  const mask=s.maskQuality||{};
+  const lock=s.objectLock||{};
+  const purity=Number(mask.purity||0), leakage=Number(mask.leakage||0);
+  const lockOk=lock.locked!==false && Number(lock.confidence||0)>=48;
+  const maskOk=(!purity||purity>=0.58)&&(!leakage||leakage<=0.50);
+  return !!(cv.front && (cv.sideA||cv.sideB||cv.back) && Number(s.acceptedFrames||0)>=2 && Number(s.coveragePercent||0)>=46 && lockOk && maskOk);
+}
+
 function v31106StartAcquire3D(key='',opts={}){
   v31106CleanSessions();
   const rec=v3160Rec(key); if(!rec) return {ok:false,error:'product_not_found'};
-  v31124ResetLegacy3DForRecord(rec,'start_new_acquisition_v31_10_28');
+  v31124ResetLegacy3DForRecord(rec,'start_new_acquisition_v31_10_30_guided_product_twin');
   const sessionId=v31106SessionId();
-  const s={sessionId,key,householdId:opts.householdId||'',status:'active',createdAt:Date.now(),updatedAt:Date.now(),frames:[],descriptors:[],viewDescriptors:{},frontDescriptor:null,lastDescriptor:null,lastMetrics:null,barcodeCandidates:[],ocrWords:[],printedText:'',capturedViews:{},capturedParts:{},missingViews:['front','sideA','back','sideB','top','bottom'],missingParts:['frontLabel','barcode'],coveragePercent:0,acceptedFrames:0,rejectedFrames:0,productFamily:'unknown_product',readyFor3D:false,currentView:'unknown',viewConfidence:0,frameType:'unknown',distanceState:'unknown',motionType:'unknown',barcodeStatus:'not_seen',barcodeValue:'',labelStatus:'unknown',evidence:[],overlay:null,lastInstruction:'Inquadra il prodotto intero. Ruotalo lentamente: non assegno lati senza prove visive.',lastFrameReason:'',lastFrameAccepted:false,rejectedSinceAccepted:0,lastAcceptedAt:0,objectLock:null,maskQuality:null,poseEstimate:null,geometryScores:null,buildQuality:null,cleanup:'pending'};
+  const s={sessionId,key,householdId:opts.householdId||'',status:'active',createdAt:Date.now(),updatedAt:Date.now(),frames:[],descriptors:[],viewDescriptors:{},frontDescriptor:null,lastDescriptor:null,lastMetrics:null,barcodeCandidates:[],ocrWords:[],printedText:'',capturedViews:{},capturedParts:{},missingViews:['front','sideA','back','sideB','top','bottom'],missingParts:['frontLabel','barcode'],coveragePercent:0,acceptedFrames:0,rejectedFrames:0,productFamily:'unknown_product',readyFor3D:false,currentView:'unknown',viewConfidence:0,frameType:'unknown',distanceState:'unknown',motionType:'unknown',barcodeStatus:'not_seen',barcodeValue:'',labelStatus:'unknown',evidence:[],overlay:null,lastInstruction:'Missione 1: mostrami il FRONTALE con etichetta leggibile. Tieni il prodotto intero dentro la sagoma, sfondo pulito, movimento lento.',lastFrameReason:'',lastFrameAccepted:false,rejectedSinceAccepted:0,lastAcceptedAt:0,objectLock:null,maskQuality:null,poseEstimate:null,geometryScores:null,buildQuality:null,cleanup:'pending',missionMode:'guided_product_twin',targetView:'front',targetInstruction:'Missione 1: mostrami il FRONTALE con etichetta leggibile. Tieni il prodotto intero dentro la sagoma, sfondo pulito, movimento lento.',productTwinMode:true,missionOrder:V31130_MISSION_ORDER};
   v31106AcquireSessions.set(sessionId,s);
-  return {ok:true,sessionId,message:'Acquisizione 3D video avviata',assistant:'Inquadra il prodotto intero. Ruotalo lentamente: catturo solo frame con prove reali.',status:v31106SessionPublic(s)};
+  return {ok:true,sessionId,message:'Acquisizione 3D guidata avviata',assistant:'Scanner guidato: frontale, lato, retro, sopra/base. Catturo solo frame utili e creo Product Twin/GLB.',status:v31106SessionPublic(s)};
 }
 async function v31106Acquire3DFrame(sessionId='',frameDataUrl='',frameIndex=0,clientMotion={}){
   v31106CleanSessions();
@@ -10592,7 +10636,13 @@ async function v31106Acquire3DFrame(sessionId='',frameDataUrl='',frameIndex=0,cl
     viewDescriptors:s.viewDescriptors||{},
     barcodeCandidates:s.barcodeCandidates||[],
     ocrWords:s.ocrWords||[],
-    clientMotion:clientMotion||{}
+    targetView:v31130TargetView(s),
+    targetInstruction:v31130TargetInstruction(s),
+    missionMode:s.missionMode||'guided_product_twin',
+    productTwinMode:s.productTwinMode!==false,
+    missionOrder:V31130_MISSION_ORDER,
+    canProductTwinBuild:v31130CanProductTwinBuild(s),
+    clientMotion:Object.assign({},clientMotion||{},{targetView:v31130TargetView(s),missionMode:s.missionMode||'guided_product_twin'})
   };
   const gpu=await v31106CallGpuAcquireFrame(parts.buffer,parts.mime,{frameIndex,coverage,filename:`${s.key}_${frameIndex}.jpg`});
   const data=(gpu.ok&&gpu.data&&gpu.data.ok)?gpu.data:null;
@@ -10654,16 +10704,19 @@ async function v31106Acquire3DFrame(sessionId='',frameDataUrl='',frameIndex=0,cl
   const purity=Number(data.maskQuality?.purity||s.maskQuality?.purity||0);
   const leakage=Number(data.maskQuality?.leakage||s.maskQuality?.leakage||0);
   const lockOk=!!(data.objectLock?.locked!==false && Number(data.objectLock?.confidence||s.objectLock?.confidence||0)>=54);
-  const hasCoreViews=!!(s.capturedViews.front && (s.capturedViews.sideA||s.capturedViews.sideB) && s.capturedViews.back);
-  const enoughFrames=Number(s.acceptedFrames||0)>=4;
+  const hasCoreViews=!!(s.capturedViews.front && (s.capturedViews.sideA||s.capturedViews.sideB));
+  const enoughFrames=Number(s.acceptedFrames||0)>=3;
   const goodMask=(!purity || purity>=0.64) && (!leakage || leakage<=0.42);
-  // V31.10.28: readiness is based on the accepted-frame memory, not on a single rejected/duplicate current frame.
+  // V31.10.30: readiness is based on the accepted-frame memory, not on a single rejected/duplicate current frame.
   // This avoids flicker while still preventing fake ready because capturedViews only update from server-accepted geometry.
-  s.readyFor3DStable=!!(recentAccepted && lockOk && goodMask && hasCoreViews && s.coveragePercent>=58 && enoughFrames);
-  s.readyFor3D=!!(s.readyFor3DStable && (geometryAccepted || ['duplicate_angle','duplicate_or_not_distinct','view_not_confident','geometry_usefulness_low'].includes(String(data.reason||''))));
-  s.readyBlockedReason=s.readyFor3D?'':(!hasCoreViews?'missing_core_views':(!enoughFrames?'not_enough_geometry_frames':(!goodMask?'mask_leak_or_low_purity':(!lockOk?'object_lock_not_stable':(!recentAccepted?'no_recent_geometry_frame':'waiting')))));
+  const productTwinCore=v31130CanProductTwinBuild(s);
+  s.readyFor3DStable=!!((recentAccepted && lockOk && goodMask && hasCoreViews && s.coveragePercent>=58 && enoughFrames) || productTwinCore);
+  s.readyFor3D=!!(s.readyFor3DStable && (geometryAccepted || productTwinCore || ['duplicate_angle','duplicate_or_not_distinct','view_not_confident','geometry_usefulness_low','view_not_geometry'].includes(String(data.reason||''))));
+  s.readyBlockedReason=s.readyFor3D?'':(!hasCoreViews?'mission_missing_front_or_side':(!enoughFrames?'mission_collect_2_good_frames':(!goodMask?'mask_leak_or_low_purity':(!lockOk?'object_lock_not_stable':(!recentAccepted?'no_recent_geometry_frame':'waiting')))));
+  s.targetView=v31130TargetView(s); s.targetInstruction=v31130TargetInstruction(s);
   const publicData=v31106SessionPublic(s);
-  publicData.preview3DEligible=!!(s.capturedViews.front && (s.capturedViews.sideA||s.capturedViews.sideB) && Number(s.acceptedFrames||0)>=2);
+  publicData.preview3DEligible=!!(v31130CanProductTwinBuild(s)|| (s.capturedViews.front && (s.capturedViews.sideA||s.capturedViews.sideB) && Number(s.acceptedFrames||0)>=2));
+  publicData.targetView=s.targetView; publicData.targetInstruction=s.targetInstruction; publicData.productTwinMode=s.productTwinMode!==false; publicData.canProductTwinBuild=v31130CanProductTwinBuild(s);
   publicData.autoBuildEligible=false; publicData.readyFor3DStable=!!s.readyFor3DStable; publicData.readyBlockedReason=s.readyBlockedReason||"";
   publicData.serverTruth={geometryAccepted,filteredParts,rawAccepted:!!data.accepted,rawView:viewName,rawReason:data.reason||'',rawConfidence:conf,bboxCoverage:gate.bboxCoverage,aspect:gate.aspect,objectOnly:gate.objectOnly,maskVisible:gate.maskVisible,objectLock:gate.objectLock,maskQuality:gate.maskQuality,geometryUsefulness:gate.geometryUsefulness};
   publicData.debug=Object.assign({},publicData.debug||{}, {serverTruthGate:{ok:geometryAccepted,reason:geometryAccepted?'accepted':(!gate.geomView?'view_not_geometry':(!gate.conf||gate.conf<80?'low_confidence':(!gate.lockOk?'object_lock_not_stable':(!gate.maskOk?'mask_purity_low':(!gate.enoughCoverage?'mask_dirty_or_incomplete':(!gate.scoreOk?'geometry_usefulness_low':(!gate.saneAspect?'distorted_bbox':(!gate.objectOnly?'not_object_only':'rejected')))))))),coverage:Number(gate.bboxCoverage||0),aspect:Number(gate.aspect||0),purity:Number(gate.purity||0),leakage:Number(gate.leakage||0),geometryUsefulness:Number(gate.geometryUsefulness||0)}});
@@ -10678,10 +10731,11 @@ async function v31106BuildAcquire3D(sessionId='',opts={}){
   v31106CleanSessions();
   const s=v31106AcquireSessions.get(String(sessionId||'')); if(!s) return {ok:false,error:'session_not_found'};
   const rec=v3160Rec(s.key); if(!rec) return {ok:false,error:'product_not_found'};
-  const forcePreview=!!opts.forcePreview && !!s.readyFor3D;
+  const productTwinCore=v31130CanProductTwinBuild(s);
+  const forcePreview=!!opts.forcePreview && (!!s.readyFor3D || productTwinCore);
   const geomFrames=(Array.isArray(s.frames)?s.frames:[]).filter(f=>['front','sideA','sideB','back','top','bottom'].includes(String(f.view||'')) && f.buffer);
-  if(!s.readyFor3DStable){
-    return {ok:false,error:'not_ready_for_3d',message:'Non genero 3D: mancano ancora viste geometriche pulite nella memoria live. Ruota lentamente fino a frontale + lato + retro reali.',status:v31106SessionPublic(s)};
+  if(!s.readyFor3DStable && !productTwinCore){
+    return {ok:false,error:'not_ready_for_3d',message:'Non genero 3D: segui le missioni. Mi servono almeno frontale + lato puliti per creare Product Twin/GLB senza mostri.',status:v31106SessionPublic(s)};
   }
   if(!geomFrames.length) return {ok:false,error:'no_geometry_frames',message:'Non ho frame geometrici veri. Inquadra fronte e lato con prodotto intero.'};
   const front=v31106PickBestFrame(s,'front')||geomFrames[0];
@@ -10691,19 +10745,19 @@ async function v31106BuildAcquire3D(sessionId='',opts={}){
   const bottom=v31106PickBestFrame(s,'bottom')||null;
   if(!front||!front.buffer) return {ok:false,error:'no_valid_front',message:'Mi serve almeno un frontale valido per costruire il 3D.'};
   if(!side||!side.buffer) return {ok:false,error:'no_valid_side',message:'Non creo GLB deformati: mi serve almeno un lato reale pulito oltre al frontale.',status:v31106SessionPublic(s)};
-  const metadata={sessionId:s.sessionId,productFamily:s.productFamily,coveragePercent:s.coveragePercent,capturedViews:Object.keys(s.capturedViews).filter(k=>s.capturedViews[k]),capturedParts:Object.keys(s.capturedParts).filter(k=>s.capturedParts[k]),missingViews:s.missingViews,missingParts:s.missingParts,acceptedFrames:s.acceptedFrames,rejectedFrames:s.rejectedFrames,readyFor3D:s.readyFor3D,forcePreview,distanceAware:true,truthGate:true,objectCentricTracking:true,ocrWords:s.ocrWords||[],printedText:s.printedText||'',barcodeCandidates:s.barcodeCandidates||[],barcodeValue:s.barcodeValue||'',version:'v31_10_28_deep_pixel_skin_motion_fusion',buildViews:{front:!!front,side:!!side,back:!!back,top:!!top,bottom:!!bottom}};
+  const metadata={sessionId:s.sessionId,productFamily:s.productFamily,coveragePercent:s.coveragePercent,capturedViews:Object.keys(s.capturedViews).filter(k=>s.capturedViews[k]),capturedParts:Object.keys(s.capturedParts).filter(k=>s.capturedParts[k]),missingViews:s.missingViews,missingParts:s.missingParts,acceptedFrames:s.acceptedFrames,rejectedFrames:s.rejectedFrames,readyFor3D:s.readyFor3D,forcePreview,distanceAware:true,truthGate:true,objectCentricTracking:true,ocrWords:s.ocrWords||[],printedText:s.printedText||'',barcodeCandidates:s.barcodeCandidates||[],barcodeValue:s.barcodeValue||'',version:'v31_10_30_guided_product_twin_core',missionMode:s.missionMode||'guided_product_twin',targetView:v31130TargetView(s),productTwinMode:true,canProductTwinBuild:productTwinCore,buildViews:{front:!!front,side:!!side,back:!!back,top:!!top,bottom:!!bottom}};
   let build=await v31106CallGpuBuildFromAcquisition(front,back,side,metadata,{top,bottom});
   let payload=(build.ok&&build.data&&build.data.ok)?build.data:null;
   // V31.10.23: MAI fallback a render-3d da frontale singolo.
   // Quel fallback creava GLB deformati con tavolo/sfondo dentro. Se la GPU rifiuta, mostro errore chiaro.
   if(!payload||!payload.ok){
-    return {ok:false,error:(build?.data?.error||'build_failed'),gpuBuild:build,status:v31106SessionPublic(s),message:(build?.data?.message||'La GPU ha rifiutato il GLB perché la maschera/lato non sono puliti. Continua acquisizione: fronte + lato reale su sfondo semplice.')};
+    return {ok:false,error:(build?.data?.error||'build_failed'),gpuBuild:build,status:v31106SessionPublic(s),message:(build?.data?.message||'Il finalizzatore smart ha rifiutato il GLB solo perché manca una sagoma frontale utilizzabile. Continua acquisizione con prodotto intero e sfondo più contrastato.')};
   }
   payload.acquisition3D=Object.assign({},metadata,{status:'completed',cleanup:{temporaryFramesDeleted:true,savedFinalAssetsOnly:true}});
   payload.extractedText=payload.extractedText||{printedText:s.printedText||'',ocrWords:s.ocrWords||[]};
   payload.barcodeCandidate=payload.barcodeCandidate||s.barcodeValue||'';
   const render3d=payload.render3d||{};
-  const trustBuilt=v31124ModelTrustInfo({version:payload.version||render3d.version||'',engine:render3d.engine||payload.engine||'',mode:render3d.mode||payload.mode||'real_glb_mesh',storagePolicy:'v31_10_28_deep_pixel_skin_motion_fusion',note:render3d.note||payload.message||'',pipeline:render3d.pipeline||[],realMeshGlb:!!(render3d.realMeshGlb!==false),glbDataUrl:String(render3d.glbDataUrl||payload.glbDataUrl||payload.modelUrl||''),acquisition:payload.acquisition3D||{}});
+  const trustBuilt=v31124ModelTrustInfo({version:payload.version||render3d.version||'',engine:render3d.engine||payload.engine||'',mode:render3d.mode||payload.mode||'real_glb_mesh',storagePolicy:'v31_10_30_guided_product_twin_core',note:render3d.note||payload.message||'',pipeline:render3d.pipeline||[],realMeshGlb:!!(render3d.realMeshGlb!==false),glbDataUrl:String(render3d.glbDataUrl||payload.glbDataUrl||payload.modelUrl||''),acquisition:payload.acquisition3D||{}});
   if(!trustBuilt.ok){
     return {ok:false,error:trustBuilt.blockedReason||'blocked_dirty_legacy_model',message:'Build 3D bloccato: il worker ha restituito un motore legacy/sporco oppure un GLB non affidabile. Non salvo più modelli stile SpesaMesh Depth Extrusion.',engine:trustBuilt.engine||'',version:trustBuilt.version||'',status:v31106SessionPublic(s)};
   }
@@ -10715,11 +10769,11 @@ async function v31106BuildAcquire3D(sessionId='',opts={}){
   const saved=await v3100PersistGpuVision(s.key,payload,'professional_video_live_acquisition_3d',{source:'professional_video_live_acquisition',reference:{sessionId:s.sessionId},preserveGlb:true,glbBytes});
   let model3D=null;
   if(glbDataUrl){
-    model3D={version:payload.version||'33.4.23',at:Date.now(),mode:'real_glb_mesh',realMeshGlb:true,glbDataUrl,glbEndpoint:v3191GpuModelUrl(s.key),engine:render3d.engine||payload.engine||'Scanner3D GLB',qualityScore:render3d.qualityScore||payload.qualityScore||0,note:render3d.note||payload.message||'GLB generato da acquisizione live',frames:[],acquisition:payload.acquisition3D,pipeline:render3d.pipeline||[],glbBytes,glbChars:glbDataUrl.length,storagePolicy:'preserve_glb_v31_10_28_deep_pixel_skin_motion_fusion'};
+    model3D={version:payload.version||'33.4.25',at:Date.now(),mode:'real_glb_mesh',realMeshGlb:true,glbDataUrl,glbEndpoint:v3191GpuModelUrl(s.key),engine:render3d.engine||payload.engine||'Scanner3D GLB',qualityScore:render3d.qualityScore||payload.qualityScore||0,note:render3d.note||payload.message||'GLB generato da acquisizione live',frames:[],acquisition:payload.acquisition3D,pipeline:render3d.pipeline||[],glbBytes,glbChars:glbDataUrl.length,storagePolicy:'preserve_glb_v31_10_30_guided_product_twin_core'};
   }
   if(saved){
-    saved.version='31.10.28-v33.4.20-macro-no-false-ready';
-    saved.renderPipelineVersion='v31_10_28_deep_pixel_skin_motion_fusion';
+    saved.version='31.10.30-v33.4.25-guided-product-twin-core';
+    saved.renderPipelineVersion='v31_10_30_guided_product_twin_core';
     saved.acquisition3D=payload.acquisition3D;
     saved.extractedText=payload.extractedText;
     saved.barcodeCandidate=s.barcodeValue||saved.barcodeCandidate||'';
@@ -10737,7 +10791,7 @@ async function v31106BuildAcquire3D(sessionId='',opts={}){
   }catch(_){ }
   s.frames=[]; s.cleanup='completed'; s.status='completed';
   v31106AcquireSessions.delete(s.sessionId);
-  return {ok:true,title:'Acquisizione 3D completata',message:glbDataUrl?'GLB reale creato e caricato nel viewer sotto scanner.':'Build completata ma GLB non trovato: controlla console.',savedGpuVision:saved,gpuVision:payload,render3d:render3d,glbDataUrl,modelUrl:glbDataUrl||v3191GpuModelUrl(s.key),acquisition3D:payload.acquisition3D,engine:render3d.engine||payload.engine||'',glbBytes,glbChars:glbDataUrl.length,storagePolicy:'preserve_glb_v31_10_28_deep_pixel_skin_motion_fusion'};
+  return {ok:true,title:'Acquisizione 3D completata',message:glbDataUrl?'GLB reale creato e caricato nel viewer sotto scanner.':'Build completata ma GLB non trovato: controlla console.',savedGpuVision:saved,gpuVision:payload,render3d:render3d,glbDataUrl,modelUrl:glbDataUrl||v3191GpuModelUrl(s.key),acquisition3D:payload.acquisition3D,engine:render3d.engine||payload.engine||'',glbBytes,glbChars:glbDataUrl.length,storagePolicy:'preserve_glb_v31_10_30_guided_product_twin_core'};
 }
 function v31106CancelAcquire3D(sessionId=''){
   const s=v31106AcquireSessions.get(String(sessionId||'')); if(s){ s.frames=[]; s.cleanup='cancelled'; v31106AcquireSessions.delete(String(sessionId)); }
